@@ -1,6 +1,6 @@
 {
   "name": "starmade-decoder",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "TypeScript SDK to read/write StarMade save files — faithful port of the Java Tag format",
   "type": "module",
   "license": "MIT",
@@ -13,7 +13,8 @@
     "coverage": "c8 --reporter=text --reporter=html --reporter=json-summary npm test",
     "coverage:check": "c8 --check-coverage --lines 70 --functions 70 --branches 60 --statements 70 npm test",
     "samples:fetch-starmadedock": "node scripts/fetch-starmadedock-samples.mjs",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist coverage",
+    "prepublishOnly": "npm run build && npm test"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
@@ -32,5 +33,35 @@
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/InitSysRev/StarMade-Decoder"
+  },
+  "homepage": "https://github.com/InitSysRev/StarMade-Decoder#readme",
+  "keywords": [
+    "starmade",
+    "nbt",
+    "binary",
+    "parser",
+    "sdk",
+    "blueprint",
+    "save-file",
+    "smd3",
+    "sment",
+    "decoder"
+  ]
 }
