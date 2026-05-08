@@ -38,8 +38,9 @@ fs.writeFileSync('FACTIONS.fac', out);
 
 ## Documentation
 
-- [API reference](docs/API.md)
-- [Examples](docs/EXAMPLES.md)
+- [Getting started guide](docs/GUIDE.md) — file system overview, first steps, common pitfalls
+- [API reference](docs/API.md) — complete method and field documentation
+- [Examples](docs/EXAMPLES.md) — ready-to-run code snippets
 
 ## Binary tag format
 

@@ -69,7 +69,7 @@ const ship = Ship.fromBuffer(fs.readFileSync('ENTITY_SHIP_MyShip.ent'));
 
 console.log(ship.uniqueId);
 console.log(ship.realName);
-console.log(ship.sector.toString());
+console.log(ship.sectorPosition.toString()); // SectorPosition(x, y, z)
 
 const renamed = ship.withRealName('Explorer');
 fs.writeFileSync('ENTITY_SHIP_MyShip.renamed.ent', writeTo(renamed.toTag()));
@@ -164,7 +164,7 @@ const config = SMToolConfig.fromData({
 });
 
 const blockConfig = BlockConfig.load(config);
-BlockRegistry.initialize(blockConfig);
+BlockRegistry.init(blockConfig);
 
 const counts = new ElementCountMap([
   { type: 1, count: 1 },
