@@ -49,9 +49,9 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/InitSysRev/StarMade-Decoder"
+    "url": "https://github.com/blackcancer/StarMade-Decoder"
   },
-  "homepage": "https://github.com/InitSysRev/StarMade-Decoder#readme",
+  "homepage": "https://github.com/blackcancer/StarMade-Decoder#readme",
   "keywords": [
     "starmade",
     "nbt",
