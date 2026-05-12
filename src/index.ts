@@ -39,6 +39,9 @@ export * from './config/index.js';
 // Domain object exports
 export * from './objects/index.js';
 
+// DB VARBINARY decoders/encoders
+export * from './db/index.js';
+
 // Entity parsers
 export * from './entity/index.js';
 

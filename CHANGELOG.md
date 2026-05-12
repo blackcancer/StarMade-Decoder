@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.1.0 — 2026-05-12
+
+### Added
+- **`BufferReader.readJavaModifiedUTF()`** — decodes Java Modified UTF-8 (network protocol variant).
+  Handles NUL → `C0 80` encoding and supplementary characters encoded as two independent
+  3-byte surrogate sequences, matching `DataInputStream.readUTF()` on the wire.
+- **`BufferWriter.writeJavaModifiedUTF()`** — encodes Java Modified UTF-8 (inverse of the above),
+  matching `DataOutputStream.writeUTF()` used by the StarMade TCP admin protocol and fleet command serialization.
+- **14 new unit tests** in `test/javaModifiedUtf.test.ts` covering round-trips (ASCII, NUL,
+  accents, emoji/surrogate pairs), error paths (truncated sequences, invalid leading bytes,
+  size limit), and consistency with the standard `readJavaUTF` / `writeJavaUTF` on ASCII input.
+
+### Context
+`readJavaUTF()` / `writeJavaUTF()` (unchanged) use standard UTF-8 — the format used by StarMade
+save-file Tag serialization. The new `Modified` variants match the network wire format and are
+shared with `starmade-gamemaster` to avoid duplication.
+
+### Consumers
+- `starmade-gamemaster@0.1.0+` now depends on `starmade-decoder` and uses `BufferReader` /
+  `BufferWriter` directly instead of the previously duplicated `BinaryReader` + `javaUtf.ts`.
+
+---
+
 ## 1.0.0 — 2026-05-08
 
 ### Added
