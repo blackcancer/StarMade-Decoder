@@ -88,7 +88,8 @@ export class BufferWriter {
   }
 
   /**
-   * DataOutputStream.writeUTF() — uint16 byte length + UTF-8 bytes.
+   * DataOutputStream.writeUTF() — uint16 byte-length + standard UTF-8 bytes.
+   * Used by StarMade save-file Tag serialization.
    */
   writeJavaUTF(s: string): void {
     const encoded = Buffer.from(s, 'utf8');
@@ -97,6 +98,46 @@ export class BufferWriter {
     }
     this.writeUInt16BE(encoded.length);
     this.writeBytes(encoded);
+  }
+
+  /**
+   * DataOutputStream.writeUTF() — Java Modified UTF-8 variant used by the
+   * StarMade network protocol.
+   *
+   * Differences from standard UTF-8:
+   *   • NUL (U+0000) → 2 bytes: C0 80.
+   *   • U+0001..U+007F → 1 byte (standard ASCII).
+   *   • U+0080..U+07FF → 2 bytes (standard).
+   *   • U+0800..U+FFFF → 3 bytes (standard, includes surrogates).
+   *   • Supplementary chars (U+10000+): each surrogate half encoded
+   *     independently as a 3-byte sequence — identical to Java behaviour.
+   *
+   * Wire shape: uint16 encoded-byte-count, then that many bytes.
+   */
+  writeJavaModifiedUTF(s: string): void {
+    const bytes: number[] = [];
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c >= 0x0001 && c <= 0x007f) {
+        // 1-byte ASCII
+        bytes.push(c);
+      } else if (c === 0x0000 || (c >= 0x0080 && c <= 0x07ff)) {
+        // 2-byte: NUL and U+0080..U+07FF
+        bytes.push(0xc0 | ((c >> 6) & 0x1f), 0x80 | (c & 0x3f));
+      } else {
+        // 3-byte: U+0800..U+FFFF, including surrogates
+        bytes.push(
+          0xe0 | ((c >> 12) & 0x0f),
+          0x80 | ((c >> 6)  & 0x3f),
+          0x80 | (c         & 0x3f),
+        );
+      }
+    }
+    if (bytes.length > 0xffff) {
+      throw new RangeError(`String too long for writeJavaModifiedUTF: ${bytes.length} encoded bytes`);
+    }
+    this.writeUInt16BE(bytes.length);
+    this.writeBytes(Buffer.from(bytes));
   }
 
   /** Returns the written buffer as a trimmed copy. */
