@@ -1,5 +1,63 @@
 # Changelog
 
+## 1.2.0 — 2026-05-12
+
+### Added
+
+#### DB VARBINARY decoders/encoders (`src/db/`)
+New module covering the 4 HSQLDB tables that store custom binary-serialized data:
+
+| Table.Column | Format | API |
+|---|---|---|
+| `FLEETS.COMMAND` | `FleetCommand` DataOutput | `decodeFleetCommand` / `encodeFleetCommand` |
+| `FLEETS.SAVED_REMOTES` | Network DataOutput **or** Java ObjectOutputStream | `decodeFleetRemotes` / `encodeFleetRemotes` |
+| `SECTORS_ITEMS.ITEMS` | FreeItem 22-byte records | `decodeSectorItems` / `encodeSectorItems` |
+| `TRADE_NODES.ITEMS` | TradePrices zlib raw-DEFLATE | `decodeTradeNodeItems` / `encodeTradeNodeItems` |
+| `SYSTEMS.INFOS` | `byte[16³×2]` sector grid | `decodeSystemInfos` / `encodeSystemInfos` |
+| `SYSTEMS.RESOURCES` | `byte[19]` resource densities | `decodeSystemResources` / `encodeSystemResources` |
+
+- `FLEET_COMMAND_TYPES` enum (22 ordinals from `FleetCommandTypes.java`)
+- `CMD_TYPES` constants shared with the StarMade network protocol (`NetUtil`)
+- `RESOURCE_ITEM_IDS` mapping (index → item ID + name, from `ElementKeyMap.java`)
+- `SECTOR_TYPES` / `PLANET_TYPES` enums from `SectorInformation.java` / `StellarSystem.java`
+- Helper functions `systemIndexToCoords` / `systemCoordsToIndex`
+
+#### DB Business objects (`src/db/`)
+Five immutable business objects mirroring the file-level pattern (`Catalog`, `FactionManager`, etc.):
+
+| Class | Source | Key API |
+|---|---|---|
+| `FleetCommandObject` | `FLEETS.COMMAND` | `create()`, `fromBytes()`, `toBytes()`, `withCommand()`, `withArgs()` |
+| `FleetRemotesObject` | `FLEETS.SAVED_REMOTES` | `from()`, `fromBytes()`, `toBytes()`, `withRemote()`, `withToggle()` |
+| `SectorItemsObject` | `SECTORS_ITEMS.ITEMS` | `from()`, `fromBytes()`, `toBytes()`, `withItem()`, `withMerged()` |
+| `TradePricesObject` | `TRADE_NODES.ITEMS` | `empty()`, `fromBytes()`, `toBytes()`, `withBuyOrder()`, `withSellOrder()` |
+| `StarSystem` | `SYSTEMS.INFOS` + `SYSTEMS.RESOURCES` | `empty()`, `fromBytes()`, `infosToBytes()`, `resourcesToBytes()`, `withSectorType()`, `withResourceDensity*()` |
+
+#### Blueprint writers (completing round-trip coverage)
+- **`writeSmbpm()`** — encoder for `.smbpm` (blueprint meta), inverse of `BlueprintEntry.writeMeta()`
+- **`writeSmbmm()`** + `emptyModMappings()` — encoder for `.smbmm` (mod mappings)
+- **`writeSim()`** — encoder for `.sim` (simulation state)
+
+#### `toBuffer()` on Tag-based business objects
+All Tag-based objects now expose `toBuffer()` for direct file serialization:
+`FactionManager`, `Catalog`, `TradingManager`, `FloatingItemsArchive`,
+`ChatChannelManager`, `NPCFactionManager`, `SimulationState`.
+
+Also added `FactionManager.fromBuffer()` and `Catalog.fromBuffer()` which were missing.
+
+### Fixed
+- **`SmbpmParser`**: `WirelessMarker` interface and parsing corrected to match the actual
+  `BBWirelessLogicMarker` Java format (`UTF marking + long markerLocation + long fromLocation`),
+  replacing the previously incorrect format (`3×int + 2×long + byte`).
+  `wirelessMarkers[]` is now a first-class field on `SmbpmFile`.
+
+### Coverage
+- **640 tests passing**, 4 pending (conditional integration tests)
+- 97 new unit tests across `test/javaModifiedUtf.test.ts`, `test/db.test.ts`,
+  `test/db-objects.test.ts`, and additions to `test/writers.test.ts`
+
+---
+
 ## 1.1.0 — 2026-05-12
 
 ### Added
