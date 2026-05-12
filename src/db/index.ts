@@ -26,6 +26,13 @@ export type {
   CommandArg,
 } from './FleetDb.js';
 
+// ── Business objects ──────────────────────────────────────────────────────────
+export { FleetCommandObject } from './FleetCommandObject.js';
+export { FleetRemotesObject } from './FleetRemotesObject.js';
+export { SectorItemsObject }  from './SectorItemsObject.js';
+export { TradePricesObject }  from './TradePricesObject.js';
+export { StarSystem }         from './StarSystemObject.js';
+
 export {
   decodeSectorItems,
   encodeSectorItems,
