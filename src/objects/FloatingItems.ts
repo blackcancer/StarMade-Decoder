@@ -118,6 +118,9 @@ export class FloatingItemsArchive {
     ]);
   }
 
+  /** Encodes to binary for FLOATING_ITEMS_ARCHIVE.ent. */
+  toBuffer(): Buffer { return writeTo(this.toTag()); }
+
   static fromBuffer(data: Buffer | Uint8Array): FloatingItemsArchive {
     return FloatingItemsArchive.fromTag(readFrom(data));
   }

@@ -268,6 +268,9 @@ export class TradingManager {
     ]);
   }
 
+  /** Encodes to binary for TRADING.tag. */
+  toBuffer(): Buffer { return writeTo(this.toTag()); }
+
   static fromBuffer(data: Buffer | Uint8Array): TradingManager {
     return TradingManager.fromTag(readFrom(data));
   }

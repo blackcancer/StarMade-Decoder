@@ -42,6 +42,7 @@ import { Tag } from '../core/Tag.js';
 import { Tags } from '../core/TagBuilder.js';
 import { TagType } from '../core/TagType.js';
 import { FINISH_TAG } from '../core/Tag.js';
+import { readFrom, writeTo } from '../core/TagParser.js';
 import { BLUEPRINT_TYPE } from '../smd3/SmentParser.js';
 
 // ── Catalog entry ──────────────────────────────────────────────────────────
@@ -199,6 +200,14 @@ export class Catalog {
   }
 
   // ── Display ──────────────────────────────────────────────────────────────
+
+  /** Encodes to binary for CATALOG.cat. */
+  toBuffer(): Buffer { return writeTo(this.toTag()); }
+
+  /** Named constructor from binary file. */
+  static fromBuffer(data: Buffer | Uint8Array): Catalog {
+    return Catalog.fromTag(readFrom(data));
+  }
 
   toString(): string {
     return `Catalog(${this.entries.length} player entries, ${this.systemEntries.length} system entries)`;

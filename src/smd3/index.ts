@@ -52,3 +52,6 @@ export { writeSmd3, emptySegment, emptySmd3File } from './Smd3Writer.js';
 export { writeSmtpl } from './SmtplWriter.js';
 export { writeSmbpl } from './SmbplWriter.js';
 export { writeSmbph } from './SmbphWriter.js';
+export { writeSmbpm } from './SmbpmWriter.js';
+export { writeSmbmm, emptyModMappings } from './SmbmmWriter.js';
+export { writeSim } from './SimWriter.js';

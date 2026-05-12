@@ -159,6 +159,9 @@ export class ChatChannelManager {
     ]);
   }
 
+  /** Encodes to binary for chatchannels.tag. */
+  toBuffer(): Buffer { return writeTo(this.toTag()); }
+
   static fromBuffer(data: Buffer | Uint8Array): ChatChannelManager {
     return ChatChannelManager.fromTag(readFrom(data));
   }

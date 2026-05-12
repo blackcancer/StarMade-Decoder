@@ -250,3 +250,140 @@ describe('SmbphWriter — .smbph encoding', function () {
     console.log('    Smbph round-trip: type=' + hdr1.entityType + ' blocks=' + hdr1.totalBlockCount + ' → ok');
   });
 });
+
+// ── writeSmbpm ────────────────────────────────────────────────────────────────
+
+describe('SmbpmWriter — .smbpm encoding', function () {
+  this.timeout(10_000);
+
+  it('round-trips BASE_Warehouse_Station meta.smbpm', async () => {
+    const { parseSmbpm } = await import('../src/smd3/SmbpmParser.js');
+    const { writeSmbpm } = await import('../src/smd3/SmbpmWriter.js');
+    const data = fs.readFileSync(path.join(BASE, 'meta.smbpm'));
+    const meta1 = parseSmbpm(data);
+    const encoded = writeSmbpm(meta1);
+    const meta2 = parseSmbpm(encoded);
+
+    assert.equal(meta2.metaVersion, meta1.metaVersion, 'metaVersion');
+    assert.equal(meta2.dockingEntries.length, meta1.dockingEntries.length, 'dockingEntries count');
+    assert.equal(meta2.railChildren.length, meta1.railChildren.length, 'railChildren count');
+    assert.equal(meta2.cargoPoints.length, meta1.cargoPoints.length, 'cargoPoints count');
+    assert.equal(meta2.railDockerPieces.length, meta1.railDockerPieces.length, 'railDockerPieces count');
+    if (meta1.railUID !== undefined) assert.equal(meta2.railUID, meta1.railUID, 'railUID');
+    console.log('    Smbpm round-trip: version=' + meta1.metaVersion
+      + ' docking=' + meta1.dockingEntries.length
+      + ' railChildren=' + meta1.railChildren.length
+      + ' cargo=' + meta1.cargoPoints.length + ' → ok');
+  });
+
+  it('all 43 .smbpm files round-trip without crashing', async () => {
+    const { parseSmbpm } = await import('../src/smd3/SmbpmParser.js');
+    const { writeSmbpm } = await import('../src/smd3/SmbpmWriter.js');
+    const dir = path.join(BASE, '..');
+    const files = fs.readdirSync(dir)
+      .filter(f => f.endsWith('.smbpm'))
+      .map(f => path.join(dir, f));
+    let ok = 0, fail = 0;
+    for (const file of files) {
+      try {
+        const data = fs.readFileSync(file);
+        const m1 = parseSmbpm(data);
+        const encoded = writeSmbpm(m1);
+        const m2 = parseSmbpm(encoded);
+        assert.equal(m2.metaVersion, m1.metaVersion);
+        ok++;
+      } catch (e) {
+        fail++;
+      }
+    }
+    console.log('    smbpm round-trip: ' + ok + ' OK, ' + fail + ' FAIL');
+    assert.equal(fail, 0);
+  });
+});
+
+// ── writeSmbmm ────────────────────────────────────────────────────────────────
+
+describe('SmbmmWriter — .smbmm encoding', function () {
+  it('empty vanilla blueprint produces empty buffer', async () => {
+    const { writeSmbmm } = await import('../src/smd3/SmbmmWriter.js');
+    const { parseSmbmm } = await import('../src/smd3/SmbmmParser.js');
+    const buf = writeSmbmm({ size: 0, isEmpty: true, raw: new Uint8Array(0) });
+    assert.equal(buf.length, 0);
+    const parsed = parseSmbmm(buf);
+    assert.isTrue(parsed.isEmpty);
+  });
+
+  it('non-empty smbmm preserves raw bytes', async () => {
+    const { writeSmbmm } = await import('../src/smd3/SmbmmWriter.js');
+    const { parseSmbmm } = await import('../src/smd3/SmbmmParser.js');
+    const raw = new Uint8Array([0x01, 0x02, 0x03, 0x04]);
+    const buf = writeSmbmm({ size: 4, isEmpty: false, raw });
+    assert.equal(buf.length, 4);
+    const parsed = parseSmbmm(buf);
+    assert.isFalse(parsed.isEmpty);
+    assert.deepEqual(Array.from(parsed.raw), [1, 2, 3, 4]);
+  });
+});
+
+// ── writeSim ──────────────────────────────────────────────────────────────────
+
+describe('SimWriter — .sim encoding', function () {
+  it('round-trips SIMULATION_STATE.sim', async () => {
+    const { writeSim } = await import('../src/smd3/SimWriter.js');
+    const { parseSim } = await import('../src/smd3/SimParser.js');
+    const simPath = '/mnt/d/Jeux/Steam/steamapps/common/StarMade/StarMade/server-database/world0/SIMULATION_STATE.sim';
+    if (!fs.existsSync(simPath)) return; // skip if not present
+    const data = fs.readFileSync(simPath);
+    const sim1 = parseSim(data);
+    const encoded = writeSim(sim1);
+    const sim2 = parseSim(encoded);
+    assert.equal(sim2.version, sim1.version, 'version');
+    assert.equal(sim2.groups.length, sim1.groups.length, 'groups');
+    console.log('    Sim round-trip: version=' + sim1.version + ' groups=' + sim1.groups.length + ' → ok');
+  });
+});
+
+// ── Tag-based object toBuffer() ───────────────────────────────────────────────
+
+describe('Tag-based objects — toBuffer() round-trips', function () {
+  this.timeout(10_000);
+
+  it('FactionManager.toBuffer() round-trips FACTIONS.fac', async () => {
+    const { FactionManager } = await import('../src/objects/Factions.js');
+    const data = fs.readFileSync('/mnt/d/Jeux/Steam/steamapps/common/StarMade/StarMade/server-database/world0/FACTIONS.fac');
+    const fm1 = FactionManager.fromBuffer(data);
+    const fm2 = FactionManager.fromBuffer(fm1.toBuffer());
+    assert.equal(fm2.factions.size, fm1.factions.size, 'faction count');
+    assert.equal(fm2.relations.length, fm1.relations.length, 'relation count');
+    console.log('    FactionManager round-trip: ' + fm1.factions.size + ' factions, ' + fm1.relations.length + ' relations → ok');
+  });
+
+  it('Catalog.toBuffer() round-trips CATALOG.cat', async () => {
+    const { Catalog } = await import('../src/objects/Catalog.js');
+    const data = fs.readFileSync('/mnt/d/Jeux/Steam/steamapps/common/StarMade/StarMade/server-database/world0/CATALOG.cat');
+    const c1 = Catalog.fromBuffer(data);
+    const c2 = Catalog.fromBuffer(c1.toBuffer());
+    assert.equal(c2.entries.length, c1.entries.length, 'entry count');
+    console.log('    Catalog round-trip: ' + c1.entries.length + ' entries → ok');
+  });
+
+  it('TradingManager.toBuffer() round-trips TRADING.tag', async () => {
+    const { TradingManager } = await import('../src/objects/Trading.js');
+    const tradePath = '/mnt/d/Jeux/Steam/steamapps/common/StarMade/StarMade/server-database/world0/TRADING.tag';
+    if (!fs.existsSync(tradePath)) return;
+    const data = fs.readFileSync(tradePath);
+    const t1 = TradingManager.fromBuffer(data);
+    const t2 = TradingManager.fromBuffer(t1.toBuffer());
+    assert.equal(t2.routes.length, t1.routes.length, 'route count');
+    console.log('    TradingManager round-trip: ' + t1.routes.length + ' routes → ok');
+  });
+
+  it('ChatChannelManager.toBuffer() round-trips chatchannels.tag', async () => {
+    const { ChatChannelManager } = await import('../src/objects/ChatChannels.js');
+    const data = fs.readFileSync('/mnt/d/Jeux/Steam/steamapps/common/StarMade/StarMade/server-database/world0/chatchannels.tag');
+    const c1 = ChatChannelManager.fromBuffer(data);
+    const c2 = ChatChannelManager.fromBuffer(c1.toBuffer());
+    assert.equal(c2.channels.length, c1.channels.length, 'channel count');
+    console.log('    ChatChannelManager round-trip: ' + c1.channels.length + ' channels → ok');
+  });
+});

@@ -420,11 +420,10 @@ describe('SmbpmParser — DOCKING_BYTE entries / RAIL_BYTE wireless markers', ()
     // metaVersion >= 2: railUID + wirelessSize + markers
     w.writeJavaUTF('rail-uid-001');
     w.writeInt32BE(1);   // wirelessSize = 1 wireless marker
-    // _skipWirelessMarker: 3×int32 + long + long + int8
-    w.writeInt32BE(1); w.writeInt32BE(2); w.writeInt32BE(3); // pos
-    w.writeInt64BE(100n); // fromPos
-    w.writeInt64BE(200n); // toPos
-    w.writeInt8(0);       // side
+    // BBWirelessLogicMarker: UTF marking + long markerLocation + long fromLocation
+    w.writeJavaUTF('chain-uid-xyz');  // marking
+    w.writeInt64BE(100n);             // markerLocation
+    w.writeInt64BE(200n);             // fromLocation
 
     // railChildren: 1 child
     w.writeInt32BE(1);
@@ -436,6 +435,8 @@ describe('SmbpmParser — DOCKING_BYTE entries / RAIL_BYTE wireless markers', ()
 
     const file = parseSmbpm(w.toBuffer());
     assert.equal(file.railUID, 'rail-uid-001');
+    assert.equal(file.wirelessMarkers.length, 1);
+    assert.equal(file.wirelessMarkers[0].marking, 'chain-uid-xyz');
     assert.equal(file.railChildren.length, 1);
     assert.equal(file.railChildren[0].name, 'ATTACHED_0');
   });

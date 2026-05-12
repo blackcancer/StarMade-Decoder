@@ -65,6 +65,7 @@ import { Tag } from '../core/Tag.js';
 import { Tags } from '../core/TagBuilder.js';
 import { TagType } from '../core/TagType.js';
 import { FINISH_TAG } from '../core/Tag.js';
+import { readFrom, writeTo } from '../core/TagParser.js';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -345,6 +346,14 @@ export class FactionManager {
       Tags.long(null, this.lastUpdate),                        // [8] lastupdate
       Tags.struct(null, []),                                   // [9] npcFactionNews
     ]);
+  }
+
+  /** Encodes to binary for FACTIONS.fac. */
+  toBuffer(): Buffer { return writeTo(this.toTag()); }
+
+  /** Named constructor from binary file. */
+  static fromBuffer(data: Buffer | Uint8Array): FactionManager {
+    return FactionManager.fromTag(readFrom(data));
   }
 
   toString(): string {

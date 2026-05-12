@@ -64,7 +64,12 @@ export interface RailDockerPiece {
 }
 
 export interface WirelessMarker {
-  // Opaque — only the bytes are read
+  /** Rail UID of the destination chain element. */
+  marking: string;
+  /** Packed element index of the marker location. */
+  markerLocation: bigint;
+  /** Packed element index of the source activation controller. */
+  fromLocation: bigint;
 }
 
 export interface SmbpmFile {
@@ -75,6 +80,8 @@ export interface SmbpmFile {
   dockingEntries: DockingEntry[];
   /** Rail UID (for RAIL_BYTE) */
   railUID?: string;
+  /** Wireless logic markers (BBWirelessLogicMarker, metaVersion >= 2) */
+  wirelessMarkers: WirelessMarker[];
   /** Rail children */
   railChildren: Array<{ name: string; tag: Tag | null }>;
   /** Configuration IA */
@@ -102,6 +109,7 @@ export function parseSmbpm(data: Buffer | Uint8Array): SmbpmFile {
     metaVersion,
     managerTag: null,
     dockingEntries: [],
+    wirelessMarkers: [],
     railChildren: [],
     aiTag: null,
     railDockerPieces: [],
@@ -147,9 +155,10 @@ export function parseSmbpm(data: Buffer | Uint8Array): SmbpmFile {
           result.railUID = r.readJavaUTF();
           const wirelessSize = r.readInt32BE();
           for (let i = 0; i < wirelessSize; i++) {
-            // BBWirelessLogicMarker.deserialize : opaque, on skip
-            // Format: 3×int pos + long fromPos + long toPos + byte side + byte type
-            _skipWirelessMarker(r);
+            const marking        = r.readJavaUTF();
+            const markerLocation = r.readInt64BE();
+            const fromLocation   = r.readInt64BE();
+            result.wirelessMarkers.push({ marking, markerLocation, fromLocation });
           }
         }
 
@@ -221,15 +230,4 @@ export function parseSmbpm(data: Buffer | Uint8Array): SmbpmFile {
   return result;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
-/**
- * Skips a BBWirelessLogicMarker (opaque format).
- * Format Java approximatif : 3×int pos + long fromPos + long toPos + byte side + byte colorR + byte colorG + byte colorB
- */
-function _skipWirelessMarker(r: BufferReader): void {
-  r.readInt32BE(); r.readInt32BE(); r.readInt32BE(); // pos
-  r.readInt64BE(); // fromPos
-  r.readInt64BE(); // toPos
-  r.readInt8();    // side or type
-}

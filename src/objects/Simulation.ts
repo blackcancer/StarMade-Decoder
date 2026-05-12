@@ -97,6 +97,9 @@ export class NPCFactionManager {
 
   toTag(): Tag { return this._rootTag; }
 
+  /** Encodes to binary for NPCFACTIONS_*.tag. */
+  toBuffer(): Buffer { return writeTo(this.toTag()); }
+
   static fromBuffer(data: Buffer | Uint8Array): NPCFactionManager {
     return NPCFactionManager.fromTag(readFrom(data));
   }
@@ -164,6 +167,9 @@ export class SimulationState {
   }
 
   toTag(): Tag { return this._rebuild(this.groups); }
+
+  /** Encodes to binary for SIMULATION_STATE.sim. */
+  toBuffer(): Buffer { return writeTo(this.toTag()); }
 
   static fromBuffer(data: Buffer | Uint8Array): SimulationState {
     return SimulationState.fromTag(readFrom(data));
