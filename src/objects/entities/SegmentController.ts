@@ -113,11 +113,68 @@ export abstract class SegmentController extends GameEntity {
     super(mass, transform, sectorPosition, factionId, owner, spawnController, _transformableChildren);
   }
 
+  // Widens _clone to also accept SegmentController-specific overrides
+  protected abstract _clone(overrides: Partial<{
+    mass: number; transform: EntityTransform;
+    sectorPosition: SectorPosition; factionId: number;
+    owner: string; spawnController: SpawnController;
+    realName: string; vulnerable: boolean; minable: boolean;
+    scrap: boolean; factionRights: number; seed: bigint;
+    spawner: string; lastModifier: string; creatorId: number;
+  }>): this;
+
   // ── Accesseurs pratiques ───────────────────────────────────────────────────
 
   get isDocked(): boolean        { return this.dockingState.isDocked; }
   get isAlive(): boolean         { return this.hpState.isAlive; }
   get hpPercent(): number        { return this.hpState.hpPercent; }
+
+  // ── SegmentController-specific mutations ─────────────────────────────────
+
+  /** Changes the displayed real name (visible in-game, stored in tag field [5]). */
+  withRealName(realName: string): this {
+    return this._clone({ realName });
+  }
+
+  /** Sets the entity vulnerability flag. */
+  withVulnerable(vulnerable: boolean): this {
+    return this._clone({ vulnerable });
+  }
+
+  /** Sets the entity minability flag. */
+  withMinable(minable: boolean): this {
+    return this._clone({ minable });
+  }
+
+  /** Sets the scrap flag (used for debris/wreckage). */
+  withScrap(scrap: boolean): this {
+    return this._clone({ scrap });
+  }
+
+  /** Sets the faction rights flags. */
+  withFactionRights(factionRights: number): this {
+    return this._clone({ factionRights });
+  }
+
+  /** Sets the entity seed (used for procedural generation). */
+  withSeed(seed: bigint): this {
+    return this._clone({ seed });
+  }
+
+  /** Sets the spawner UID (entity that originally spawned this). */
+  withSpawner(spawner: string): this {
+    return this._clone({ spawner });
+  }
+
+  /** Sets the last modifier player name. */
+  withLastModifier(lastModifier: string): this {
+    return this._clone({ lastModifier });
+  }
+
+  /** Sets the creator DB ID. */
+  withCreatorId(creatorId: number): this {
+    return this._clone({ creatorId });
+  }
 
   // ── Serialization ─────────────────────────────────────────────────────────
 

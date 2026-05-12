@@ -48,6 +48,16 @@ function cloneWith<T extends SegmentController>(
     mass: number; transform: EntityTransform;
     sectorPosition: SectorPosition; factionId: number;
     owner: string; spawnController: SpawnController;
+    // SegmentController-specific overrides
+    realName: string;
+    vulnerable: boolean;
+    minable: boolean;
+    scrap: boolean;
+    factionRights: number;
+    seed: bigint;
+    spawner: string;
+    lastModifier: string;
+    creatorId: number;
   }>,
 ): T {
   const p = (SegmentController as any)._parse(entity.toTag());
@@ -79,10 +89,20 @@ function cloneWith<T extends SegmentController>(
     overrides.owner          ?? p.owner,
     overrides.spawnController ?? p.spawnController,
     tc,
-    p.uniqueId, p.realName, p.bounds, p.dockingState, p.controlElementMap,
-    p.managerContainer, p.creatorId, p.spawner, p.lastModifier, p.seed,
-    p.nonEmptySegments, p.hpState, p.textBlocks, p.scrap, p.vulnerable,
-    p.minable, p.factionRights, p.currentOwner, p.lastDockerPlayer,
+    p.uniqueId,
+    overrides.realName       ?? p.realName,
+    p.bounds, p.dockingState, p.controlElementMap,
+    p.managerContainer,
+    overrides.creatorId      ?? p.creatorId,
+    overrides.spawner        ?? p.spawner,
+    overrides.lastModifier   ?? p.lastModifier,
+    overrides.seed           ?? p.seed,
+    p.nonEmptySegments, p.hpState, p.textBlocks,
+    overrides.scrap          ?? p.scrap,
+    overrides.vulnerable     ?? p.vulnerable,
+    overrides.minable        ?? p.minable,
+    overrides.factionRights  ?? p.factionRights,
+    p.currentOwner, p.lastDockerPlayer,
     p.lastEditBlocks, p.lastDamageTaken, p.tagVersion, p.rootChildren,
   );
 }
