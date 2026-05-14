@@ -168,6 +168,20 @@ describe('BlockConfig', function () {
     }
   });
 
+  it('preserves render fields from BlockConfig.xml', () => {
+    const bc = BlockConfig.load(cfg);
+    const greyWedge = bc.getById(599);
+    const purpleHalfSlab = bc.getById(771);
+    const advancedFactory = bc.getById(259);
+    const greenCrystalTetra = bc.getById(531);
+
+    assert.deepEqual(greyWedge?.textureId, [33, 33, 33, 33, 33, 33]);
+    assert.equal(greyWedge?.blockStyle, 1);
+    assert.equal(purpleHalfSlab?.slab, 2);
+    assert.equal(advancedFactory?.individualSides, 3);
+    assert.equal(greenCrystalTetra?.transparency, true);
+  });
+
   it('getByName() finds a block by name', () => {
     const bc = BlockConfig.load(cfg);
     // Find a known block

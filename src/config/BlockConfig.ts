@@ -98,6 +98,26 @@ export class BlockDefinition {
     readonly computerReference: number,
     /** XML category/type name (for example "Grey Basic Armor"). */
     readonly xmlTypeName: string,
+    /** Texture IDs from the XML "textureId" attribute. */
+    readonly textureId: readonly number[] = [],
+    /** Slab thickness mode from BlockConfig.xml. */
+    readonly slab: number = 0,
+    /** Texture side grouping mode from BlockConfig.xml. */
+    readonly individualSides: number = 1,
+    /** Whether side textures rotate relative to orientation. */
+    readonly sideTexturesPointToOrientation: boolean = false,
+    /** Whether the block has active/inactive texture variants. */
+    readonly hasActivationTexture: boolean = false,
+    /** Whether the block has animated texture frames. */
+    readonly animated: boolean = false,
+    /** Whether the block should render with alpha. */
+    readonly transparency: boolean = false,
+    /** Whether the block is a light source. */
+    readonly lightSource: boolean = false,
+    /** RGBA light color/intensity from BlockConfig.xml. */
+    readonly lightSourceColor: readonly number[] = [],
+    /** Whether texture IDs address a 4x4 extended texture block. */
+    readonly extendedTexture4x4: boolean = false,
   ) {}
 
   /** Returns an immutable variant with one or more modified properties. */
@@ -106,6 +126,10 @@ export class BlockDefinition {
     price: number; description: string; armor: number;
     isPlacable: boolean; inShop: boolean; hasOrientation: boolean;
     canActivate: boolean; isDeprecated: boolean; blockStyle: number;
+    textureId: readonly number[]; slab: number; individualSides: number;
+    sideTexturesPointToOrientation: boolean; hasActivationTexture: boolean;
+    animated: boolean; transparency: boolean; lightSource: boolean;
+    lightSourceColor: readonly number[]; extendedTexture4x4: boolean;
   }>): BlockDefinition {
     return new BlockDefinition(
       this.id,
@@ -127,6 +151,16 @@ export class BlockDefinition {
       this.styleIds,
       this.computerReference,
       this.xmlTypeName,
+      overrides.textureId ?? this.textureId,
+      overrides.slab ?? this.slab,
+      overrides.individualSides ?? this.individualSides,
+      overrides.sideTexturesPointToOrientation ?? this.sideTexturesPointToOrientation,
+      overrides.hasActivationTexture ?? this.hasActivationTexture,
+      overrides.animated ?? this.animated,
+      overrides.transparency ?? this.transparency,
+      overrides.lightSource ?? this.lightSource,
+      overrides.lightSourceColor ?? this.lightSourceColor,
+      overrides.extendedTexture4x4 ?? this.extendedTexture4x4,
     );
   }
 
@@ -317,6 +351,11 @@ export class BlockConfig {
       if (!v || String(v).trim() === '') return [];
       return String(v).split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
     };
+    const gNumArr = (key: string): number[] => {
+      const v = node[key];
+      if (!v || String(v).trim() === '') return [];
+      return String(v).split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
+    };
 
     return new BlockDefinition(
       id,
@@ -338,6 +377,16 @@ export class BlockConfig {
       gArr('StyleIds'),
       gn('BlockComputerReference'),
       typeName,
+      gArr('@_textureId'),
+      gn('Slab'),
+      gn('IndividualSides', 1),
+      gb('SideTexturesPointToOrientation', false),
+      gb('HasActivationTexture', false),
+      gb('Animated', false),
+      gb('Transparency', false),
+      gb('LightSource', false),
+      gNumArr('LightSourceColor'),
+      gb('ExtendedTexture4x4', false),
     );
   }
 
@@ -353,6 +402,7 @@ export class BlockConfig {
                 '@_type':              b.id,
                 '@_name':              b.name,
                 '@_icon':              b.icon,
+                '@_textureId':         b.textureId.join(', '),
                 Hitpoints:             b.hp,
                 Mass:                  b.mass,
                 Volume:                b.volume,
@@ -365,6 +415,15 @@ export class BlockConfig {
                 CanActivate:           b.canActivate,
                 Deprecated:            b.isDeprecated,
                 BlockStyle:            b.blockStyle,
+                Slab:                  b.slab,
+                IndividualSides:       b.individualSides,
+                SideTexturesPointToOrientation: b.sideTexturesPointToOrientation,
+                HasActivationTexture:  b.hasActivationTexture,
+                Animated:              b.animated,
+                Transparency:          b.transparency,
+                LightSource:           b.lightSource,
+                LightSourceColor:      b.lightSourceColor.join(','),
+                ExtendedTexture4x4:    b.extendedTexture4x4,
                 SlabIds:               b.slabIds.join(', '),
                 StyleIds:              b.styleIds.join(', '),
                 BlockComputerReference: b.computerReference,
