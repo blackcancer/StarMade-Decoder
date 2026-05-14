@@ -174,12 +174,20 @@ describe('BlockConfig', function () {
     const purpleHalfSlab = bc.getById(771);
     const advancedFactory = bc.getById(259);
     const greenCrystalTetra = bc.getById(531);
+    const whiteRodLight = bc.getByName('White Rod Light');
+    const smallButton = bc.getByName('Small Button');
 
     assert.deepEqual(greyWedge?.textureId, [33, 33, 33, 33, 33, 33]);
     assert.equal(greyWedge?.blockStyle, 1);
     assert.equal(purpleHalfSlab?.slab, 2);
     assert.equal(advancedFactory?.individualSides, 3);
     assert.equal(greenCrystalTetra?.transparency, true);
+    assert.equal(whiteRodLight?.lodShape, 'WhiteLightRod');
+    assert.equal(whiteRodLight?.lodShapeFromFar, 1);
+    assert.equal(whiteRodLight?.hasLod, true);
+    assert.equal(smallButton?.lodShape, 'SmallButtonInactive');
+    assert.equal(smallButton?.lodShapeActive, 'SmallButtonActive');
+    assert.equal(smallButton?.lodActivationAnimationStyle, 1);
   });
 
   it('getByName() finds a block by name', () => {

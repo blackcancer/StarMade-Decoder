@@ -118,6 +118,16 @@ export class BlockDefinition {
     readonly lightSourceColor: readonly number[] = [],
     /** Whether texture IDs address a 4x4 extended texture block. */
     readonly extendedTexture4x4: boolean = false,
+    /** Resource loader key for the decorative LOD mesh, when BlockConfig declares one. */
+    readonly lodShape: string = '',
+    /** Optional active-state LOD mesh key. */
+    readonly lodShapeActive: string = '',
+    /** StarMade LOD draw style: 0=near detail, 1=LOD from far, 2=LOD-only. */
+    readonly lodShapeFromFar: number = 0,
+    /** LOD active/inactive animation style from BlockConfig.xml. */
+    readonly lodActivationAnimationStyle: number = 0,
+    /** Whether the LOD mesh participates in physical collision. */
+    readonly lodCollisionPhysical: boolean = true,
   ) {}
 
   /** Returns an immutable variant with one or more modified properties. */
@@ -130,6 +140,8 @@ export class BlockDefinition {
     sideTexturesPointToOrientation: boolean; hasActivationTexture: boolean;
     animated: boolean; transparency: boolean; lightSource: boolean;
     lightSourceColor: readonly number[]; extendedTexture4x4: boolean;
+    lodShape: string; lodShapeActive: string; lodShapeFromFar: number;
+    lodActivationAnimationStyle: number; lodCollisionPhysical: boolean;
   }>): BlockDefinition {
     return new BlockDefinition(
       this.id,
@@ -161,7 +173,16 @@ export class BlockDefinition {
       overrides.lightSource ?? this.lightSource,
       overrides.lightSourceColor ?? this.lightSourceColor,
       overrides.extendedTexture4x4 ?? this.extendedTexture4x4,
+      overrides.lodShape ?? this.lodShape,
+      overrides.lodShapeActive ?? this.lodShapeActive,
+      overrides.lodShapeFromFar ?? this.lodShapeFromFar,
+      overrides.lodActivationAnimationStyle ?? this.lodActivationAnimationStyle,
+      overrides.lodCollisionPhysical ?? this.lodCollisionPhysical,
     );
+  }
+
+  get hasLod(): boolean {
+    return this.lodShape.length > 0;
   }
 
   toString(): string {
@@ -387,6 +408,11 @@ export class BlockConfig {
       gb('LightSource', false),
       gNumArr('LightSourceColor'),
       gb('ExtendedTexture4x4', false),
+      String(g('LodShape')),
+      String(g('LodShapeSwitchStyleActive')),
+      gn('LodShapeFromFar'),
+      gn('LodActivationAnimationStyle'),
+      gb('LodCollisionPhysical', true),
     );
   }
 
@@ -424,6 +450,11 @@ export class BlockConfig {
                 LightSource:           b.lightSource,
                 LightSourceColor:      b.lightSourceColor.join(','),
                 ExtendedTexture4x4:    b.extendedTexture4x4,
+                LodShape:              b.lodShape,
+                LodShapeSwitchStyleActive: b.lodShapeActive,
+                LodShapeFromFar:       b.lodShapeFromFar,
+                LodActivationAnimationStyle: b.lodActivationAnimationStyle,
+                LodCollisionPhysical:  b.lodCollisionPhysical,
                 SlabIds:               b.slabIds.join(', '),
                 StyleIds:              b.styleIds.join(', '),
                 BlockComputerReference: b.computerReference,
