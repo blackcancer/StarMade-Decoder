@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.3.0 — 2026-05-14
+
+### Added
+
+#### `SegmentController` — immutable mutation methods
+
+Nine new `with*` methods on `SegmentController` (and its subclasses via `cloneWith()` in `Ships.ts`),
+following the same immutable-object pattern used throughout the SDK:
+
+| Method | Field | Description |
+|---|---|---|
+| `withRealName(realName: string)` | tag field `[5]` | Displayed name of the entity in-game |
+| `withVulnerable(value: boolean)` | `VULNERABLE` | Whether the entity can take damage |
+| `withMinable(value: boolean)` | `MINABLE` | Whether the entity can be mined |
+| `withScrap(value: boolean)` | `SCRAP` | Whether the entity is a debris/scrap object |
+| `withFactionRights(value: number)` | `FACTION_RIGHTS` | Faction rights bit-flags |
+| `withSeed(value: bigint)` | `SEED` | Procedural generation seed (long) |
+| `withSpawner(uid: string)` | `SPAWNER` | UID of the originating spawner entity |
+| `withLastModifier(name: string)` | `LAST_MODIFIER` | Name of the last player to modify the entity |
+| `withCreatorId(value: number)` | `CREATOR_ID` | Database ID of the creator player |
+
+Implementation: `_clone()` signature widened in `SegmentController` to accept the new field
+overrides; `cloneWith()` in `Ships.ts` threads them through all concrete subclasses.
+All new fields are covered by round-trip tests in `starmade-gamemaster`.
+
+### Coverage
+- **640 tests passing**, 4 pending (conditional integration tests — unchanged from v1.2.0)
+
+---
+
 ## 1.2.0 — 2026-05-12
 
 ### Added
