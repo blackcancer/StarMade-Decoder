@@ -29,11 +29,12 @@
  *   └─────────────────────────────────────────────────────────────────────┘
  *
  * Decompressed block data :
- *   version < 7 (Chunk16, 3 bytes/block) : BLOCK_COUNT_32 × 3 bytes
- *     type    = b[2] + (b[1] & 7) × 256  (11 bits)
- *     hp      = bits 11-18               (8 bits)
- *     active  = bit3 de b[0] == 0        (inverted)
- *     orient  = bits 4-7 de b[0]         (4 bits)
+ *   version < 7 (SegmentDataIntArray, 3 bytes/block) : BLOCK_COUNT_32 × 3 bytes
+ *     raw     = b[0] | b[1] << 8 | b[2] << 16
+ *     type    = bits 0-10
+ *     hp      = bits 11-17
+ *     active  = bit 18
+ *     orient  = bits 19-23
  *
  *   version >= 7 (Chunk32, 4 bytes/block, little-endian int) :
  *     type    = bits 0-12   (13 bits)
@@ -260,25 +261,21 @@ function _parseSegment(buf: Buffer, absPos: number, size: number): SegmentData |
   return { x, y, z, lastChanged, version, blocks, blockCount };
 }
 
-// ── 3-byte/block decoding (Chunk16, version < 7) ────────────────────────────
+// ── 3-byte/block decoding (SegmentDataIntArray, version < 7) ────────────────
 
 function _decode3Byte(inflated: Buffer): BlockData[] {
   const blocks: BlockData[] = new Array(BLOCK_COUNT);
 
   for (let i = 0; i < BLOCK_COUNT; i++) {
     const idx = i * 3;
-    const b0 = inflated[idx]     & 0xff;
-    const b1 = inflated[idx + 1] & 0xff;
-    const b2 = inflated[idx + 2] & 0xff;
+    const raw = (inflated[idx] & 0xff)
+      | ((inflated[idx + 1] & 0xff) << 8)
+      | ((inflated[idx + 2] & 0xff) << 16);
 
-    // type : bits 0-10 (11 bits)
-    const type = b2 + ((b1 & 0x07) * 256);
-    // hp : bits 11-18 (8 bits)
-    const hp = ((b1 & 0xf8) >> 3) | ((b0 & 0x03) << 5);
-    // active : bit 3 de b0, 0 = active (inverted)
-    const active = (b0 & 0x08) === 0;
-    // orientation : bits 4-7 de b0 (4 bits)
-    const orientation = (b0 >> 4) & 0x0f;
+    const type = raw & 0x7ff;
+    const hp = (raw >> 11) & 0x7f;
+    const active = ((raw >> 18) & 0x1) === 1;
+    const orientation = (raw >> 19) & 0x1f;
 
     blocks[i] = { type, hp, orientation, active };
   }
