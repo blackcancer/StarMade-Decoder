@@ -34,8 +34,8 @@ All new fields are covered by round-trip tests in `starmade-gamemaster`.
 
 ### Added
 
-#### DB VARBINARY decoders/encoders (`src/db/`)
-New module covering the 4 HSQLDB tables that store custom binary-serialized data:
+#### DB VARBINARY readers/writers (`src/db/`)
+New reader/writer module covering the HSQLDB tables that store custom binary-serialized data:
 
 | Table.Column | Format | API |
 |---|---|---|
@@ -63,7 +63,7 @@ Five immutable business objects mirroring the file-level pattern (`Catalog`, `Fa
 | `TradePricesObject` | `TRADE_NODES.ITEMS` | `empty()`, `fromBytes()`, `toBytes()`, `withBuyOrder()`, `withSellOrder()` |
 | `StarSystem` | `SYSTEMS.INFOS` + `SYSTEMS.RESOURCES` | `empty()`, `fromBytes()`, `infosToBytes()`, `resourcesToBytes()`, `withSectorType()`, `withResourceDensity*()` |
 
-#### Blueprint writers (completing round-trip coverage)
+#### New blueprint writers (completing round-trip coverage)
 - **`writeSmbpm()`** — encoder for `.smbpm` (blueprint meta), inverse of `BlueprintEntry.writeMeta()`
 - **`writeSmbmm()`** + `emptyModMappings()` — encoder for `.smbmm` (mod mappings)
 - **`writeSim()`** — encoder for `.sim` (simulation state)
