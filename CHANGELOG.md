@@ -1,5 +1,54 @@
 # Changelog
 
+## 1.4.0 — 2026-05-20
+
+### Added
+
+#### `BlockConfig` — render metadata aligned with `BlockConfig.xml`
+
+`BlockDefinition` now preserves the render-facing fields needed by downstream tools such as
+`StarMade-3D`, instead of dropping them during XML normalization:
+
+- `textureId`
+- `slab`
+- `individualSides`
+- `sideTexturesPointToOrientation`
+- `hasActivationTexture`
+- `animated`
+- `transparency`
+- `lightSource`
+- `lightSourceColor`
+- `extendedTexture4x4`
+- `lodShape`
+- `lodShapeActive`
+- `lodShapeFromFar`
+- `lodActivationAnimationStyle`
+- `lodCollisionPhysical`
+- derived getter `hasLod`
+
+These fields are now also threaded through `BlockDefinition.with(...)` and emitted again by
+`BlockConfig.toXml()`.
+
+### Fixed
+
+#### `.smd3` version 6 block decoding
+
+The pre-v7 3-byte block path now decodes `SegmentDataIntArray` using the correct packed bit layout:
+
+- `type` from bits `0-10`
+- `hp` from bits `11-17`
+- `active` from bit `18`
+- `orientation` from bits `19-23`
+
+This replaces the previous `Chunk16`-style interpretation, which produced incorrect block state
+for version 6 segment data.
+
+### Coverage
+- Existing `BlockConfig` tests extended to assert the newly preserved render/Lod fields
+- Decoder behavior covered by the existing test suite before release
+
+---
+
 ## 1.3.0 — 2026-05-14
 
 ### Added
