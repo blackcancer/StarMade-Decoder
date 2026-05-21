@@ -213,7 +213,7 @@ function writeCommandArgs(w: BufferWriter, args: CommandArg[]): void {
 
 export interface FleetRemotes {
   remotes: Map<string, boolean>;
-  /** Raw bytes when format is unrecognized (neither network nor Java serialization). */
+  /** @deprecated raw fallback bytes for unrecognized formats. Prefer remotes. */
   raw?: Buffer;
 }
 

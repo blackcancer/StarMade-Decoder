@@ -72,8 +72,8 @@ import { parsePlayerState as legacyParsePlayerState } from '../src/entity/Player
 
 registerAllFactories();
 
-const S = path.resolve('/mnt/c/Users/init-/source/repos/StarMade-Decoder/samples');
-const SM_DIR = '/mnt/d/Jeux/Steam/steamapps/common/StarMade/StarMade';
+const S = path.resolve('samples');
+const SM_DIR = '/srv/StarMade';
 const hasSamples = fs.existsSync(S);
 const hasStarMade = fs.existsSync(SM_DIR);
 const load = (f: string) => readFrom(fs.readFileSync(path.join(S, f)));

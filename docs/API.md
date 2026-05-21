@@ -15,6 +15,38 @@ import { readFrom, writeTo, Ship, BlockRegistry } from 'starmade-decoder';
 
 ---
 
+## High-level `.ent` slot objects
+
+Entity classes expose StarMade-Open slots through typed objects, not public raw `Tag` trees.
+Use the object helpers, then pass the updated object back to the parent entity.
+
+Main accessors:
+
+| Entity | Accessors |
+|--------|-----------|
+| `Ship` / `SpaceStation` / `ShopSpaceStation` / `FloatingRock` | `railController`, `coreTimer`, `blueprintInfo`, `itemsToSpawnWith`, `quarterManager`, `npcData` |
+| `ManagerContainer` | `modules`, `aiConfiguration`, `moduleExplosions`, `warpGateInfo`, `raceGateInfo`, `unloadedDummies`, `modData` |
+| `PlayerStateEntity` | `hostHistory`, `scanHistory`, `inventoryBackup`, `savedCoordinates`, `ignoredPlayers`, `cargoInventoryBlock` |
+
+Common update pattern:
+
+```ts
+const ship2 = ship
+  .withCoreTimer(ship.coreTimer.withTimeLeftMs(5000n))
+  .withBlueprintInfo(ship.blueprintInfo.withIdentifier('Explorer'));
+
+const request = ship.railController.currentRequest;
+const ship3 = request
+  ? ship.withRailController(ship.railController.withCurrentRequest(
+      request.withDidRotationInPlace(true)
+    ))
+  : ship;
+```
+
+These objects keep the original binary slot privately so unchanged data can still round-trip exactly.
+
+---
+
 ## Core Tag API
 
 ### `readFrom(data: Buffer | Uint8Array): Tag`
@@ -612,7 +644,7 @@ Slot-indexed block inventory.
 - `inventory.byType(blockType)` — `ItemStack[]` of a given type.
 - `inventory.countOf(blockType)` — total quantity of a block type.
 
-**`ItemStack` fields:** `slot`, `type` (block ID), `count`, `meta?: ItemMeta`.  
+**`ItemStack` fields:** `slot`, `type` (block ID), `count`, `meta?: ItemMeta`.
 **`ItemMeta` fields:** `id`, `type`, `orientation`, `subId`.
 
 ### `PowerState`
@@ -835,47 +867,66 @@ import { parseSmd3, writeSmd3, emptySegment, emptySmd3File, getBlock, posToIndex
 - `posToIndex(x, y, z)` — converts local `(x, y, z)` to a flat block array index.
 - `indexToPos(index)` — inverse of `posToIndex`.
 
-**`Smd3File` fields:** `version`, `segments: SegmentData[]`.  
-**`SegmentData` fields:** `version`, `x, y, z` (absolute segment coords), `lastChanged: bigint`, `blockCount`, `blocks: BlockData[]` (length `BLOCK_COUNT = 32768`).  
+**`Smd3File` fields:** `version`, `segments: SegmentData[]`.
+**`SegmentData` fields:** `version`, `x, y, z` (absolute segment coords), `lastChanged: bigint`, `blockCount`, `blocks: BlockData[]` (length `BLOCK_COUNT = 32768`).
 **`BlockData` fields:** `type: number`, `hp: number`, `active: boolean`, `orientation: number`.
 
 **Constants:** `CHUNK_DIM = 32`, `BLOCK_COUNT = 32768`, `VERSION_4BYTE = 7`, `DATA_AVAILABLE`, `DATA_EMPTY`, `DATA_SINGLE`, `DATA_BITMAP`, `DATA_SINGLE_SIDE_EDGE`.
 
 ### `.sment` blueprint archives
 
-- `parseSment(data)` — parses a `.sment` ZIP archive into `SmentFile`.
-- `parseBlueprintFolder(folderPath)` — parses an extracted blueprint directory.
+- `parseSment(data)` — parses a `.sment` ZIP archive into a `BlueprintArchive`.
+- `parseBlueprintFolder(folderPath)` — parses an extracted blueprint directory into the same `BlueprintArchive` view.
 - `BLUEPRINT_TYPE` — array of valid blueprint type strings in ordinal order.
+- `BLUEPRINT_CLASSIFICATION` — array of valid `BlueprintClassification` names in ordinal order.
 
-**`SmentFile` fields:** `root: SmentEntity`, `totalEntities: number`, `totalSegments: number`.  
-**`SmentEntity` fields:** `name`, `header: BlueprintHeader`, `segments: Smd3File[]`, `children: SmentEntity[]`.  
-**`BlueprintHeader` fields:** `entityType`, `gameVersion`, `boundingBox: BoundingBox`, `totalBlockCount`, `blockCountByType`, `classification`.
+**`BlueprintArchive` fields:** `root: BlueprintEntity`, `totalEntities: number`, `totalSegments: number`, `entities`, `totalBlockCount`.
+**`BlueprintArchive` helpers:** `findEntity(name)`.
+**`BlueprintEntity` fields:** `name`, `header: BlueprintHeader`, `meta: BlueprintMeta | null`, `logic: BlueprintLogic | null`, `offset`, `worldOffset`, `segments: Smd3File[]`, `children: SmentEntity[]`.
+**`BlueprintEntity` helpers:** `entityType`, `directBlockCount`, `declaredBlockCount`, `segmentFileCount`, `attachmentCount`, `child(name)`, `findEntity(name)`, `allEntities()`, `withHeader(header)`, `withMeta(meta)`, `withLogic(logic)`, `withChildren(children)`.
+
+### `.smbph` header files
+
+- `parseSmbph(data)` — parses a `.smbph` file into `BlueprintHeader`.
+- `writeSmbph(header, gameVersion?)` — encodes a `BlueprintHeader` or compatible high-level object to a `.smbph` `Buffer`. The `gameVersion` argument overrides `header.gameVersion`.
+
+**`BlueprintHeader` fields:** `headerVersion`, `gameVersion`, `entityType`, `classification`, `classificationName`, `boundingBox: BoundingBox`, `blockCountByType`, `totalBlockCount`, `score: BlueprintIndexScore | null`.
+**`BlueprintHeader` helpers:** `entityTypeOrdinal`, `classificationOrdinal`, `hasScore`, `blockTypeCount`, `isEmpty`, `boundsSize`, `boundsCenter`, `boundsVolume`, `blockCountOf(type)`, `hasBlockType(type)`, `blockShare(type)`, `topBlockTypes(limit?)`, `withHeaderVersion(version)`, `withGameVersion(version)`, `withEntityType(type, classification?)`, `withClassification(classification)`, `withBoundingBox(box)`, `withBlockCounts(entries)`, `withBlockCount(type, count)`, `withoutBlockType(type)`, `withScore(score)`.
+**`BlueprintIndexScore` fields:** `version`, `offensiveIndex`, `defensiveIndex`, `powerIndex`, `mobilityIndex`, `dangerIndex`, `survivabilityIndex`, `supportIndex`, `miningIndex`.
+**`BlueprintIndexScore` helpers:** `hasMiningIndex`, `totalIndex`, `strongestField`, `getValue(field)`, `withVersion(version)`, `withValue(field, value)`, `withValues(values)`.
 
 ### `.smtpl` template files
 
-- `parseSmtpl(data)` — parses a `.smtpl` file into `SmtplFile`.
-- `writeSmtpl(file)` — encodes to `Buffer`.
+- `parseSmtpl(data)` — parses a `.smtpl` file into `BlueprintTemplate`.
+- `writeSmtpl(template)` — encodes a `BlueprintTemplate` or compatible high-level object to `Buffer`.
+- `templatePositionKey(position)` / `templatePositionFromKey(key)` — convert StarMade template position keys to `{ x, y, z }`.
 
-**`SmtplFile` fields:** `version`, `pieces: TemplatePiece[]`, `connections: TemplateConnection[]`, `texts: Map<bigint, string>`.
+**`BlueprintTemplate` fields:** `version`, `minX/minY/minZ`, `maxX/maxY/maxZ`, `sizeX/sizeY/sizeZ`, `pieces`, `connections`, `texts`, `filters`, `production`, `productionLimits`, `fillUpFilters`, `totalBlocks`.
+**`BlueprintTemplate` helpers:** `bounds`, `pieceCount`, `connectionCount`, `textCount`, `filterCount`, `productionCount`, `productionLimitCount`, `fillUpFilterCount`, `isEmpty`, `pieceAt(position)`, `piecesOfType(type)`, `blockCountOf(type)`, `topBlockTypes(limit?)`, `getText(positionOrKey)`, `filterAt(positionOrKey)`, `fillUpFilterAt(positionOrKey)`, `productionAt(positionOrKey)`, `productionLimitAt(positionOrKey)`, `controllersFor(target)`, `controlledBy(controller)`, `isConnected(controller, target)`, `withPieces(pieces)`, `withPiece(piece)`, `removePieceAt(position)`, `withConnections(connections)`, `addConnection(controller, target)`, `removeConnection(controller, target?)`, `withText(position, text)`, `withoutText(position)`, `withInventoryFilter(position, entries)`, `withFillUpFilter(position, entries)`, `withProduction(position, typeOrNull)`, `withProductionLimit(position, limitOrNull)`.
+**`TemplatePiece` fields:** `x`, `y`, `z`, `type`, `hp`, `active`, `orientation`.
+**`TemplateInventoryFilter` fields:** `position`, `entries: Array<{ type, count }>`.
 
 ### `.smbpl` logic files
 
-- `parseSmbpl(data)` — `SmbplFile` with `links: ControlLink[]`.
-- `writeSmbpl(file)` — encodes to `Buffer`.
+- `parseSmbpl(data)` — `BlueprintLogic` control network.
+- `writeSmbpl(logic)` — encodes a `BlueprintLogic` or compatible object to `Buffer`.
 
+**`BlueprintLogic` fields:** `structureVersion`, `controllers`, `links`, `controllerCount`, `isEmpty`, `groupCount`, `connectionCount`.
+**`BlueprintLogic` helpers:** `controllerAt(position)`, `groupsForType(type)`, `controllersForType(type)`, `linksFrom(position)`, `targetsOf(position, type?)`, `typesFrom(position)`, `isLinked(from, target, type?)`, `withStructureVersion(version)`, `withControllers(controllers)`, `withLinks(links)`, `addLink(from, type, targetOrTargets)`, `removeLink(from, type?, target?)`, `clearController(position)`, `moveController(from, to)`.
 **`ControlLink` fields:** `fromX/Y/Z`, `type`, `targets: Array<{x, y, z}>`.
 
 ### `.smbpm` metadata files
 
-- `parseSmbpm(data)` — `SmbpmFile` with `dockingEntries`, `railChildren`, `railUID`, `cargoPoints`, `railDockerPieces`, `aiTag`, `thrustTag`.
+- `parseSmbpm(data)` — `BlueprintMeta` with `manager`, `dockingEntries`, `railChildren`, `railUID`, `wirelessMarkers`, `cargoPoints`, `lockBoxPoints`, `railDockerPieces`, `aiConfig`, `thrustConfig`.
+- `writeSmbpm(meta)` — encodes a `BlueprintMeta` or compatible high-level object to a `.smbpm` `Buffer`.
+
+**`BlueprintMeta` helpers:** `hasManager`, `hasRails`, `attachmentCount`, `childTransformFor(name)`, `childOffsetFor(name)`, `withMetaVersion(version)`, `withManager(manager)`, `withDockingEntries(entries)`, `withRailBounds(min, max)`, `withRailUID(uid)`, `withWirelessMarkers(markers)`, `withRailChildren(children)`, `withRailChildRequest(nameOrIndex, request)`, `withAiConfig(config)`, `withAiValue(id, value)`, `withRailDockerPieces(pieces)`, `withCargoPoints(points)`, `withLockBoxPoints(points)`, `withThrustConfig(config)`.
+
+The parser preserves binary fallback data internally for unchanged round-trips, but the high-level object surface exposes decoded domain fields rather than raw tags.
 
 ### `.smbmm` mod-mapping files
 
 - `parseSmbmm(data)` — `SmbmmFile` with `isEmpty: boolean`, `size: number`, `raw: Uint8Array`.
-
-### `.smbph` header writer
-
-- `writeSmbph(header, gameVersion?)` — encodes a `BlueprintHeader` to a `.smbph` `Buffer`. The `gameVersion` argument overrides `header.gameVersion`.
 
 ### Simulation files
 

@@ -53,7 +53,9 @@ export class PlayerTransformable {
     public owner: string,
     /** Unknown fields preserved by index (spawnController, etc.) */
     private _extra: Tag[],
-  ) {}
+  ) {
+    Object.defineProperty(this, '_extra', { enumerable: false });
+  }
 
   static fromTag(tag: Tag): PlayerTransformable {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);

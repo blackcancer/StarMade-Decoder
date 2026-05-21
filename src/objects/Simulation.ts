@@ -4,28 +4,42 @@
  * Defines high-level StarMade domain objects with typed accessors, mutation helpers, and round-trip serialization support.
  *
  * @author InitSysRev
- * @version 1.0.0
+ * @version 1.1.0
  */
 
 /**
- * NPCFactions — business object for NPCFACTIONS_0_0_0.tag
+ * NPCFactionManager — business object for NPCFACTIONS_*.tag
  *
- * Structure (NPCFactionManager.toTagStructure) :
+ * Tag structure (NPCFactionManager.toTagStructure — Java source):
  *   STRUCT [
- *     BYTE  version
+ *     BYTE  version  (= 0)
  *     FINISH
  *   ]
+ *
+ * Note: NPC factions are not stored here — they live in FACTIONS.fac as
+ * regular Faction entries with isNPC()==true. This file only carries the
+ * manager version byte written by the server at shutdown.
  *
  * SimulationGroup structure (SimulationGroup.toTagStructure):
  *   STRUCT [
- *     BYTE    version
- *     INT     type
- *     STRUCT  members — STRING list
- *     LONG    startTime
+ *     BYTE     version
+ *     INT      type
+ *     STRUCT   members — STRING list
+ *     LONG     startTime
  *     VECTOR3i startSector
- *     INT     programId
+ *     INT      programId
  *     FINISH
  *   ]
+ *
+ * SimulationState structure (SimulationManager.toTagStructure):
+ *   STRUCT SimulationState [
+ *     BYTE    version
+ *     STRUCT  groups — SimulationGroup list
+ *     LONG    lastUpdate
+ *     FINISH
+ *   ]
+ *
+ * Source: NPCFactionManager.java, SimulationManager.java
  */
 
 import { Tag } from '../core/Tag.js';
@@ -34,6 +48,8 @@ import { TagType } from '../core/TagType.js';
 import { FINISH_TAG } from '../core/Tag.js';
 import { readFrom, writeTo } from '../core/TagParser.js';
 import type { Vector3i } from '../types/Vectors.js';
+
+// ── SimulationGroup ────────────────────────────────────────────────────────────
 
 export class SimulationGroup {
   constructor(
@@ -47,18 +63,17 @@ export class SimulationGroup {
 
   static fromTag(tag: Tag): SimulationGroup {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
-    const version   = s[0]?.type === TagType.BYTE    ? s[0].getByte()     : 0;
-    const type      = s[1]?.type === TagType.INT     ? s[1].getInt()      : 0;
+    const version     = s[0]?.type === TagType.BYTE    ? s[0].getByte()     : 0;
+    const type        = s[1]?.type === TagType.INT     ? s[1].getInt()      : 0;
     const members: string[] = [];
     if (s[2]?.type === TagType.STRUCT) {
       for (const m of s[2].getStruct().filter(t => t.type !== TagType.FINISH)) {
         if (m.type === TagType.STRING) members.push(m.getString());
       }
     }
-    const startTime  = s[3]?.type === TagType.LONG     ? s[3].getLong()     : 0n;
+    const startTime   = s[3]?.type === TagType.LONG     ? s[3].getLong()     : 0n;
     const startSector = s[4]?.type === TagType.VECTOR3i ? s[4].getVector3i() : null;
-    const programId  = s[5]?.type === TagType.INT      ? s[5].getInt()      : 0;
-
+    const programId   = s[5]?.type === TagType.INT      ? s[5].getInt()      : 0;
     return new SimulationGroup(version, type, members, startTime, startSector, programId);
   }
 
@@ -82,20 +97,26 @@ export class SimulationGroup {
   }
 }
 
+// ── NPCFactionManager ─────────────────────────────────────────────────────────
+
 export class NPCFactionManager {
   constructor(
+    /** File format version (always 0 in current StarMade). */
     public version: number,
-    private _rootTag: Tag,
   ) {}
+
+  // ── Serialization ─────────────────────────────────────────────────────────
 
   static fromTag(root: Tag): NPCFactionManager {
     if (root.type !== TagType.STRUCT) throw new TypeError('NPCFactionManager: expected STRUCT');
     const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
     const version = s[0]?.type === TagType.BYTE ? s[0].getByte() : 0;
-    return new NPCFactionManager(version, root);
+    return new NPCFactionManager(version);
   }
 
-  toTag(): Tag { return this._rootTag; }
+  toTag(): Tag {
+    return Tags.struct(null, [Tags.byte(null, this.version)]);
+  }
 
   /** Encodes to binary for NPCFACTIONS_*.tag. */
   toBuffer(): Buffer { return writeTo(this.toTag()); }
@@ -107,42 +128,27 @@ export class NPCFactionManager {
   toString(): string { return `NPCFactionManager(v${this.version})`; }
 }
 
-/**
- * SimulationState — business object for SIMULATION_STATE.sim
- *
- * Structure (SimulationManager.toTagStructure) :
- *   STRUCT "SimulationState" [
- *     BYTE    version
- *     STRUCT  groups — SimulationGroup list
- *     LONG    lastUpdate
- *     FINISH
- *   ]
- */
+// ── SimulationState ────────────────────────────────────────────────────────────
+
 export class SimulationState {
   constructor(
     public version: number,
     public groups: SimulationGroup[],
     public lastUpdate: bigint,
-    private _rootTag: Tag,
   ) {}
 
   // ── Updates ──────────────────────────────────────────────────────────
 
   addGroup(group: SimulationGroup): SimulationState {
-    return SimulationState.fromTag(this._rebuild([...this.groups, group]));
+    return new SimulationState(this.version, [...this.groups, group], this.lastUpdate);
   }
 
   removeGroup(idx: number): SimulationState {
-    return SimulationState.fromTag(this._rebuild(this.groups.filter((_, i) => i !== idx)));
+    return new SimulationState(this.version, this.groups.filter((_, i) => i !== idx), this.lastUpdate);
   }
 
-  private _rebuild(groups: SimulationGroup[]): Tag {
-    const groupTags = [...groups.map(g => g.toTag()), FINISH_TAG];
-    return Tags.struct('SimulationState', [
-      Tags.byte(null, this.version),
-      new Tag(TagType.STRUCT, null, groupTags),
-      Tags.long(null, this.lastUpdate),
-    ]);
+  withLastUpdate(ts: bigint): SimulationState {
+    return new SimulationState(this.version, this.groups, ts);
   }
 
   // ── Serialization ─────────────────────────────────────────────────────────
@@ -150,23 +156,27 @@ export class SimulationState {
   static fromTag(root: Tag): SimulationState {
     if (root.type !== TagType.STRUCT) throw new TypeError('SimulationState: expected STRUCT');
     const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
-
     const version    = s[0]?.type === TagType.BYTE ? s[0].getByte() : 0;
     const lastUpdate = s[2]?.type === TagType.LONG ? s[2].getLong() : 0n;
     const groups: SimulationGroup[] = [];
-
     if (s[1]?.type === TagType.STRUCT) {
       for (const g of s[1].getStruct().filter(t => t.type !== TagType.FINISH)) {
         if (g.type === TagType.STRUCT) {
-          try { groups.push(SimulationGroup.fromTag(g)); } catch { /* skip */ }
+          try { groups.push(SimulationGroup.fromTag(g)); } catch { /* skip malformed */ }
         }
       }
     }
-
-    return new SimulationState(version, groups, lastUpdate, root);
+    return new SimulationState(version, groups, lastUpdate);
   }
 
-  toTag(): Tag { return this._rebuild(this.groups); }
+  toTag(): Tag {
+    const groupTags = [...this.groups.map(g => g.toTag()), FINISH_TAG];
+    return Tags.struct('SimulationState', [
+      Tags.byte(null, this.version),
+      new Tag(TagType.STRUCT, null, groupTags),
+      Tags.long(null, this.lastUpdate),
+    ]);
+  }
 
   /** Encodes to binary for SIMULATION_STATE.sim. */
   toBuffer(): Buffer { return writeTo(this.toTag()); }

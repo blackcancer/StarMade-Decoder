@@ -1,7 +1,7 @@
 {
   "name": "starmade-decoder",
   "version": "1.4.0",
-  "description": "TypeScript SDK to read/write StarMade save files — faithful port of the Java Tag format",
+  "description": "TypeScript SDK to read/write StarMade save files \u2014 faithful port of the Java Tag format",
   "type": "module",
   "license": "MIT",
   "author": "InitSysRev <init-sys-rev@hotmail.com>",
@@ -12,6 +12,7 @@
     "test": "node --import tsx/esm --no-warnings node_modules/.bin/mocha 'test/**/*.test.ts'",
     "coverage": "c8 --reporter=text --reporter=html --reporter=json-summary npm test",
     "coverage:check": "c8 --check-coverage --lines 70 --functions 70 --branches 60 --statements 70 npm test",
+    "docs:check": "node scripts/check-jsdoc-coverage.mjs",
     "samples:fetch-starmadedock": "node scripts/fetch-starmadedock-samples.mjs",
     "clean": "rimraf dist coverage",
     "prepublishOnly": "npm run build && npm test"

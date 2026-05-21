@@ -17,21 +17,31 @@
  */
 
 import { BufferWriter } from '../core/BufferWriter.js';
-import { BLUEPRINT_TYPE } from './SmentParser.js';
-import type { BlueprintHeader } from './SmentParser.js';
+import {
+  BlueprintHeader,
+  blueprintTypeOrdinal,
+  normalizeBlueprintHeader,
+} from './SmentParser.js';
+import type { BlueprintHeaderInput, BlueprintIndexScore } from './SmentParser.js';
 
-export function writeSmbph(header: BlueprintHeader, gameVersion = '0.203.175_20250426_044402'): Buffer {
+const DEFAULT_GAME_VERSION = '0.203.175_20250426_044402';
+
+export function writeSmbph(
+  headerInput: BlueprintHeader | BlueprintHeaderInput,
+  gameVersion?: string
+): Buffer {
+  const header = normalizeBlueprintHeader(headerInput);
   const w = new BufferWriter();
 
   w.writeInt32BE(5); // headerVersion = 5 (current)
-  w.writeJavaUTF(header.gameVersion ?? gameVersion);
+  w.writeJavaModifiedUTF(gameVersion ?? header.gameVersion ?? DEFAULT_GAME_VERSION);
 
   // entityType ordinal
-  const typeIdx = BLUEPRINT_TYPE.indexOf(header.entityType as any);
+  const typeIdx = blueprintTypeOrdinal(header.entityType);
   w.writeInt32BE(typeIdx >= 0 ? typeIdx : 0);
 
   // classification (headerVersion >= 3)
-  w.writeInt32BE(header.classification ?? 0);
+  w.writeInt32BE(header.classificationOrdinal);
 
   // BoundingBox
   const bb = header.boundingBox;
@@ -46,8 +56,27 @@ export function writeSmbph(header: BlueprintHeader, gameVersion = '0.203.175_202
     w.writeInt32BE(e.count);
   }
 
-  // hasScore = false
-  w.writeInt8(0);
+  if (header.score) {
+    w.writeInt8(1);
+    writeBlueprintIndexScore(w, header.score);
+  } else {
+    w.writeInt8(0);
+  }
 
   return w.toBuffer();
+}
+
+function writeBlueprintIndexScore(w: BufferWriter, score: BlueprintIndexScore): void {
+  w.writeInt16BE(score.version);
+  w.writeFloat64BE(score.legacyOffensiveIndex);
+  w.writeFloat64BE(score.defensiveIndex);
+  w.writeFloat64BE(score.powerIndex);
+  w.writeFloat64BE(score.mobilityIndex);
+  w.writeFloat64BE(score.dangerIndex);
+  w.writeFloat64BE(score.survivabilityIndex);
+  w.writeFloat64BE(score.offensiveIndex);
+  w.writeFloat64BE(score.supportIndex);
+  if (score.version >= 1) {
+    w.writeFloat64BE(score.miningIndex);
+  }
 }

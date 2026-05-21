@@ -21,6 +21,7 @@ import { ElementCountMap } from '../src/objects/Serializables.js';
 import { Ship } from '../src/objects/entities/Ships.js';
 import { ManagerContainer } from '../src/objects/components/ManagerContainer.js';
 import { Tags } from '../src/core/TagBuilder.js';
+import { TagType } from '../src/core/TagType.js';
 import {
   enrichBlockCounts,
   getBlockCountStats,
@@ -32,8 +33,8 @@ import { parseSmd3, BLOCK_COUNT } from '../src/smd3/Smd3Parser.js';
 
 registerAllFactories();
 
-const STARMADE_DIR = '/mnt/d/Jeux/Steam/steamapps/common/StarMade/StarMade';
-const S = path.resolve('/mnt/c/Users/init-/source/repos/StarMade-Decoder/samples');
+const STARMADE_DIR = '/srv/StarMade';
+const S = path.resolve('samples');
 
 function initBlockRegistry(): void {
   const cfg = SMToolConfig.fromData({ starmadeDir: STARMADE_DIR, worldDir: 'world0' });
@@ -134,8 +135,8 @@ describe('Phase 4 — BlockConfig-enriched views', function () {
   it('ManagerContainer.relevantElementCountMap tolerates malformed relevantECM data', () => {
     const ship = Ship.fromBuffer(fs.readFileSync(path.join(S, 'ENTITY_SHIP_Traders Homerl110.ent')));
     const mc = ship.managerContainer!;
-    const rawChildren = [...mc._rawChildren];
-    rawChildren[7] = Tags.struct(null, [
+    const children = mc.toTag().getStruct().filter(t => t.type !== TagType.FINISH);
+    children[7] = Tags.struct(null, [
       Tags.int(null, 42),
       Tags.struct(null, [Tags.string(null, 'bad'), Tags.int(null, 12)]),
       Tags.struct(null, [Tags.short(null, 5), Tags.string(null, 'bad')]),
@@ -143,7 +144,7 @@ describe('Phase 4 — BlockConfig-enriched views', function () {
 
     const malformed = new ManagerContainer(
       mc.inventories, mc.initialShields, mc.powerState, mc.texts,
-      mc.slotAssignment, mc.pullPermission, rawChildren,
+      mc.slotAssignment, mc.pullPermission, children,
     );
 
     assert.deepEqual(malformed.relevantElementCountMap?.counts, []);

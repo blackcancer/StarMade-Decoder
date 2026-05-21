@@ -18,7 +18,7 @@ import { Catalog, CatalogEntry } from '../src/objects/Catalog.js';
 import { FactionManager, Faction, FactionMember, FactionRelation, RELATION_ALLY, RELATION_WAR } from '../src/objects/Factions.js';
 
 registerAllFactories();
-const S = path.resolve('/mnt/c/Users/init-/source/repos/StarMade-Decoder/samples');
+const S = path.resolve('samples');
 const load = (f: string) => readFrom(fs.readFileSync(path.join(S, f)));
 
 // ── Catalog ───────────────────────────────────────────────────────────────────

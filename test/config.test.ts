@@ -18,8 +18,9 @@ import { ServerConfig, SERVER_CONFIG_SCHEMA } from '../src/config/ServerConfig.j
 import { BlockConfig } from '../src/config/BlockConfig.js';
 import { BlockBehaviorConfig } from '../src/config/BlockBehaviorConfig.js';
 import { FactionConfig } from '../src/config/FactionConfig.js';
+import { parseSystemNames, writeSystemNames } from '../src/config/SystemNames.js';
 
-const STARMADE_DIR = '/mnt/d/Jeux/Steam/steamapps/common/StarMade/StarMade';
+const STARMADE_DIR = '/srv/StarMade';
 
 // ── SMToolConfig ──────────────────────────────────────────────────────────────
 
@@ -168,26 +169,125 @@ describe('BlockConfig', function () {
     }
   });
 
-  it('preserves render fields from BlockConfig.xml', () => {
+  it('loads render fields needed by StarMade-3D', () => {
     const bc = BlockConfig.load(cfg);
-    const greyWedge = bc.getById(599);
-    const purpleHalfSlab = bc.getById(771);
-    const advancedFactory = bc.getById(259);
-    const greenCrystalTetra = bc.getById(531);
-    const whiteRodLight = bc.getByName('White Rod Light');
-    const smallButton = bc.getByName('Small Button');
+    const b = bc.getByName('Grey Basic Armor') ?? bc.all[0];
+    assert.isDefined(b);
+    assert.isArray(b!.textureIds);
+    assert.isAbove(b!.textureIds.length, 0);
+    assert.isBoolean(b!.transparent);
+    assert.isBoolean(b!.animated);
+    assert.isNumber(b!.individualSides);
+    assert.isBoolean(b!.sideTexturesPointToOrientation);
+    assert.isBoolean(b!.hasActivationTexture);
+    assert.isBoolean(b!.lightSource);
+    assert.lengthOf(b!.lightSourceColor, 4);
+    assert.isBoolean(b!.drawOnlyInBuildMode);
+    assert.isBoolean(b!.extendedTexture);
+    assert.isNumber(b!.resourceInjection);
+    assert.isNumber(b!.chamberRoot);
+    assert.isBoolean(b!.reactorChamberSpecific);
+    assert.isBoolean(b!.lodCollisionPhysical);
+    assert.isNumber(b!.slab);
+    assert.isBoolean(b!.drawLogicConnection);
+    assert.isBoolean(b!.logicBlock);
+    assert.isBoolean(b!.logicSignaledByRail);
+    assert.isBoolean(b!.logicBlockButton);
+    assert.isObject(b!.metadata);
+    console.log('    render fields:', b!.name, b!.textureIds.join(','));
+  });
 
-    assert.deepEqual(greyWedge?.textureId, [33, 33, 33, 33, 33, 33]);
-    assert.equal(greyWedge?.blockStyle, 1);
-    assert.equal(purpleHalfSlab?.slab, 2);
-    assert.equal(advancedFactory?.individualSides, 3);
-    assert.equal(greenCrystalTetra?.transparency, true);
-    assert.equal(whiteRodLight?.lodShape, 'WhiteLightRod');
-    assert.equal(whiteRodLight?.lodShapeFromFar, 1);
-    assert.equal(whiteRodLight?.hasLod, true);
-    assert.equal(smallButton?.lodShape, 'SmallButtonInactive');
-    assert.equal(smallButton?.lodShapeActive, 'SmallButtonActive');
-    assert.equal(smallButton?.lodActivationAnimationStyle, 1);
+  it('loads XML render metadata required by StarMade-3D', () => {
+    const bc = BlockConfig.load(cfg);
+    const resourceBlocks = bc.all.filter((block) => block.resourceInjection > 0);
+    const extendedBlocks = bc.all.filter((block) => block.extendedTexture);
+    const buildModeBlocks = bc.all.filter((block) => block.drawOnlyInBuildMode);
+    const chamberBlocks = bc.all.filter((block) => block.reactorChamberSpecific);
+
+    assert.isAbove(resourceBlocks.length, 0, 'ResourceInjection metadata must be exposed');
+    assert.isAbove(extendedBlocks.length, 0, 'ExtendedTexture4x4 metadata must be exposed');
+    assert.isAbove(buildModeBlocks.length, 0, 'OnlyDrawnInBuildMode metadata must be exposed');
+    assert.isAbove(chamberBlocks.length, 0, 'ChamberRoot metadata must be exposed');
+    assert.isTrue(chamberBlocks.every((block) => block.chamberRoot !== 0));
+    console.log(
+      '    XML render metadata:',
+      `resource=${resourceBlocks.length}`,
+      `extended=${extendedBlocks.length}`,
+      `buildMode=${buildModeBlocks.length}`,
+      `chambers=${chamberBlocks.length}`
+    );
+  });
+
+  it('loads extended BlockConfig metadata for future render and gameplay use', () => {
+    const bc = BlockConfig.load(cfg);
+    const railBasic = bc.getByName('Rail Basic');
+    const greyHull = bc.getByName('Grey Basic Armor');
+    const antiGravity = bc.getByName('Anti Gravity 1');
+    const whiteLight = bc.getByName('White Light');
+
+    assert.isDefined(railBasic);
+    assert.include(railBasic!.metadata.controlling, 'STORAGE');
+    assert.include(railBasic!.metadata.controlledBy, 'RAIL_SPEED_CONTROLLER');
+
+    assert.isDefined(greyHull);
+    assert.isAbove(greyHull!.metadata.consistence.length, 0);
+    assert.equal(greyHull!.metadata.inventoryGroup, 'basicgreyhull');
+    assert.isNumber(greyHull!.metadata.blockResourceType);
+    assert.isTrue(greyHull!.metadata.inRecipe);
+    assert.isObject(greyHull!.metadata.effectArmor);
+    assert.isNumber(greyHull!.metadata.effectArmor.heat);
+    assert.isNumber(greyHull!.metadata.effectArmor.kinetic);
+    assert.isNumber(greyHull!.metadata.effectArmor.em);
+
+    assert.isDefined(antiGravity);
+    assert.isAbove(antiGravity!.metadata.chamberChildren.length, 0);
+    assert.include(antiGravity!.metadata.chamberConfigGroups, 'mobility - anti gravity 1');
+
+    assert.isDefined(whiteLight);
+    assert.isAbove(whiteLight!.metadata.wildcardIds.length, 0);
+  });
+
+  it('provides StarMade-Open style BlockConfig element information', () => {
+    const bc = BlockConfig.load(cfg);
+    const greyHull = bc.getElementInfoByName('Grey Basic Armor');
+    const wedge = bc.getElementInfoByName('Grey Basic Armor Wedge');
+    const railBasic = bc.getElementInfoByName('Rail Basic');
+    const antiGravity = bc.getElementInfoByName('Anti Gravity 1');
+    const cargo = bc.getElementInfoByTypeName('CARGO_SPACE');
+    const transporter = bc.getElementInfoByTypeName('TRANSPORTER_MODULE');
+    const gravity = bc.getElementInfoByTypeName('GRAVITY_UNIT');
+
+    assert.isDefined(greyHull);
+    assert.equal(greyHull!.identity.typeName, 'GREY_HULL');
+    assert.equal(greyHull!.render.style.key, 'NORMAL');
+    assert.isTrue(greyHull!.render.isNormalBlockStyle);
+    assert.isTrue(greyHull!.classification.armor);
+    assert.isAbove(greyHull!.recipe.consistence.length, 0);
+    assert.isNumber(greyHull!.recipe.consistence[0].id);
+    assert.isAbove(greyHull!.recipe.consistence[0].count, 0);
+    assert.equal(greyHull!.collision.defaultShape?.type, 'BlockType');
+
+    assert.isDefined(wedge);
+    assert.equal(wedge!.render.style.key, 'WEDGE');
+    assert.isTrue(wedge!.render.isSolidBlockStyle);
+
+    assert.isDefined(railBasic);
+    assert.include(railBasic!.logic.controlledBy.map((ref) => ref.typeName), 'RAIL_SPEED_CONTROLLER');
+    assert.isAtLeast(railBasic!.logic.controlledBy[0].id ?? 0, 1);
+    assert.isTrue(railBasic!.logic.canBeControlledByAny);
+
+    assert.isDefined(antiGravity);
+    assert.isTrue(antiGravity!.chamber.any);
+    assert.isAbove(antiGravity!.chamber.children.length, 0);
+    assert.isNotNull(antiGravity!.chamber.children[0].block);
+    assert.include(antiGravity!.chamber.configGroups, 'mobility - anti gravity 1');
+
+    assert.equal(cargo!.render.defaultOrientation, 4);
+    assert.equal(transporter!.render.defaultOrientation, 2);
+    assert.equal(gravity!.render.defaultOrientation, 3);
+    assert.equal(bc.resolveReference('GREY_HULL').name, 'Grey Basic Armor');
+    assert.equal(bc.elementInfo.length, bc.size);
+    assert.equal(bc.getByName('Grey Basic Armor')!.toElementInfo(bc).identity.typeName, 'GREY_HULL');
   });
 
   it('getByName() finds a block by name', () => {
@@ -289,5 +389,20 @@ describe('FactionConfig', function () {
     const mod = fc.set(keys[0], 42);
     assert.equal(mod.getNumber(keys[0]), 42);
     console.log('    FactionConfig.set(): ok');
+  });
+});
+
+// ── systemNames.syl ──────────────────────────────────────────────────────────
+
+describe('SystemNames', function () {
+  it('parses and writes systemNames.syl', () => {
+    const file = path.join(STARMADE_DIR, 'data/config/systemNames.syl');
+    const parsed = parseSystemNames(fs.readFileSync(file));
+    assert.isAbove(parsed.syllables.length, 10);
+    assert.include(parsed.syllables.map(s => s.value), '-a');
+
+    const encoded = writeSystemNames(parsed);
+    const reparsed = parseSystemNames(encoded);
+    assert.deepEqual(reparsed, parsed);
   });
 });

@@ -14,7 +14,7 @@ import { decodeFleetRemotes, encodeFleetRemotes } from './FleetDb.js';
 
 export class FleetRemotesObject {
   readonly remotes: ReadonlyMap<string, boolean>;
-  /** Raw bytes when the source format was unrecognized. */
+  /** @deprecated raw fallback bytes for unrecognized formats. Prefer remotes. */
   readonly raw?: Buffer;
 
   private constructor(remotes: Map<string, boolean>, raw?: Buffer) {

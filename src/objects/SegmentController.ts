@@ -40,7 +40,9 @@ export class SegmentControllerObject {
     public seed: bigint,
     public nonEmptySegments: number,
     private _rootTag: Tag,
-  ) {}
+  ) {
+    Object.defineProperty(this, '_rootTag', { enumerable: false });
+  }
 
   // ── Business-object SERIALIZABLE accessors ──────────────────────────────
 

@@ -27,7 +27,18 @@
 
 import { BufferWriter } from '../core/BufferWriter.js';
 import { writeTo } from '../core/TagParser.js';
-import type { SmbpmFile } from './SmbpmParser.js';
+import type { Tag } from '../core/Tag.js';
+import {
+  aiConfigToTag,
+  getRailChildInternals,
+  getSmbpmInternals,
+  parseAiConfigTag,
+  parseRailChildRequestFromTag,
+  railChildRequestToTag,
+  type AiConfig,
+  type RailChildRequest,
+  type SmbpmFile,
+} from './SmbpmParser.js';
 
 const FINISH_BYTE        = 1;
 const SEG_MANAGER_BYTE   = 2;
@@ -37,9 +48,11 @@ const AI_CONFIG_BYTE     = 5;
 const RAIL_DOCKER_BYTE   = 6;
 const CARGO_BYTE         = 7;
 const LOCK_BOX_BYTE      = 8;
+const THRUST_CONFIG_BYTE = 9;
 
 export function writeSmbpm(file: SmbpmFile): Buffer {
   const w = new BufferWriter();
+  const internals = getSmbpmInternals(file);
 
   w.writeInt32BE(file.metaVersion);
 
@@ -65,6 +78,7 @@ export function writeSmbpm(file: SmbpmFile): Buffer {
       w.writeInt32BE(p.posX); w.writeInt32BE(p.posY); w.writeInt32BE(p.posZ);
       w.writeInt16BE(p.type);
       w.writeInt8(p.orientation);
+      w.writeInt8(p.active ? 1 : 0);
       w.writeInt8(p.hp);
     }
   }
@@ -96,28 +110,37 @@ export function writeSmbpm(file: SmbpmFile): Buffer {
   // ── RAIL_BYTE ───────────────────────────────────────────────────────────────
   w.writeInt8(RAIL_BYTE);
 
-  // bounds (min/max float3) — zeroed when not tracked
-  w.writeFloat32BE(0); w.writeFloat32BE(0); w.writeFloat32BE(0); // minX/Y/Z
-  w.writeFloat32BE(0); w.writeFloat32BE(0); w.writeFloat32BE(0); // maxX/Y/Z
+  const railRootMin = file.railRootMin ?? { x: 0, y: 0, z: 0 };
+  const railRootMax = file.railRootMax ?? { x: 0, y: 0, z: 0 };
+  w.writeFloat32BE(railRootMin.x); w.writeFloat32BE(railRootMin.y); w.writeFloat32BE(railRootMin.z);
+  w.writeFloat32BE(railRootMax.x); w.writeFloat32BE(railRootMax.y); w.writeFloat32BE(railRootMax.z);
 
-  // railUID (always present in metaVersion >= 2; safe to always write)
-  w.writeJavaUTF(file.railUID ?? '');
+  if (file.metaVersion >= 2) {
+    w.writeJavaUTF(file.railUID ?? '');
 
-  // Wireless markers (BBWirelessLogicMarker: UTF + long + long)
-  const markers = file.wirelessMarkers ?? [];
-  w.writeInt32BE(markers.length);
-  for (const m of markers) {
-    w.writeJavaUTF(m.marking);
-    w.writeInt64BE(m.markerLocation);
-    w.writeInt64BE(m.fromLocation);
+    // Wireless markers (BBWirelessLogicMarker: UTF + long + long)
+    const markers = file.wirelessMarkers ?? [];
+    w.writeInt32BE(markers.length);
+    for (const m of markers) {
+      w.writeJavaUTF(m.marking);
+      w.writeInt64BE(m.markerLocation);
+      w.writeInt64BE(m.fromLocation);
+    }
   }
 
   // Rail children (UTF name + int tagSize + bytes)
   w.writeInt32BE(file.railChildren.length);
   for (const child of file.railChildren) {
     w.writeJavaUTF(child.name);
-    if (child.tag) {
-      const tagBytes = writeTo(child.tag);
+    const childInternals = getRailChildInternals(child);
+    const tag = selectRailChildTag(child.request, childInternals.tag ?? null);
+    const rawTagBytes = tag === childInternals.tag ? childInternals.tagRaw : null;
+    if (rawTagBytes) {
+      const tagBytes = Buffer.from(rawTagBytes);
+      w.writeInt32BE(tagBytes.length);
+      w.writeBytes(tagBytes);
+    } else if (tag) {
+      const tagBytes = writeTo(tag);
       w.writeInt32BE(tagBytes.length);
       w.writeBytes(tagBytes);
     } else {
@@ -126,21 +149,100 @@ export function writeSmbpm(file: SmbpmFile): Buffer {
   }
 
   // ── AI_CONFIG_BYTE ──────────────────────────────────────────────────────────
-  if (file.aiTag) {
+  const aiTag = selectAiTag(file.aiConfig, internals.aiTag ?? null);
+  if (aiTag) {
     w.writeInt8(AI_CONFIG_BYTE);
-    const tagBytes = writeTo(file.aiTag);
+    const tagBytes = aiTag === internals.aiTag && internals.aiRaw
+      ? Buffer.from(internals.aiRaw)
+      : writeTo(aiTag);
     w.writeInt32BE(tagBytes.length);
     w.writeBytes(tagBytes);
   }
 
-  // ── SEG_MANAGER_BYTE / FINISH ───────────────────────────────────────────────
-  if (file.managerTag) {
+  // ── SEG_MANAGER_BYTE / THRUST_CONFIG_BYTE / FINISH ─────────────────────────
+  const managerTag = internals.managerTag ?? file.manager?.toTag() ?? null;
+  const thrustTag = internals.thrustTag ?? file.thrustConfig?.toTag() ?? null;
+  if (internals.managerRaw || managerTag) {
     w.writeInt8(SEG_MANAGER_BYTE);
-    const tagBytes = writeTo(file.managerTag);
+    const tagBytes = internals.managerRaw && (!managerTag || managerTag === internals.managerTag)
+      ? Buffer.from(internals.managerRaw)
+      : writeTo(managerTag!);
+    w.writeBytes(tagBytes); // raw tag, no size prefix — ends the stream
+  } else if (internals.thrustRaw || thrustTag) {
+    w.writeInt8(THRUST_CONFIG_BYTE);
+    const tagBytes = internals.thrustRaw && (!thrustTag || thrustTag === internals.thrustTag)
+      ? Buffer.from(internals.thrustRaw)
+      : writeTo(thrustTag!);
     w.writeBytes(tagBytes); // raw tag, no size prefix — ends the stream
   } else {
     w.writeInt8(FINISH_BYTE);
   }
 
   return w.toBuffer();
+}
+
+function selectRailChildTag(request: RailChildRequest | null | undefined, fallback: Tag | null): Tag | null {
+  if (!request) {
+    return fallback;
+  }
+  if (fallback && isRailRequestUnchanged(request, fallback)) {
+    return fallback;
+  }
+  return railChildRequestToTag(request, fallback);
+}
+
+function selectAiTag(config: AiConfig | null | undefined, fallback: Tag | null): Tag | null {
+  if (!config) {
+    return fallback;
+  }
+  if (fallback && isAiConfigUnchanged(config, fallback)) {
+    return fallback;
+  }
+  return aiConfigToTag(config, fallback);
+}
+
+function isAiConfigUnchanged(config: AiConfig, fallback: Tag): boolean {
+  const parsed = parseAiConfigTag(fallback);
+  if (!parsed || parsed.entries.length !== config.entries.length) {
+    return false;
+  }
+
+  return parsed.entries.every((entry, index) =>
+    entry.id === config.entries[index]?.id &&
+    entry.value === config.entries[index]?.value
+  );
+}
+
+function isRailRequestUnchanged(request: RailChildRequest, fallback: Tag): boolean {
+  const parsed = parseRailChildRequestFromTag(fallback);
+  if (!parsed) {
+    return false;
+  }
+
+  return JSON.stringify(normalizeRailRequest(parsed)) === JSON.stringify(normalizeRailRequest(request));
+}
+
+function normalizeRailRequest(request: RailChildRequest): unknown {
+  return {
+    railTagType: request.railTagType,
+    rail: request.rail,
+    docked: request.docked,
+    railTransform: normalizeMatrix4f(request.railTransform),
+    dockedTransform: normalizeMatrix4f(request.dockedTransform),
+    railContact: request.railContact,
+    movingAtDockTransform: normalizeMatrix4f(request.movingAtDockTransform),
+    flags: request.flags,
+  };
+}
+
+function normalizeMatrix4f(matrix: RailChildRequest['railTransform']): number[] | null {
+  if (!matrix) {
+    return null;
+  }
+  return [
+    matrix.m00, matrix.m01, matrix.m02, matrix.m03,
+    matrix.m10, matrix.m11, matrix.m12, matrix.m13,
+    matrix.m20, matrix.m21, matrix.m22, matrix.m23,
+    matrix.m30, matrix.m31, matrix.m32, matrix.m33,
+  ];
 }

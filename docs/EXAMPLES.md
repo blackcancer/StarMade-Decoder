@@ -75,6 +75,83 @@ const renamed = ship.withRealName('Explorer');
 fs.writeFileSync('ENTITY_SHIP_MyShip.renamed.ent', writeTo(renamed.toTag()));
 ```
 
+## Work with high-level `.ent` slot objects
+
+The entity API exposes StarMade-Open slot objects instead of raw `Tag` trees.
+Every helper returns a new immutable object, so the original parsed entity stays unchanged.
+
+```ts
+import fs from 'node:fs';
+import {
+  ModuleExplosionState,
+  PlayerStateEntity,
+  ScanDataRecord,
+  Ship,
+  writeTo,
+} from 'starmade-decoder';
+
+const ship = Ship.fromBuffer(fs.readFileSync('ENTITY_SHIP_MyShip.ent'));
+
+const retimed = ship.withCoreTimer(ship.coreTimer.withTimeLeftMs(5000n));
+const renamedBlueprint = retimed.withBlueprintInfo(
+  retimed.blueprintInfo.withIdentifier('Explorer Blueprint')
+);
+
+const railRequest = renamedBlueprint.railController.currentRequest;
+const rotated = railRequest
+  ? renamedBlueprint.withRailController(
+      renamedBlueprint.railController.withCurrentRequest(
+        railRequest.withDidRotationInPlace(true)
+      )
+    )
+  : renamedBlueprint;
+
+const module = rotated.managerContainer?.modules.getModule('JAO');
+const shiftedModule = module?.entries[0]
+  ? module.withEntry(0, module.entries[0].withPosition({ x: 1, y: 2, z: 3 }))
+  : module;
+
+const withModule = shiftedModule && rotated.managerContainer
+  ? rotated.withManagerContainer(
+      rotated.managerContainer.withModules(
+        rotated.managerContainer.modules.withModule('JAO', shiftedModule)
+      )
+    )
+  : rotated;
+
+const explosion = ModuleExplosionState.create({
+  radius: 4,
+  damage: 250,
+  explosionPositions: [1n, 2n, 3n],
+});
+
+const withExplosion = withModule.managerContainer
+  ? withModule.withManagerContainer(
+      withModule.managerContainer.withModuleExplosions(
+        withModule.managerContainer.moduleExplosions.addExplosion(explosion)
+      )
+    )
+  : withModule;
+
+fs.writeFileSync('ENTITY_SHIP_MyShip.edited.ent', writeTo(withExplosion.toTag()));
+
+const player = PlayerStateEntity.fromBuffer(fs.readFileSync('ENTITY_PLAYERSTATE_Player.ent'));
+const withScan = player.withScanHistory(
+  player.scanHistory.addScan(ScanDataRecord.create({
+    origin: { x: 4, y: 4, z: 4 },
+    time: BigInt(Date.now()),
+    range: 1000,
+    entityData: [{
+      name: 'Explorer',
+      sector: { x: 4, y: 4, z: 4 },
+      factionId: 0,
+      controllerInfo: '',
+    }],
+  }))
+);
+fs.writeFileSync('ENTITY_PLAYERSTATE_Player.edited.ent', writeTo(withScan.toTag()));
+```
+
 ## Read factions and change a relation
 
 ```ts
@@ -132,10 +209,16 @@ import { parseSment } from 'starmade-decoder';
 const blueprint = parseSment(fs.readFileSync('MyBlueprint.sment'));
 
 console.log(blueprint.root.name);
-console.log(blueprint.root.header.entityType);
-console.log(blueprint.root.header.totalBlockCount);
+console.log(blueprint.root.entityType);
+console.log(blueprint.root.declaredBlockCount);
+console.log(blueprint.root.directBlockCount);
 console.log(blueprint.totalEntities);
 console.log(blueprint.totalSegments);
+
+const turret = blueprint.findEntity('ATTACHED_0');
+console.log(turret?.worldOffset);
+console.log(blueprint.root.meta?.childOffsetFor('ATTACHED_0'));
+console.log(blueprint.root.logic?.connectionCount);
 ```
 
 ## Parse an extracted blueprint folder
@@ -145,6 +228,86 @@ import { parseBlueprintFolder } from 'starmade-decoder';
 
 const blueprint = parseBlueprintFolder('/path/to/extracted/blueprint');
 console.log(blueprint.root.header.boundingBox);
+console.log(blueprint.root.meta?.railChildren.length);
+```
+
+## Update blueprint header counts and score
+
+```ts
+import fs from 'node:fs';
+import { parseSmbph, writeSmbph } from 'starmade-decoder';
+
+const header = parseSmbph(fs.readFileSync('header.smbph'));
+const mainBlock = header.topBlockTypes(1)[0];
+
+const updated = (mainBlock
+  ? header.withBlockCount(mainBlock.type, mainBlock.count + 12)
+  : header
+)
+  .withClassification(4)
+  .withScore(header.score?.withValue('miningIndex', header.score.miningIndex + 1) ?? null);
+
+console.log(updated.classificationName);
+console.log(mainBlock ? updated.blockCountOf(mainBlock.type) : 0);
+
+fs.writeFileSync('header.updated.smbph', writeSmbph(updated));
+```
+
+## Update a template without raw maps
+
+```ts
+import fs from 'node:fs';
+import { parseSmtpl, writeSmtpl } from 'starmade-decoder';
+
+const template = parseSmtpl(fs.readFileSync('room.smtpl'));
+const first = template.pieces[0];
+const pos = first ? { x: first.x, y: first.y, z: first.z } : { x: 0, y: 0, z: 0 };
+
+const updated = template
+  .withText(pos, 'Cargo')
+  .withInventoryFilter(pos, [{ type: 1, count: 5 }])
+  .withProduction(pos, 1)
+  .withProductionLimit(pos, 100);
+
+console.log(updated.topBlockTypes(5));
+console.log(updated.getText(pos));
+
+fs.writeFileSync('room.updated.smtpl', writeSmtpl(updated));
+```
+
+## Update blueprint metadata without raw tags
+
+```ts
+import fs from 'node:fs';
+import { parseSmbpm, writeSmbpm } from 'starmade-decoder';
+
+const meta = parseSmbpm(fs.readFileSync('meta.smbpm'));
+const updated = meta
+  .withAiValue(19, 'false')
+  .withRailUID('my-rail-root');
+
+const childOffset = updated.childOffsetFor('ATTACHED_0');
+console.log(childOffset);
+
+fs.writeFileSync('meta.updated.smbpm', writeSmbpm(updated));
+```
+
+## Update blueprint logic without binary plumbing
+
+```ts
+import fs from 'node:fs';
+import { parseSmbpl, writeSmbpl } from 'starmade-decoder';
+
+const logic = parseSmbpl(fs.readFileSync('logic.smbpl'));
+const controller = { x: 16, y: 16, z: 16 };
+const target = { x: 20, y: 16, z: 16 };
+
+const updated = logic
+  .addLink(controller, 6, target)
+  .moveController(controller, { x: 17, y: 16, z: 16 });
+
+console.log(updated.targetsOf({ x: 17, y: 16, z: 16 }, 6));
+fs.writeFileSync('logic.updated.smbpl', writeSmbpl(updated));
 ```
 
 ## Load BlockConfig and enrich block counts

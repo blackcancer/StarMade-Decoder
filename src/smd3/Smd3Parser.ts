@@ -30,11 +30,11 @@
  *
  * Decompressed block data :
  *   version < 7 (SegmentDataIntArray, 3 bytes/block) : BLOCK_COUNT_32 × 3 bytes
- *     raw     = b[0] | b[1] << 8 | b[2] << 16
- *     type    = bits 0-10
- *     hp      = bits 11-17
- *     active  = bit 18
- *     orient  = bits 19-23
+ *     raw     = b[0] | b[1]<<8 | b[2]<<16 (little-endian 24-bit value)
+ *     type    = bits 0-10                 (11 bits)
+ *     hp      = bits 11-17                (7 bits)
+ *     active  = bit 18                    (1 bit)
+ *     orient  = bits 19-23                (5 bits)
  *
  *   version >= 7 (Chunk32, 4 bytes/block, little-endian int) :
  *     type    = bits 0-12   (13 bits)
@@ -81,6 +81,9 @@ export const DATA_SINGLE_SIDE_EDGE = 5;
 
 /** Chunk dimension (32 in Chunk32 mode) */
 export const CHUNK_DIM = 32;
+/**
+ * Defines BLOCK_COUNT for StarMade blueprint and segment file parsing.
+ */
 export const BLOCK_COUNT = CHUNK_DIM * CHUNK_DIM * CHUNK_DIM; // 32768
 
 /** Version from which the 4-byte format is used */
@@ -88,6 +91,9 @@ export const VERSION_4BYTE = 7;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Describes the BlockData data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface BlockData {
   /** block type/id (0 = air) */
   type: number;
@@ -99,6 +105,9 @@ export interface BlockData {
   active: boolean;
 }
 
+/**
+ * Describes the SegmentData data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface SegmentData {
   /** position in segment coordinates */
   x: number;
@@ -114,6 +123,9 @@ export interface SegmentData {
   blockCount: number;
 }
 
+/**
+ * Describes the Smd3File data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface Smd3File {
   /** header version */
   headerVersion: number;
@@ -163,6 +175,14 @@ export function parseSmd3(data: Buffer | Uint8Array): Smd3File {
 
 // ── Parser de segment ─────────────────────────────────────────────────────────
 
+/**
+ * Parses Segment for StarMade blueprint and segment file parsing.
+ *
+ * @param buf - Input value for the _parseSegment operation.
+ * @param absPos - Input value for the _parseSegment operation.
+ * @param size - Input value for the _parseSegment operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _parseSegment(buf: Buffer, absPos: number, size: number): SegmentData | null {
   if (absPos + 22 > buf.length) return null;
 
@@ -263,18 +283,25 @@ function _parseSegment(buf: Buffer, absPos: number, size: number): SegmentData |
 
 // ── 3-byte/block decoding (SegmentDataIntArray, version < 7) ────────────────
 
+/**
+ * Parses 3Byte for StarMade blueprint and segment file parsing.
+ *
+ * @param inflated - Input value for the _decode3Byte operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _decode3Byte(inflated: Buffer): BlockData[] {
   const blocks: BlockData[] = new Array(BLOCK_COUNT);
 
   for (let i = 0; i < BLOCK_COUNT; i++) {
     const idx = i * 3;
-    const raw = (inflated[idx] & 0xff)
-      | ((inflated[idx + 1] & 0xff) << 8)
-      | ((inflated[idx + 2] & 0xff) << 16);
+    const b0 = inflated[idx]     & 0xff;
+    const b1 = inflated[idx + 1] & 0xff;
+    const b2 = inflated[idx + 2] & 0xff;
+    const raw = b0 | (b1 << 8) | (b2 << 16);
 
-    const type = raw & 0x7ff;
-    const hp = (raw >> 11) & 0x7f;
-    const active = ((raw >> 18) & 0x1) === 1;
+    const type        = raw & 0x7ff;
+    const hp          = (raw >> 11) & 0x7f;
+    const active      = ((raw >> 18) & 0x1) === 1;
     const orientation = (raw >> 19) & 0x1f;
 
     blocks[i] = { type, hp, orientation, active };
@@ -285,6 +312,12 @@ function _decode3Byte(inflated: Buffer): BlockData[] {
 
 // ── 4-byte/block decoding (Chunk32, version >= 7, little-endian) ────────────
 
+/**
+ * Parses 4Byte for StarMade blueprint and segment file parsing.
+ *
+ * @param inflated - Input value for the _decode4Byte operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _decode4Byte(inflated: Buffer): BlockData[] {
   const blocks: BlockData[] = new Array(BLOCK_COUNT);
 

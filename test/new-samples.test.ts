@@ -16,7 +16,7 @@ import { parseBlueprintFolder } from '../src/smd3/BlueprintFolderParser.js';
 import { parseSment } from '../src/smd3/SmentParser.js';
 import type { SmtplFile } from '../src/smd3/SmtplParser.js';
 
-const S = path.resolve('/mnt/c/Users/init-/source/repos/StarMade-Decoder/samples');
+const S = path.resolve('samples');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

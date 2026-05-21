@@ -59,8 +59,8 @@ import { parseBlueprintFolder }     from '../src/smd3/BlueprintFolderParser.js';
 
 registerAllFactories();
 
-const S = path.resolve('/mnt/c/Users/init-/source/repos/StarMade-Decoder/samples');
-const SM_DIR = '/mnt/d/Jeux/Steam/steamapps/common/StarMade/StarMade';
+const S = path.resolve('samples');
+const SM_DIR = '/srv/StarMade';
 const hasSamples = fs.existsSync(S);
 const hasStarMade = fs.existsSync(SM_DIR);
 const load = (f: string) => readFrom(fs.readFileSync(path.join(S, f)));
@@ -529,7 +529,7 @@ describe('SmtplParser — production / prodMap / prodLimitMap coverage', functio
 
   it('parses all .smtpl files in samples', function() {
     if (!hasSamples) { this.skip(); return; }
-    const smtplDir = path.join(S, 'blueprints');
+    const smtplDir = S;
     if (!fs.existsSync(smtplDir)) { this.skip(); return; }
     let ok = 0;
     const walk = (d: string) => {
@@ -549,7 +549,7 @@ describe('SmtplParser — production / prodMap / prodLimitMap coverage', functio
 
   it('parses NOR Gate .smtpl (has connections)', function() {
     if (!hasSamples) { this.skip(); return; }
-    const smtplPath = path.join(S, 'blueprints', '8-bit_nor_gate_ram_module_v2.smtpl');
+    const smtplPath = path.join(S, '8-Bit-4-Wide-NOR Gate RAM Module-12x12x16-00.smtpl');
     if (!fs.existsSync(smtplPath)) { this.skip(); return; }
     const file = parseSmtpl(fs.readFileSync(smtplPath));
     assert.isAbove(file.connections.length, 0);

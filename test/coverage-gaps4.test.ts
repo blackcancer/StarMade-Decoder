@@ -43,7 +43,7 @@ import { writeSmd3, emptySegment, emptySmd3File } from '../src/smd3/Smd3Writer.j
 
 registerAllFactories();
 
-const S = path.resolve('/mnt/c/Users/init-/source/repos/StarMade-Decoder/samples');
+const S = path.resolve('samples');
 const hasSamples = fs.existsSync(S);
 const load = (f: string) => readFrom(fs.readFileSync(path.join(S, f)));
 
@@ -295,12 +295,14 @@ describe('SmbpmParser — binary format edge cases', () => {
         w.writeInt32BE(10); w.writeInt32BE(20); w.writeInt32BE(30); // pos
         w.writeInt16BE(5); // type
         w.writeInt8(2);    // orientation
+        w.writeInt8(1);    // active
         w.writeInt8(100);  // hp
       }
     ]);
     const file = parseSmbpm(buf);
     assert.equal(file.railDockerPieces.length, 1);
     assert.equal(file.railDockerPieces[0].type, 5);
+    assert.equal(file.railDockerPieces[0].active, true);
     assert.equal(file.railDockerPieces[0].hp, 100);
   });
 
@@ -467,9 +469,17 @@ describe('Smd3Writer — writeSmd3 with non-empty segments', () => {
     // Use a real smd3 file to verify multi-segment round-trip
     const bpDir = path.join(S, 'BASE_Warehouse_Station');
     if (!fs.existsSync(bpDir)) { this.skip(); return; }
-    const smd3Files = fs.readdirSync(path.join(bpDir)).filter(f => f.endsWith('.smd3'));
+    const smd3Files: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (entry.name.endsWith('.smd3')) smd3Files.push(full);
+      }
+    };
+    walk(bpDir);
     if (smd3Files.length === 0) { this.skip(); return; }
-    const smd3Path = path.join(bpDir, smd3Files[0]);
+    const smd3Path = smd3Files[0];
     const file = parseSmd3(fs.readFileSync(smd3Path));
     const buf = writeSmd3(file);
     const rt = parseSmd3(buf);

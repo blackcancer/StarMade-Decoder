@@ -27,22 +27,84 @@ export {
 
 export type { Smd3File, SegmentData, BlockData } from './Smd3Parser.js';
 
-export { parseSment, BLUEPRINT_TYPE, _parseHeaderBuffer } from './SmentParser.js';
-export type { SmentFile, SmentEntity, BlueprintHeader, BoundingBox } from './SmentParser.js';
+export {
+  parseSment,
+  parseSmbph,
+  BLUEPRINT_TYPE,
+  BLUEPRINT_CLASSIFICATION,
+  BlueprintArchive,
+  BlueprintEntity,
+  BlueprintHeader,
+  BlueprintIndexScore,
+  _parseHeaderBuffer,
+  blueprintClassificationName,
+  blueprintTypeOrdinal,
+  defaultBlueprintClassification,
+  normalizeBlueprintHeader,
+} from './SmentParser.js';
+export type {
+  SmentFile,
+  SmentEntity,
+  BlueprintBlockCount,
+  BlueprintClassification,
+  BlueprintHeaderInput,
+  BlueprintIndexScoreInput,
+  BlueprintScoreField,
+  BlueprintType,
+  BoundingBox,
+} from './SmentParser.js';
 
-export { parseSmtpl } from './SmtplParser.js';
-export type { SmtplFile, TemplatePiece, TemplateConnection } from './SmtplParser.js';
+export {
+  parseSmtpl,
+  BlueprintTemplate,
+  normalizeBlueprintTemplate,
+  templatePositionFromKey,
+  templatePositionKey,
+} from './SmtplParser.js';
+export type {
+  SmtplFile,
+  SmtplFileInput,
+  TemplateConnection,
+  TemplateFilterEntry,
+  TemplateInventoryFilter,
+  TemplatePiece,
+  TemplatePosition,
+  TemplateProductionEntry,
+  TemplateProductionLimit,
+} from './SmtplParser.js';
 
 export { parseBlueprintFolder } from './BlueprintFolderParser.js';
 
-export { parseSmbpm } from './SmbpmParser.js';
-export type { SmbpmFile, DockingEntry, CargoPoint, RailDockerPiece } from './SmbpmParser.js';
+export {
+  parseSmbpm,
+  BlueprintMeta,
+  parseAiConfigTag,
+  aiConfigToTag,
+  parseRailChildRequestFromTag,
+  railChildRequestToTag,
+  getRailChildOffsetFromTag,
+  getRailChildOffsetFromRequest,
+} from './SmbpmParser.js';
+export type {
+  SmbpmFile,
+  AiConfig,
+  AiConfigEntry,
+  DockingEntry,
+  CargoPoint,
+  RailDockerPiece,
+  RailChildEntry,
+  RailChildRequest,
+  RailPieceRef,
+  Vector3f,
+  BlueprintChildOffset,
+  BlueprintChildTransform,
+} from './SmbpmParser.js';
 
-export { parseSmbpl } from './SmbplParser.js';
-export type { SmbplFile, ControlLink } from './SmbplParser.js';
+export { parseSmbpl, BlueprintLogic } from './SmbplParser.js';
+export type { SmbplFile, ControlController, ControlGroup, ControlLink } from './SmbplParser.js';
 
 export { parseSmbmm } from './SmbmmParser.js';
-export type { SmbmmFile } from './SmbmmParser.js';
+export type { SmbmmFile, SmbmmFormat, ModMapping } from './SmbmmParser.js';
 
 export { parseSim } from './SimParser.js';
 export type { SimFile, SimGroup } from './SimParser.js';

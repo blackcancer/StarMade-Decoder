@@ -16,9 +16,11 @@
  */
 
 import { BufferWriter } from '../core/BufferWriter.js';
-import type { SmtplFile, TemplateConnection } from './SmtplParser.js';
+import { BlueprintTemplate, normalizeBlueprintTemplate } from './SmtplParser.js';
+import type { SmtplFileInput, TemplateInventoryFilter } from './SmtplParser.js';
 
-export function writeSmtpl(file: SmtplFile): Buffer {
+export function writeSmtpl(fileInput: BlueprintTemplate | SmtplFileInput): Buffer {
+  const file = normalizeBlueprintTemplate(fileInput);
   const w = new BufferWriter();
 
   // Version (always 6 = 4-byte format)
@@ -54,14 +56,36 @@ export function writeSmtpl(file: SmtplFile): Buffer {
   w.writeInt32BE(file.texts.size);
   for (const [key, text] of file.texts) {
     w.writeInt64BE(key);
-    w.writeJavaUTF(text);
+    w.writeJavaModifiedUTF(text);
   }
 
-  // Empty sections (filters, prod, prodLimit, fillUpFilter)
-  w.writeInt32BE(0); // filterSize
-  w.writeInt32BE(0); // prodSize
-  w.writeInt32BE(0); // prodLimitSize
-  w.writeInt32BE(0); // fillUpFilterSize
+  writeFilters(w, file.filters);
+
+  w.writeInt32BE(file.production.length);
+  for (const entry of file.production) {
+    w.writeInt64BE(entry.position);
+    w.writeInt16BE(entry.type);
+  }
+
+  w.writeInt32BE(file.productionLimits.length);
+  for (const entry of file.productionLimits) {
+    w.writeInt64BE(entry.position);
+    w.writeInt32BE(entry.limit);
+  }
+
+  writeFilters(w, file.fillUpFilters);
 
   return w.toBuffer();
+}
+
+function writeFilters(w: BufferWriter, filters: TemplateInventoryFilter[]): void {
+  w.writeInt32BE(filters.length);
+  for (const filter of filters) {
+    w.writeInt64BE(filter.position);
+    w.writeInt32BE(filter.entries.length);
+    for (const entry of filter.entries) {
+      w.writeInt16BE(entry.type);
+      w.writeInt32BE(entry.count);
+    }
+  }
 }

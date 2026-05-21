@@ -67,6 +67,23 @@ import { TextBlocks } from '../components/TextBlocks.js';
 import { ManagerContainer } from '../components/ManagerContainer.js';
 import { ControlElementMapper } from '../Serializables.js';
 import type { RawElement } from '../../serializable/Factories.js';
+import {
+  buildEditableEntityFields,
+  fieldValueAsBigInt,
+  fieldValueAsBoolean,
+  fieldValueAsInteger,
+  fieldValueAsString,
+  SEGMENT_CONTROLLER_FIELD_SCHEMA,
+  type EntityField,
+} from '../EntityFieldView.js';
+import {
+  BlueprintInfo,
+  CoreTimerState,
+  ItemsToSpawnWith,
+  NpcDataState,
+  QuarterManagerState,
+  RailControllerState,
+} from '../EntitySlotObjects.js';
 
 // ── Position blocks ─────────────────────────────────────────────────────────
 
@@ -111,6 +128,7 @@ export abstract class SegmentController extends GameEntity {
     protected readonly _rootChildren: Tag[],
   ) {
     super(mass, transform, sectorPosition, factionId, owner, spawnController, _transformableChildren);
+    Object.defineProperty(this, '_rootChildren', { enumerable: false });
   }
 
   // Widens _clone to also accept SegmentController-specific overrides
@@ -121,6 +139,11 @@ export abstract class SegmentController extends GameEntity {
     realName: string; vulnerable: boolean; minable: boolean;
     scrap: boolean; factionRights: number; seed: bigint;
     spawner: string; lastModifier: string; creatorId: number;
+    uniqueId: string; bounds: BlockBounds; nonEmptySegments: number;
+    currentOwner: string; lastDockerPlayer: string;
+    lastEditBlocks: bigint; lastDamageTaken: bigint; tagVersion: number;
+    managerContainer: ManagerContainer | null;
+    rootChildren: Tag[];
   }>): this;
 
   // ── Accesseurs pratiques ───────────────────────────────────────────────────
@@ -129,7 +152,66 @@ export abstract class SegmentController extends GameEntity {
   get isAlive(): boolean         { return this.hpState.isAlive; }
   get hpPercent(): number        { return this.hpState.hpPercent; }
 
+  /** StarMade-Open SegmentController slot view, without raw Tag exposure. */
+  get fields(): readonly EntityField<this>[] {
+    return buildEditableEntityFields(this._rootChildren, SEGMENT_CONTROLLER_FIELD_SCHEMA, {
+      uniqueId: value => this.withUniqueId(fieldValueAsString(value, 'uniqueId')),
+      minPos: value => this.withBounds({ ...this.bounds, ...minBoundsFromFieldValue(value, 'minPos') }),
+      maxPos: value => this.withBounds({ ...this.bounds, ...maxBoundsFromFieldValue(value, 'maxPos') }),
+      realName: value => this.withRealName(fieldValueAsString(value, 'realName')),
+      creatorId: value => this.withCreatorId(fieldValueAsInteger(value, 'creatorId')),
+      spawner: value => this.withSpawner(fieldValueAsString(value, 'spawner')),
+      lastModifier: value => this.withLastModifier(fieldValueAsString(value, 'lastModifier')),
+      seed: value => this.withSeed(fieldValueAsBigInt(value, 'seed')),
+      npcData: value => this.withNpcData(requireInstance(value, NpcDataState, 'npcData')),
+      vulnerable: value => this.withVulnerable(fieldValueAsBoolean(value, 'vulnerable')),
+      minable: value => this.withMinable(fieldValueAsBoolean(value, 'minable')),
+      factionRights: value => this.withFactionRights(fieldValueAsInteger(value, 'factionRights')),
+      railController: value => this.withRailController(requireInstance(value, RailControllerState, 'railController')),
+      nonEmptySegments: value => this.withNonEmptySegments(fieldValueAsInteger(value, 'nonEmptySegments')),
+      coreTimer: value => this.withCoreTimer(requireInstance(value, CoreTimerState, 'coreTimer')),
+      blueprintInfo: value => this.withBlueprintInfo(requireInstance(value, BlueprintInfo, 'blueprintInfo')),
+      currentOwnerLowerCase: value => this.withCurrentOwner(fieldValueAsString(value, 'currentOwnerLowerCase')),
+      lastDockerPlayerLowerCase: value => this.withLastDockerPlayer(fieldValueAsString(value, 'lastDockerPlayerLowerCase')),
+      itemsToSpawnWith: value => this.withItemsToSpawnWith(requireInstance(value, ItemsToSpawnWith, 'itemsToSpawnWith')),
+      lastEditBlocks: value => this.withLastEditBlocks(fieldValueAsBigInt(value, 'lastEditBlocks')),
+      lastDamageTaken: value => this.withLastDamageTaken(fieldValueAsBigInt(value, 'lastDamageTaken')),
+      tagVersion: value => this.withTagVersion(fieldValueAsInteger(value, 'tagVersion')),
+      quarterManager: value => this.withQuarterManager(requireInstance(value, QuarterManagerState, 'quarterManager')),
+    });
+  }
+
+  getField(key: string): EntityField<this> | null {
+    return this.fields.find(field => field.key === key) ?? null;
+  }
+
+  get extraTagDataField(): EntityField<this> | null { return this.fields[13] ?? null; }
+  get npcDataField(): EntityField<this> | null { return this.fields[14] ?? null; }
+  get railControllerField(): EntityField<this> | null { return this.fields[19] ?? null; }
+  get coreTimerField(): EntityField<this> | null { return this.fields[22] ?? null; }
+  get blueprintInfoField(): EntityField<this> | null { return this.fields[24] ?? null; }
+  get itemsToSpawnWithField(): EntityField<this> | null { return this.fields[28] ?? null; }
+  get blockKillRecorderField(): EntityField<this> | null { return this.fields[36] ?? null; }
+  get quarterManagerField(): EntityField<this> | null { return this.fields[41] ?? null; }
+
+  get npcData(): NpcDataState { return new NpcDataState(this._rootChildren[14]); }
+  get railController(): RailControllerState { return new RailControllerState(this._rootChildren[19]); }
+  get coreTimer(): CoreTimerState { return new CoreTimerState(this._rootChildren[22]); }
+  get blueprintInfo(): BlueprintInfo { return new BlueprintInfo(this._rootChildren[24]); }
+  get itemsToSpawnWith(): ItemsToSpawnWith { return new ItemsToSpawnWith(this._rootChildren[28]); }
+  get quarterManager(): QuarterManagerState { return new QuarterManagerState(this._rootChildren[41]); }
+
   // ── SegmentController-specific mutations ─────────────────────────────────
+
+  /** Changes the internal unique id stored in tag field [0]. */
+  withUniqueId(uniqueId: string): this {
+    return this._clone({ uniqueId });
+  }
+
+  /** Changes the block bounding box stored in tag fields [1] and [2]. */
+  withBounds(bounds: BlockBounds): this {
+    return this._clone({ bounds });
+  }
 
   /** Changes the displayed real name (visible in-game, stored in tag field [5]). */
   withRealName(realName: string): this {
@@ -176,6 +258,68 @@ export abstract class SegmentController extends GameEntity {
     return this._clone({ creatorId });
   }
 
+  withNonEmptySegments(nonEmptySegments: number): this {
+    return this._clone({ nonEmptySegments });
+  }
+
+  withCurrentOwner(currentOwner: string): this {
+    return this._clone({ currentOwner });
+  }
+
+  withLastDockerPlayer(lastDockerPlayer: string): this {
+    return this._clone({ lastDockerPlayer });
+  }
+
+  withLastEditBlocks(lastEditBlocks: bigint): this {
+    return this._clone({ lastEditBlocks });
+  }
+
+  withLastDamageTaken(lastDamageTaken: bigint): this {
+    return this._clone({ lastDamageTaken });
+  }
+
+  withTagVersion(tagVersion: number): this {
+    return this._clone({ tagVersion });
+  }
+
+  withManagerContainer(managerContainer: ManagerContainer | null): this {
+    return this._clone({ managerContainer });
+  }
+
+  withNpcData(npcData: NpcDataState): this {
+    return this._withRootChild(14, npcData.toTag());
+  }
+
+  withRailController(railController: RailControllerState): this {
+    return this._withRootChild(19, railController.toTag());
+  }
+
+  withCoreTimer(coreTimer: CoreTimerState): this {
+    return this._withRootChild(22, coreTimer.toTag());
+  }
+
+  withBlueprintInfo(blueprintInfo: BlueprintInfo): this {
+    return this._withRootChild(24, blueprintInfo.toTag());
+  }
+
+  withItemsToSpawnWith(itemsToSpawnWith: ItemsToSpawnWith): this {
+    return this._withRootChild(28, itemsToSpawnWith.toTag());
+  }
+
+  withQuarterManager(quarterManager: QuarterManagerState): this {
+    return this._withRootChild(41, quarterManager.toTag());
+  }
+
+  private _withRootChild(index: number, tag: Tag): this {
+    const children = [...this._rootChildren];
+    while (children.length <= index) children.push(Tags.nothing(null));
+    const current = children[index];
+    children[index] = current?.name !== undefined && tag.name === null
+      ? new Tag(tag.type, current.name, tag.value, tag.listType ?? undefined)
+      : tag;
+    return this._clone({ rootChildren: children });
+  }
+
   // ── Serialization ─────────────────────────────────────────────────────────
 
   toTag(): Tag {
@@ -206,13 +350,14 @@ export abstract class SegmentController extends GameEntity {
     if (c[16]?.type === TagType.BYTE) set(16, Tags.byte(null, this.vulnerable ? 1 : 0));
     if (c[17]?.type === TagType.BYTE) set(17, Tags.byte(null, this.minable ? 1 : 0));
     if (c[18]?.type === TagType.BYTE) set(18, Tags.byte(null, this.factionRights));
-    // [19] railTag — preserved
+    // [19] railTag — preserved unless replaced through RailControllerState
     if (c[20]?.type === TagType.INT)  set(20, Tags.int(null, this.nonEmptySegments));
     if (c[21]?.type === TagType.STRUCT) set(21, this.hpState.toTag());
     if (c[25]?.type === TagType.STRING) set(25, Tags.string(null, this.currentOwner));
     if (c[26]?.type === TagType.STRING) set(26, Tags.string(null, this.lastDockerPlayer));
     if (c[37]?.type === TagType.LONG)   set(37, Tags.long(null, this.lastEditBlocks));
     if (c[38]?.type === TagType.LONG)   set(38, Tags.long(null, this.lastDamageTaken));
+    if (c[40]?.type === TagType.BYTE)   set(40, Tags.byte(null, this.tagVersion));
 
     return new Tag(TagType.STRUCT, this._rootTag_name(), [...c, FINISH_TAG]);
   }
@@ -336,4 +481,31 @@ export abstract class SegmentController extends GameEntity {
   toString(): string {
     return `${this.entityType}(id="${this.uniqueId}", name="${this.realName}", sector=${this.sectorPosition}, hp=${this.hpState.hpPercent}%)`;
   }
+}
+
+function vectorFromFieldValue(value: unknown, key: string): { x: number; y: number; z: number } {
+  if (value !== null && typeof value === 'object') {
+    const candidate = value as Record<string, unknown>;
+    return {
+      x: fieldValueAsInteger(candidate.x, `${key}.x`),
+      y: fieldValueAsInteger(candidate.y, `${key}.y`),
+      z: fieldValueAsInteger(candidate.z, `${key}.z`),
+    };
+  }
+  throw new TypeError(`Entity field "${key}" expects {x,y,z}`);
+}
+
+function minBoundsFromFieldValue(value: unknown, key: string): Pick<BlockBounds, 'minX' | 'minY' | 'minZ'> {
+  const v = vectorFromFieldValue(value, key);
+  return { minX: v.x, minY: v.y, minZ: v.z };
+}
+
+function maxBoundsFromFieldValue(value: unknown, key: string): Pick<BlockBounds, 'maxX' | 'maxY' | 'maxZ'> {
+  const v = vectorFromFieldValue(value, key);
+  return { maxX: v.x, maxY: v.y, maxZ: v.z };
+}
+
+function requireInstance<T>(value: unknown, ctor: new (...args: any[]) => T, key: string): T {
+  if (value instanceof ctor) return value;
+  throw new TypeError(`Entity field "${key}" expects a ${ctor.name} object`);
 }

@@ -48,6 +48,24 @@ import { StarMadeEntity } from './StarMadeEntity.js';
 import { SectorPosition } from '../components/Transform.js';
 import { Inventory } from '../components/Inventory.js';
 import { PlayerSpawnData, SpawnPoint } from '../components/SpawnData.js';
+import {
+  buildEditableEntityFields,
+  fieldValueAsBigInt,
+  fieldValueAsBoolean,
+  fieldValueAsInteger,
+  fieldValueAsNumber,
+  fieldValueAsString,
+  PLAYER_STATE_FIELD_SCHEMA,
+  type EntityField,
+} from '../EntityFieldView.js';
+import {
+  CargoInventoryBlock,
+  IgnoredPlayers,
+  InventoryBackupState,
+  PlayerInfoHistoryList,
+  SavedCoordinates,
+  ScanHistory,
+} from '../EntitySlotObjects.js';
 
 // ── FactionMembership ─────────────────────────────────────────────────────────
 
@@ -102,7 +120,54 @@ export class PlayerStateEntity extends StarMadeEntity {
     readonly macroInventory: Inventory,
     /** All root Tag children for faithful round-tripping */
     private readonly _rootTag: Tag,
-  ) { super(); }
+  ) {
+    super();
+    Object.defineProperty(this, '_rootTag', { enumerable: false });
+  }
+
+  /** StarMade-Open PlayerState slot view, without raw Tag exposure. */
+  get fields(): readonly EntityField<PlayerStateEntity>[] {
+    const children = this._rootTag.getStruct().filter(t => t.type !== TagType.FINISH);
+    return buildEditableEntityFields(children, PLAYER_STATE_FIELD_SCHEMA, {
+      credits: value => this.withCredits(fieldValueAsBigInt(value, 'credits')),
+      inventory: value => this.withInventory(requireInstance(value, Inventory, 'inventory')),
+      factionMembership: value => {
+        const membership = factionMembershipFromFieldValue(value);
+        return this.withFaction(membership.factionId, membership.rank);
+      },
+      lastLogin: value => this.withLastLogin(fieldValueAsBigInt(value, 'lastLogin')),
+      lastLogout: value => this.withLastLogout(fieldValueAsBigInt(value, 'lastLogout')),
+      hostHistory: value => this.withHostHistory(requireInstance(value, PlayerInfoHistoryList, 'hostHistory')),
+      creativeMode: value => this.withCreativeMode(fieldValueAsBoolean(value, 'creativeMode')),
+      lastEnteredEntity: value => this.withLastEnteredEntity(fieldValueAsString(value, 'lastEnteredEntity')),
+      scanHistory: value => this.withScanHistory(requireInstance(value, ScanHistory, 'scanHistory')),
+      inventoryBackup: value => this.withInventoryBackup(requireInstance(value, InventoryBackupState, 'inventoryBackup')),
+      savedCoordinates: value => this.withSavedCoordinates(requireInstance(value, SavedCoordinates, 'savedCoordinates')),
+      ignoredPlayers: value => this.withIgnoredPlayers(requireInstance(value, IgnoredPlayers, 'ignoredPlayers')),
+      health: value => this.withHealth(fieldValueAsNumber(value, 'health')),
+      cargoInventoryBlock: value => this.withCargoInventoryBlock(requireInstance(value, CargoInventoryBlock, 'cargoInventoryBlock')),
+      mineAutoArmSecs: value => this.withMineAutoArmSecs(fieldValueAsInteger(value, 'mineAutoArmSecs')),
+    });
+  }
+
+  getField(key: string): EntityField<PlayerStateEntity> | null {
+    return this.fields.find(field => field.key === key) ?? null;
+  }
+
+  get hostHistoryField(): EntityField<PlayerStateEntity> | null { return this.fields[9] ?? null; }
+  get playerAiManagerField(): EntityField<PlayerStateEntity> | null { return this.fields[14] ?? null; }
+  get scanHistoryField(): EntityField<PlayerStateEntity> | null { return this.fields[20] ?? null; }
+  get inventoryBackupField(): EntityField<PlayerStateEntity> | null { return this.fields[22] ?? null; }
+  get savedCoordinatesField(): EntityField<PlayerStateEntity> | null { return this.fields[23] ?? null; }
+  get ignoredPlayersField(): EntityField<PlayerStateEntity> | null { return this.fields[26] ?? null; }
+  get cargoInventoryBlockField(): EntityField<PlayerStateEntity> | null { return this.fields[28] ?? null; }
+
+  get hostHistory(): PlayerInfoHistoryList { return new PlayerInfoHistoryList(this._childAt(9)); }
+  get scanHistory(): ScanHistory { return new ScanHistory(this._childAt(20)); }
+  get inventoryBackup(): InventoryBackupState { return new InventoryBackupState(this._childAt(22)); }
+  get savedCoordinates(): SavedCoordinates { return new SavedCoordinates(this._childAt(23)); }
+  get ignoredPlayers(): IgnoredPlayers { return new IgnoredPlayers(this._childAt(26)); }
+  get cargoInventoryBlock(): CargoInventoryBlock { return new CargoInventoryBlock(this._childAt(28)); }
 
   // ── Immutable updates ──────────────────────────────────────────────
 
@@ -137,12 +202,7 @@ export class PlayerStateEntity extends StarMadeEntity {
   }
 
   withHealth(health: number): PlayerStateEntity {
-    const children = this._rootTag.getStruct();
-    const newChildren = [...children];
-    if (newChildren[27]?.type === TagType.FLOAT) {
-      newChildren[27] = Tags.float(null, health);
-    }
-    return PlayerStateEntity.fromTag(new Tag(TagType.STRUCT, this._rootTag.name, newChildren));
+    return this._withChild(27, Tags.float(null, health));
   }
 
   withInventory(inventory: Inventory): PlayerStateEntity {
@@ -154,10 +214,64 @@ export class PlayerStateEntity extends StarMadeEntity {
     return PlayerStateEntity.fromTag(new Tag(TagType.STRUCT, this._rootTag.name, newChildren));
   }
 
+  withLastLogin(lastLogin: bigint): PlayerStateEntity {
+    return this._withChild(7, Tags.long(null, lastLogin));
+  }
+
+  withLastLogout(lastLogout: bigint): PlayerStateEntity {
+    return this._withChild(8, Tags.long(null, lastLogout));
+  }
+
+  withHostHistory(hostHistory: PlayerInfoHistoryList): PlayerStateEntity {
+    return this._withChild(9, hostHistory.toTag());
+  }
+
+  withLastEnteredEntity(lastEnteredEntity: string): PlayerStateEntity {
+    return this._withChild(11, Tags.string(null, lastEnteredEntity));
+  }
+
+  withMineAutoArmSecs(mineAutoArmSecs: number): PlayerStateEntity {
+    return this._withChild(30, Tags.int(null, mineAutoArmSecs));
+  }
+
+  withScanHistory(scanHistory: ScanHistory): PlayerStateEntity {
+    return this._withChild(20, scanHistory.toTag());
+  }
+
+  withInventoryBackup(inventoryBackup: InventoryBackupState): PlayerStateEntity {
+    return this._withChild(22, inventoryBackup.toTag());
+  }
+
+  withSavedCoordinates(savedCoordinates: SavedCoordinates): PlayerStateEntity {
+    return this._withChild(23, savedCoordinates.toTag());
+  }
+
+  withIgnoredPlayers(ignoredPlayers: IgnoredPlayers): PlayerStateEntity {
+    return this._withChild(26, ignoredPlayers.toTag());
+  }
+
+  withCargoInventoryBlock(cargoInventoryBlock: CargoInventoryBlock): PlayerStateEntity {
+    return this._withChild(28, cargoInventoryBlock.toTag());
+  }
+
   // ── Serialization ─────────────────────────────────────────────────────────
 
   toTag(): Tag { return this._rootTag; }
   toBuffer(): Buffer { return writeTo(this._rootTag); }
+
+  private _withChild(index: number, tag: Tag): PlayerStateEntity {
+    const children = this._rootTag.getStruct().filter(t => t.type !== TagType.FINISH);
+    while (children.length <= index) children.push(Tags.nothing(null));
+    const current = children[index];
+    children[index] = current?.name !== undefined && tag.name === null
+      ? new Tag(tag.type, current.name, tag.value)
+      : tag;
+    return PlayerStateEntity.fromTag(new Tag(TagType.STRUCT, this._rootTag.name, [...children, FINISH_TAG]));
+  }
+
+  private _childAt(index: number): Tag {
+    return this._rootTag.getStruct().filter(t => t.type !== TagType.FINISH)[index] ?? Tags.nothing(null);
+  }
 
   // ── Parse ─────────────────────────────────────────────────────────────────
 
@@ -225,4 +339,21 @@ export class PlayerStateEntity extends StarMadeEntity {
   toString(): string {
     return `PlayerState(credits=${this.credits}, sector=${this.currentSector}, creative=${this.hasCreativeMode}, health=${this.health})`;
   }
+}
+
+function factionMembershipFromFieldValue(value: unknown): FactionMembership {
+  if (value instanceof FactionMembership) return value;
+  if (value !== null && typeof value === 'object') {
+    const candidate = value as Record<string, unknown>;
+    return new FactionMembership(
+      fieldValueAsInteger(candidate.factionId, 'factionMembership.factionId'),
+      fieldValueAsInteger(candidate.rank ?? 0, 'factionMembership.rank'),
+    );
+  }
+  throw new TypeError('Entity field "factionMembership" expects a FactionMembership or {factionId,rank}');
+}
+
+function requireInstance<T>(value: unknown, ctor: new (...args: any[]) => T, key: string): T {
+  if (value instanceof ctor) return value;
+  throw new TypeError(`Entity field "${key}" expects a ${ctor.name} object`);
 }

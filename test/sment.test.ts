@@ -13,13 +13,15 @@ import fs from 'fs';
 import path from 'path';
 import { assert } from 'chai';
 import { parseSment } from '../src/smd3/SmentParser.js';
+import { parseBlueprintFolder } from '../src/smd3/BlueprintFolderParser.js';
 import { BLOCK_COUNT } from '../src/smd3/Smd3Parser.js';
 import type { SmentEntity } from '../src/smd3/SmentParser.js';
 
 const SMENT = path.resolve(
-  '/mnt/c/Users/init-/source/repos/StarMade-Decoder/samples',
+  'samples',
   'Sobek Dreadnought 2025-jun-02.sment'
 );
+const ISANTH_BLUEPRINT = '/srv/StarMade/blueprints/Isanth Type-PNR-25-B';
 
 describe('SmentParser — Sobek Dreadnought 2025-jun-02.sment', function () {
   this.timeout(30_000);
@@ -52,6 +54,7 @@ describe('SmentParser — Sobek Dreadnought 2025-jun-02.sment', function () {
   it('entity and segment count', () => {
     assert.isAbove(sment.totalEntities, 1);
     assert.isAbove(sment.totalSegments, 1);
+    assert.equal(sment.entities.length, sment.totalEntities);
     console.log('    totalEntities:', sment.totalEntities);
     console.log('    totalSegments:', sment.totalSegments);
     console.log('    root segments:', sment.root.segments.length);
@@ -93,6 +96,7 @@ describe('SmentParser — Sobek Dreadnought 2025-jun-02.sment', function () {
       const seg0 = c.segments[0]?.segments[0];
       console.log('    ATTACHED: ' + c.name +
         ' type=' + c.header.entityType +
+        ' offset=(' + c.offset.x + ',' + c.offset.y + ',' + c.offset.z + ')' +
         ' blocks=' + c.header.totalBlockCount +
         (seg0 ? ' (smd3 blockCount=' + seg0.blockCount + ')' : ' (no smd3)') +
         ' children=' + c.children.length);
@@ -104,6 +108,20 @@ describe('SmentParser — Sobek Dreadnought 2025-jun-02.sment', function () {
       const wc = withChildren[0];
       console.log('    ATTACHED with children: ' + wc.name + ' -> ' + wc.children.length + ' children');
     }
+  });
+
+  it('exposes high-level blueprint entity helpers', () => {
+    assert.isNotNull(sment.root.meta);
+    assert.isNotNull(sment.root.logic);
+    assert.equal(sment.root.entityType, sment.root.header.entityType);
+    assert.equal(sment.root.attachmentCount, sment.root.children.length);
+    assert.isAbove(sment.totalBlockCount, 0);
+    assert.equal(sment.root.logic?.controllerCount, sment.root.logic?.controllers.length);
+
+    const firstChild = sment.root.children[0];
+    assert.exists(firstChild);
+    assert.strictEqual(sment.findEntity(firstChild.name), firstChild);
+    assert.strictEqual(sment.root.child(firstChild.name), firstChild);
   });
 
   it('global blueprint summary', () => {
@@ -125,5 +143,22 @@ describe('SmentParser — Sobek Dreadnought 2025-jun-02.sment', function () {
     console.log('    Total blocks (in smd3):', totalBlocks);
     console.log('    Declared blocks (header):', sment.root.header.totalBlockCount);
     assert.isAbove(totalBlocks, 0);
+  });
+});
+
+describe('BlueprintFolderParser — attached entity offsets', function () {
+  it('applies rail child offsets from meta.smbpm', function () {
+    if (!fs.existsSync(ISANTH_BLUEPRINT)) this.skip();
+
+    const blueprint = parseBlueprintFolder(ISANTH_BLUEPRINT);
+    const child = blueprint.root.children.find(c => c.name === 'ATTACHED_0');
+
+    assert.exists(child);
+    assert.isNotNull(blueprint.root.meta);
+    assert.isNotNull(blueprint.root.logic);
+    assert.deepEqual(blueprint.root.meta?.childOffsetFor('ATTACHED_0'), { x: -9, y: -4, z: 0 });
+    assert.deepEqual(child!.offset, { x: -9, y: -4, z: 0 });
+    assert.deepEqual(child!.worldOffset, { x: -9, y: -4, z: 0 });
+    assert.strictEqual(child!.segments.reduce((sum, smd3) => sum + smd3.segments.reduce((inner, seg) => inner + seg.blockCount, 0), 0), 33);
   });
 });

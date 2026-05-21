@@ -24,3 +24,9 @@ export type { BehaviorValue } from './BlockBehaviorConfig.js';
 export { FactionConfig } from './FactionConfig.js';
 export type { FactionConfigValue } from './FactionConfig.js';
 export { BlockRegistry } from './BlockRegistry.js';
+
+export {
+  parseSystemNames,
+  writeSystemNames,
+} from './SystemNames.js';
+export type { SystemNamesFile, SystemNameSyllable } from './SystemNames.js';

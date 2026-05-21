@@ -32,6 +32,14 @@ import { FINISH_TAG } from '../../core/Tag.js';
 import { StarMadeEntity } from './StarMadeEntity.js';
 import { SectorPosition, EntityTransform } from '../components/Transform.js';
 import { SpawnController } from '../components/SpawnData.js';
+import {
+  buildEditableEntityFields,
+  fieldValueAsInteger,
+  fieldValueAsNumber,
+  fieldValueAsString,
+  TRANSFORMABLE_FIELD_SCHEMA,
+  type EntityField,
+} from '../EntityFieldView.js';
 
 export abstract class GameEntity extends StarMadeEntity {
   constructor(
@@ -43,11 +51,38 @@ export abstract class GameEntity extends StarMadeEntity {
     readonly spawnController: SpawnController,
     /** Unknown fields (aiTag, etc.) preserved at their original indexes */
     protected readonly _transformableChildren: Tag[],
-  ) { super(); }
+  ) {
+    super();
+    Object.defineProperty(this, '_transformableChildren', { enumerable: false });
+  }
 
   // ── Accessors ─────────────────────────────────────────────────────────────────
 
   get isNPC(): boolean { return this.factionId < 0; }
+
+  /** StarMade-Open SimpleTransformableSendableObject slot view, without raw Tag exposure. */
+  get transformableFields(): readonly EntityField<this>[] {
+    return buildEditableEntityFields(this._transformableChildren, TRANSFORMABLE_FIELD_SCHEMA, {
+      mass: value => this.withMass(fieldValueAsNumber(value, 'mass')),
+      transform: value => this._clone({ transform: entityTransformFromFieldValue(value) }),
+      sectorPosition: value => this.withSector(sectorPositionFromFieldValue(value, 'sectorPosition')),
+      factionId: value => this.withFactionId(fieldValueAsInteger(value, 'factionId')),
+      owner: value => this.withOwner(fieldValueAsString(value, 'owner')),
+      spawnController: value => {
+        if (value instanceof SpawnController) return this._clone({ spawnController: value });
+        throw new TypeError('Entity field "spawnController" expects a SpawnController object');
+      },
+    });
+  }
+
+  /** AI/noAI transformable slot as a plain high-level field view. */
+  get aiConfigurationField(): EntityField<this> | null {
+    return this.transformableFields[2] ?? null;
+  }
+
+  getTransformableField(key: string): EntityField<this> | null {
+    return this.transformableFields.find(field => field.key === key) ?? null;
+  }
 
   // ── Updates ──────────────────────────────────────────────────────────
 
@@ -78,34 +113,47 @@ export abstract class GameEntity extends StarMadeEntity {
 
   // ── Serialization of "transformable" ─────────────────────────────────────
 
-  protected _buildTransformableTag(): Tag {
+  protected _buildTransformableTag(overrides: Partial<{
+    mass: number;
+    transform: EntityTransform;
+    sectorPosition: SectorPosition;
+    factionId: number;
+    owner: string;
+    spawnController: SpawnController;
+  }> = {}): Tag {
     const children = [...this._transformableChildren];
+    const mass = overrides.mass ?? this.mass;
+    const transform = overrides.transform ?? this.transform;
+    const sectorPosition = overrides.sectorPosition ?? this.sectorPosition;
+    const factionId = overrides.factionId ?? this.factionId;
+    const owner = overrides.owner ?? this.owner;
+    const spawnController = overrides.spawnController ?? this.spawnController;
     // [0] mass
     if (children[0]?.type === TagType.FLOAT) {
-      children[0] = Tags.float(null, this.mass);
+      children[0] = Tags.float(null, mass);
     }
     // [1] transform LIST
     if (children[1]?.type === TagType.LIST) {
-      children[1] = this.transform.toMatrix4fList(children[1].name);
+      children[1] = transform.toMatrix4fList(children[1].name);
     }
     // [3] sPos
     const sPosIdx = children.findIndex(t => t.name === 'sPos');
     if (sPosIdx >= 0) {
-      children[sPosIdx] = this.sectorPosition.toTag('sPos');
+      children[sPosIdx] = sectorPosition.toTag('sPos');
     }
     // [4] fid
     const fidIdx = children.findIndex(t => t.name === 'fid');
     if (fidIdx >= 0) {
-      children[fidIdx] = Tags.int('fid', this.factionId);
+      children[fidIdx] = Tags.int('fid', factionId);
     }
     // [5] own
     const ownIdx = children.findIndex(t => t.name === 'own');
     if (ownIdx >= 0) {
-      children[ownIdx] = Tags.string('own', this.owner);
+      children[ownIdx] = Tags.string('own', owner);
     }
     // [6] spawnController
     if (children[6]?.type === TagType.STRUCT) {
-      children[6] = this.spawnController.toTag();
+      children[6] = spawnController.toTag();
     }
 
     return new Tag(TagType.STRUCT, 'transformable', [...children, FINISH_TAG]);
@@ -151,4 +199,48 @@ export abstract class GameEntity extends StarMadeEntity {
   toString(): string {
     return `${this.entityType}(sector=${this.sectorPosition}, faction=${this.factionId}, owner="${this.owner}")`;
   }
+}
+
+function sectorPositionFromFieldValue(value: unknown, key: string): SectorPosition {
+  if (value instanceof SectorPosition) return value;
+  if (value !== null && typeof value === 'object') {
+    const candidate = value as Record<string, unknown>;
+    return new SectorPosition(
+      fieldValueAsInteger(candidate.x, `${key}.x`),
+      fieldValueAsInteger(candidate.y, `${key}.y`),
+      fieldValueAsInteger(candidate.z, `${key}.z`),
+    );
+  }
+  throw new TypeError(`Entity field "${key}" expects a SectorPosition or {x,y,z}`);
+}
+
+function entityTransformFromFieldValue(value: unknown): EntityTransform {
+  if (value instanceof EntityTransform) return value;
+  if (Array.isArray(value) && value.length >= 16) {
+    const floats = value.map((entry, index) => fieldValueAsNumber(entry, `transform[${index}]`));
+    return new EntityTransform(
+      floats[12], floats[13], floats[14],
+      floats[0], floats[1], floats[2],
+      floats[4], floats[5], floats[6],
+      floats[8], floats[9], floats[10],
+    );
+  }
+  if (value !== null && typeof value === 'object') {
+    const candidate = value as Record<string, unknown>;
+    return new EntityTransform(
+      fieldValueAsNumber(candidate.originX, 'transform.originX'),
+      fieldValueAsNumber(candidate.originY, 'transform.originY'),
+      fieldValueAsNumber(candidate.originZ, 'transform.originZ'),
+      fieldValueAsNumber(candidate.m00, 'transform.m00'),
+      fieldValueAsNumber(candidate.m01, 'transform.m01'),
+      fieldValueAsNumber(candidate.m02, 'transform.m02'),
+      fieldValueAsNumber(candidate.m10, 'transform.m10'),
+      fieldValueAsNumber(candidate.m11, 'transform.m11'),
+      fieldValueAsNumber(candidate.m12, 'transform.m12'),
+      fieldValueAsNumber(candidate.m20, 'transform.m20'),
+      fieldValueAsNumber(candidate.m21, 'transform.m21'),
+      fieldValueAsNumber(candidate.m22, 'transform.m22'),
+    );
+  }
+  throw new TypeError('Entity field "transform" expects an EntityTransform, 16-number matrix array, or transform object');
 }

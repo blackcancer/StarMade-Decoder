@@ -15,7 +15,7 @@ import AdmZip from 'adm-zip';
 import { parseSment } from '../src/smd3/SmentParser.js';
 import { parseSmtpl } from '../src/smd3/SmtplParser.js';
 
-const ROOT = path.resolve('/mnt/c/Users/init-/source/repos/StarMade-Decoder/samples/retrocompat/starmadedock');
+const ROOT = path.resolve('samples/retrocompat/starmadedock');
 const MANIFEST = path.join(ROOT, 'manifest.json');
 
 interface RetroSample {

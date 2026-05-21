@@ -39,7 +39,7 @@ import { parseBlueprintFolder }     from '../src/smd3/BlueprintFolderParser.js';
 
 registerAllFactories();
 
-const S = path.resolve('/mnt/c/Users/init-/source/repos/StarMade-Decoder/samples');
+const S = path.resolve('samples');
 const hasSamples = fs.existsSync(S);
 
 // ── core/TagParser — GZIP detection path ─────────────────────────────────────

@@ -31,6 +31,13 @@ import { GameEntity } from './GameEntity.js';
 import { StarMadeEntity } from './StarMadeEntity.js';
 import { SectorPosition, EntityTransform } from '../components/Transform.js';
 import { SpawnController } from '../components/SpawnData.js';
+import {
+  buildEditableEntityFields,
+  fieldValueAsInteger,
+  fieldValueAsNumber,
+  PLAYER_CHARACTER_FIELD_SCHEMA,
+  type EntityField,
+} from '../EntityFieldView.js';
 
 export class PlayerCharacterEntity extends GameEntity {
   readonly entityType = 'PLAYER_CHARACTER';
@@ -49,9 +56,24 @@ export class PlayerCharacterEntity extends GameEntity {
     private readonly _rootTag: Tag,
   ) {
     super(mass, transform, sectorPosition, factionId, owner, spawnController, transformableChildren);
+    Object.defineProperty(this, '_rootTag', { enumerable: false });
   }
 
   readonly entityType_ = 'PLAYER_CHARACTER';
+
+  /** StarMade-Open PlayerCharacter slot view, without raw Tag exposure. */
+  get fields(): readonly EntityField<PlayerCharacterEntity>[] {
+    const children = this._rootTag.getStruct().filter(t => t.type !== TagType.FINISH);
+    return buildEditableEntityFields(children, PLAYER_CHARACTER_FIELD_SCHEMA, {
+      id: value => this.withId(fieldValueAsInteger(value, 'id')),
+      speed: value => this.withSpeed(fieldValueAsNumber(value, 'speed')),
+      stepHeight: value => this.withStepHeight(fieldValueAsNumber(value, 'stepHeight')),
+    });
+  }
+
+  getField(key: string): EntityField<PlayerCharacterEntity> | null {
+    return this.fields.find(field => field.key === key) ?? null;
+  }
 
   // ── Updates ──────────────────────────────────────────────────────────
 
@@ -69,9 +91,12 @@ export class PlayerCharacterEntity extends GameEntity {
       this._transformableChildren,
       this.id, this.speed, this.stepHeight, this.noAI,
       this._rebuildRootTag({
+        mass: overrides.mass ?? this.mass,
+        transform: overrides.transform ?? this.transform,
         factionId: overrides.factionId ?? this.factionId,
         owner:     overrides.owner ?? this.owner,
         sector:    overrides.sectorPosition ?? this.sectorPosition,
+        spawnController: overrides.spawnController ?? this.spawnController,
       }),
     ) as unknown as this;
   }
@@ -92,13 +117,22 @@ export class PlayerCharacterEntity extends GameEntity {
     );
   }
 
+  withStepHeight(stepHeight: number): PlayerCharacterEntity {
+    return new PlayerCharacterEntity(
+      this.mass, this.transform, this.sectorPosition, this.factionId, this.owner,
+      this.spawnController, this._transformableChildren,
+      this.id, this.speed, stepHeight, this.noAI, this._rebuildRootTag({ stepHeight }),
+    );
+  }
+
   // ── Serialization ─────────────────────────────────────────────────────────
 
   toTag(): Tag { return this._rootTag; }
   toBuffer(): Buffer { return writeTo(this._rootTag); }
 
   private _rebuildRootTag(overrides: Partial<{
-    id: number; speed: number; factionId: number; owner: string; sector: SectorPosition;
+    id: number; speed: number; stepHeight: number; mass: number; transform: EntityTransform;
+    factionId: number; owner: string; sector: SectorPosition; spawnController: SpawnController;
   }>): Tag {
     const s = this._rootTag.getStruct().filter(t => t.type !== TagType.FINISH);
     const children = [...s];
@@ -107,9 +141,18 @@ export class PlayerCharacterEntity extends GameEntity {
     if (children[0]?.name === 'id') children[0] = Tags.int('id', overrides.id ?? this.id);
     // [1] speed
     if (children[1]?.name === 'speed') children[1] = Tags.float('speed', overrides.speed ?? this.speed);
+    // [2] stepHeight
+    if (children[2]?.name === 'stepHeight') children[2] = Tags.float('stepHeight', overrides.stepHeight ?? this.stepHeight);
     // [3] transformable
     if (children[3]?.type === TagType.STRUCT) {
-      children[3] = this._buildTransformableTag();
+      children[3] = this._buildTransformableTag({
+        mass: overrides.mass ?? this.mass,
+        transform: overrides.transform ?? this.transform,
+        sectorPosition: overrides.sector ?? this.sectorPosition,
+        factionId: overrides.factionId ?? this.factionId,
+        owner: overrides.owner ?? this.owner,
+        spawnController: overrides.spawnController ?? this.spawnController,
+      });
     }
     return new Tag(TagType.STRUCT, this._rootTag.name, [...children, FINISH_TAG]);
   }

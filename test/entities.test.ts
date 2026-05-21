@@ -13,6 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import { assert } from 'chai';
 import { registerAllFactories } from '../src/serializable/Factories.js';
+import { Tag } from '../src/core/Tag.js';
 import { readFrom, writeTo } from '../src/core/TagParser.js';
 import { TagType } from '../src/core/TagType.js';
 
@@ -24,11 +25,28 @@ import { PlayerCharacterEntity }  from '../src/objects/entities/PlayerCharacterE
 import { PlayerStateEntity, FactionMembership } from '../src/objects/entities/PlayerStateEntity.js';
 import { SectorPosition }         from '../src/objects/components/Transform.js';
 import { DockingState }           from '../src/objects/components/DockingState.js';
+import {
+  ModuleExplosionState,
+  PlayerInfoHistoryEntry,
+  QuarterState,
+  SavedCoordinateEntry,
+  ScanDataRecord,
+} from '../src/objects/EntitySlotObjects.js';
 
 registerAllFactories();
-const S = path.resolve('/mnt/c/Users/init-/source/repos/StarMade-Decoder/samples');
+const S = path.resolve('samples');
 const load = (f: string) => readFrom(fs.readFileSync(path.join(S, f)));
 const loadB = (f: string) => fs.readFileSync(path.join(S, f));
+
+function assertNoTagInstances(value: unknown, pathName = 'value', seen = new Set<object>()): void {
+  if (value instanceof Tag) assert.fail(`${pathName} exposes a raw Tag`);
+  if (value === null || typeof value !== 'object') return;
+  if (seen.has(value)) return;
+  seen.add(value);
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    assertNoTagInstances(child, `${pathName}.${key}`, seen);
+  }
+}
 
 // ── Ship ──────────────────────────────────────────────────────────────────────
 
@@ -64,6 +82,133 @@ describe('Ship (ENTITY_SHIP_Traders Homerl110.ent)', function () {
     } else {
       console.log('    (no managerContainer)');
     }
+  });
+
+  it('exposes StarMade-Open high-level slot views without raw Tag fields', () => {
+    const ship = Ship.fromBuffer(loadB('ENTITY_SHIP_Traders Homerl110.ent'));
+
+    assert.lengthOf(ship.fields, 42);
+    assert.equal(ship.fields[0].key, 'uniqueId');
+    assert.equal(ship.fields[6].key, 'transformable');
+    assert.equal(ship.fields[7].key, 'managerContainer');
+    assert.equal(ship.fields[19].key, 'railController');
+    assert.equal(ship.fields[41].key, 'quarterManager');
+    assert.isObject(ship.fields[4].value);
+    assertNoTagInstances(ship.fields, 'ship.fields');
+    assert.equal(ship.railController.mode, 'activeRequest');
+    assert.isNotNull(ship.railController.currentRequest);
+    assert.isNotNull(ship.railController.currentRequest!.rail);
+    assert.isNotNull(ship.railController.currentRequest!.docked);
+    assert.isArray(ship.railController.currentRequest!.movedTransform);
+    assert.isTrue(ship.blueprintInfo.loadedFromBlueprint);
+    assert.include(ship.blueprintInfo.identifier, 'ATTACHED_0');
+    assert.equal(ship.coreTimer.timeLeftMs, -1n);
+    assert.equal(ship.quarterManager.version, 0);
+    assertNoTagInstances(ship.railController.toJSON(), 'ship.railController');
+    assertNoTagInstances(ship.blueprintInfo.toJSON(), 'ship.blueprintInfo');
+    assertNoTagInstances(ship.itemsToSpawnWith.toJSON(), 'ship.itemsToSpawnWith');
+    assertNoTagInstances(ship.quarterManager.toJSON(), 'ship.quarterManager');
+
+    assert.lengthOf(ship.transformableFields, 7);
+    assert.equal(ship.transformableFields[0].key, 'mass');
+    assert.equal(ship.transformableFields[2].key, 'aiConfiguration');
+    assertNoTagInstances(ship.transformableFields, 'ship.transformableFields');
+
+    assert.isDefined(ship.managerContainer);
+    assert.lengthOf(ship.managerContainer!.fields, 18);
+    assert.equal(ship.managerContainer!.fields[0].key, 'inventories');
+    assert.equal(ship.managerContainer!.fields[17].key, 'modData');
+    assert.isAtLeast(ship.managerContainer!.modules.modules.length, 1);
+    assert.isAtLeast(ship.managerContainer!.aiConfiguration.settings.length, 1);
+    assert.equal(ship.managerContainer!.warpGateInfo.tagType, 'TAG_Byte');
+    assert.equal(ship.managerContainer!.modules.getModule('JAO')?.moduleKind, 'jumpAddOn');
+    assert.isAtLeast(ship.managerContainer!.modules.getModule('JAO')!.entries.length, 1);
+    assertNoTagInstances(ship.managerContainer!.modules.toJSON(), 'managerContainer.modules');
+    assertNoTagInstances(ship.managerContainer!.aiConfiguration.toJSON(), 'managerContainer.aiConfiguration');
+    assertNoTagInstances(ship.managerContainer!.fields, 'managerContainer.fields');
+
+    assert.notProperty(ship.managerContainer!, '_rawChildren');
+    assert.notIncludeMembers(Object.keys(ship), ['_rootChildren', '_transformableChildren']);
+    assert.notIncludeMembers(Object.keys(ship.managerContainer!), ['_children', '_rawChildren']);
+  });
+
+  it('field objects update high-level values immutably', () => {
+    const ship = Ship.fromBuffer(loadB('ENTITY_SHIP_Traders Homerl110.ent'));
+
+    const renamed = ship.getField('realName')!.withValue('Field Renamed');
+    assert.instanceOf(renamed, Ship);
+    assert.equal(renamed.realName, 'Field Renamed');
+    assert.notEqual(ship.realName, renamed.realName);
+    assert.equal(Ship.fromBuffer(writeTo(renamed.toTag())).realName, 'Field Renamed');
+
+    const refactioned = ship.getTransformableField('factionId')!.setValue(777);
+    assert.equal(refactioned.factionId, 777);
+    assert.equal(ship.factionId, -10000000);
+
+    const moved = ship.getTransformableField('sectorPosition')!.withValue({ x: 9, y: 8, z: 7 });
+    assert.equal(moved.sectorPosition.x, 9);
+    assert.equal(moved.sectorPosition.y, 8);
+    assert.equal(moved.sectorPosition.z, 7);
+    assert.equal(Ship.fromBuffer(writeTo(moved.toTag())).sectorPosition.x, 9);
+
+    const restrictedPull = ship.managerContainer!.getField('pullPermission')!.withValue(2);
+    assert.equal(restrictedPull.pullPermission, 2);
+    assert.notEqual(ship.managerContainer!.pullPermission, restrictedPull.pullPermission);
+
+    const retimed = ship.withCoreTimer(ship.coreTimer.withTimeLeftMs(5000n));
+    assert.equal(retimed.coreTimer.timeLeftMs, 5000n);
+    assert.equal(Ship.fromBuffer(writeTo(retimed.toTag())).coreTimer.timeLeftMs, 5000n);
+
+    const blueprint = ship.withBlueprintInfo(ship.blueprintInfo.withIdentifier('UnitBlueprint'));
+    assert.equal(blueprint.blueprintInfo.identifier, 'UnitBlueprint');
+    assert.equal(Ship.fromBuffer(writeTo(blueprint.toTag())).blueprintInfo.identifier, 'UnitBlueprint');
+
+    const spawnMap = ship.withItemsToSpawnWith(ship.itemsToSpawnWith.withCount(665, 3));
+    assert.equal(spawnMap.itemsToSpawnWith.getCount(665), 3);
+    assert.equal(Ship.fromBuffer(writeTo(spawnMap.toTag())).itemsToSpawnWith.getCount(665), 3);
+
+    const railCleared = ship.withRailController(ship.railController.clear());
+    assert.equal(railCleared.railController.mode, 'none');
+
+    const request = ship.railController.currentRequest!;
+    const rotatedRail = ship.withRailController(
+      ship.railController.withCurrentRequest(request.withDidRotationInPlace(true))
+    );
+    assert.isTrue(rotatedRail.railController.currentRequest!.didRotationInPlace);
+    assert.isTrue(Ship.fromBuffer(writeTo(rotatedRail.toTag())).railController.currentRequest!.didRotationInPlace);
+
+    const quarter = QuarterState.create({
+      type: 0,
+      min: { x: 0, y: 0, z: 0 },
+      max: { x: 1, y: 1, z: 1 },
+      id: 7,
+      childIds: [8, 9],
+    }).withIntegrity(0.75);
+    const quartered = ship.withQuarterManager(ship.quarterManager.clearQuarters().addQuarter(quarter));
+    assert.equal(quartered.quarterManager.quarters[0].typeName, 'BRIDGE');
+    assert.equal(Ship.fromBuffer(writeTo(quartered.toTag())).quarterManager.quarters[0].childIds[1], 9);
+
+    const jumpModule = ship.managerContainer!.modules.getModule('JAO')!;
+    const movedEntry = jumpModule.entries[0].withPosition({ x: 1, y: 2, z: 3 });
+    const movedModule = ship.withManagerContainer(
+      ship.managerContainer!.withModules(ship.managerContainer!.modules.withModule('JAO', jumpModule.withEntry(0, movedEntry)))
+    );
+    assert.deepEqual(movedModule.managerContainer!.modules.getModule('JAO')!.entries[0].position, { x: 1, y: 2, z: 3 });
+
+    const explosion = ModuleExplosionState.create({ radius: 4, damage: 5, explosionPositions: [1n, 2n] })
+      .addExplosionPosition(3n)
+      .withChain(true);
+    const exploded = ship.withManagerContainer(
+      ship.managerContainer!.withModuleExplosions(ship.managerContainer!.moduleExplosions.addExplosion(explosion))
+    );
+    assert.equal(exploded.managerContainer!.moduleExplosions.explosions[0].explosionPositions.length, 3);
+    assert.isTrue(Ship.fromBuffer(writeTo(exploded.toTag())).managerContainer!.moduleExplosions.explosions[0].chain);
+
+    const configured = ship.withManagerContainer(
+      ship.managerContainer!.withAiConfiguration(ship.managerContainer!.aiConfiguration.withSetting(99, 'unit'))
+    );
+    assert.equal(configured.managerContainer!.aiConfiguration.getSetting(99), 'unit');
+    assert.equal(Ship.fromBuffer(writeTo(configured.toTag())).managerContainer!.aiConfiguration.getSetting(99), 'unit');
   });
 
   it('withFactionId immutable', () => {
@@ -199,6 +344,26 @@ describe('PlayerCharacterEntity (ENTITY_PLAYERCHARACTER_InitSysRev.ent)', functi
     assert.equal(pc2.sectorPosition.x, pc.sectorPosition.x);
     console.log('    PlayerCharacter semantic round-trip: ok');
   });
+
+  it('exposes StarMade-Open PlayerCharacter slot view', () => {
+    const pc = PlayerCharacterEntity.fromBuffer(loadB('ENTITY_PLAYERCHARACTER_InitSysRev.ent'));
+
+    assert.lengthOf(pc.fields, 4);
+    assert.equal(pc.fields[0].key, 'id');
+    assert.equal(pc.fields[3].key, 'transformable');
+    assert.lengthOf(pc.transformableFields, 7);
+    assertNoTagInstances(pc.fields, 'playerCharacter.fields');
+    assertNoTagInstances(pc.transformableFields, 'playerCharacter.transformableFields');
+    assert.notIncludeMembers(Object.keys(pc), ['_rootTag', '_transformableChildren']);
+
+    const stepped = pc.getField('stepHeight')!.withValue(0.5);
+    assert.closeTo(stepped.stepHeight, 0.5, 0.001);
+    assert.notEqual(pc.stepHeight, stepped.stepHeight);
+
+    const owned = pc.getTransformableField('owner')!.withValue('FieldOwner');
+    assert.equal(owned.owner, 'FieldOwner');
+    assert.equal(PlayerCharacterEntity.fromBuffer(writeTo(owned.toTag())).owner, 'FieldOwner');
+  });
 });
 
 // ── PlayerStateEntity ─────────────────────────────────────────────────────────
@@ -264,5 +429,69 @@ describe('PlayerStateEntity (ENTITY_PLAYERSTATE_InitSysRev.ent)', function () {
     const reenc = writeTo(ps.toTag());
     assert.equal(reenc.toString('hex'), orig.toString('hex'), 'PlayerState round-trip exact');
     console.log('    PlayerState round-trip exact (bytes): ok');
+  });
+
+  it('exposes StarMade-Open PlayerState slot view', () => {
+    const ps = PlayerStateEntity.fromBuffer(loadB('ENTITY_PLAYERSTATE_InitSysRev.ent'));
+
+    assert.lengthOf(ps.fields, 31);
+    assert.equal(ps.fields[0].key, 'credits');
+    assert.equal(ps.fields[9].key, 'hostHistory');
+    assert.equal(ps.fields[14].key, 'playerAiManager');
+    assert.equal(ps.fields[20].key, 'scanHistory');
+    assert.equal(ps.fields[30].key, 'mineAutoArmSecs');
+    assert.isNotNull(ps.playerAiManagerField);
+    assert.isNotNull(ps.ignoredPlayersField);
+    assert.isAtLeast(ps.hostHistory.entries.length, 1);
+    assert.lengthOf(ps.savedCoordinates.entries, 0);
+    assert.lengthOf(ps.ignoredPlayers.names, 0);
+    assert.isNull(ps.cargoInventoryBlock.piece);
+    assertNoTagInstances(ps.hostHistory.toJSON(), 'playerState.hostHistory');
+    assertNoTagInstances(ps.scanHistory.toJSON(), 'playerState.scanHistory');
+    assertNoTagInstances(ps.savedCoordinates.toJSON(), 'playerState.savedCoordinates');
+    assertNoTagInstances(ps.ignoredPlayers.toJSON(), 'playerState.ignoredPlayers');
+    assertNoTagInstances(ps.cargoInventoryBlock.toJSON(), 'playerState.cargoInventoryBlock');
+    assertNoTagInstances(ps.fields, 'playerState.fields');
+    assert.notInclude(Object.keys(ps), '_rootTag');
+
+    const richer = ps.getField('credits')!.withValue(123456n);
+    assert.equal(richer.credits, 123456n);
+    assert.equal(PlayerStateEntity.fromBuffer(writeTo(richer.toTag())).credits, 123456n);
+
+    const creative = ps.getField('creativeMode')!.setValue(true);
+    assert.isTrue(creative.hasCreativeMode);
+
+    const wounded = ps.getField('health')!.withValue(42);
+    assert.equal(wounded.health, 42);
+
+    const withHistory = ps.withHostHistory(ps.hostHistory.addEntry(
+      new PlayerInfoHistoryEntry(1n, '/unit-test', 'UnitTester')
+    ));
+    assert.equal(withHistory.hostHistory.entries.length, ps.hostHistory.entries.length + 1);
+    assert.equal(PlayerStateEntity.fromBuffer(writeTo(withHistory.toTag())).hostHistory.entries.at(-1)?.ip, '/unit-test');
+
+    const withCoordinate = ps.withSavedCoordinates(ps.savedCoordinates.add(
+      new SavedCoordinateEntry({ x: 1, y: 2, z: 3 }, 'Unit Coordinate')
+    ));
+    assert.equal(withCoordinate.savedCoordinates.entries[0].name, 'Unit Coordinate');
+    assert.equal(PlayerStateEntity.fromBuffer(writeTo(withCoordinate.toTag())).savedCoordinates.entries[0].sector.z, 3);
+
+    const withIgnored = ps.withIgnoredPlayers(ps.ignoredPlayers.add('IgnoredUnit'));
+    assert.include(withIgnored.ignoredPlayers.names, 'IgnoredUnit');
+    assert.include(PlayerStateEntity.fromBuffer(writeTo(withIgnored.toTag())).ignoredPlayers.names, 'IgnoredUnit');
+
+    const withScan = ps.withScanHistory(ps.scanHistory.addScan(ScanDataRecord.create({
+      origin: { x: 4, y: 5, z: 6 },
+      time: 2n,
+      range: 100,
+      entityData: [{ name: 'Unit Ship', sector: { x: 1, y: 1, z: 1 }, factionId: 3, controllerInfo: 'ok' }],
+      resourceData: [{ type: 598, resourceQuantity: 0.5 }],
+    })));
+    assert.equal(withScan.scanHistory.scans[0].entityData[0].name, 'Unit Ship');
+    assert.equal(PlayerStateEntity.fromBuffer(writeTo(withScan.toTag())).scanHistory.scans[0].resourceData[0].type, 598);
+
+    const withBackup = ps.withInventoryBackup(ps.inventoryBackup.withMainInventory(ps.inventory));
+    assert.isTrue(withBackup.inventoryBackup.hasBackup);
+    assert.equal(PlayerStateEntity.fromBuffer(writeTo(withBackup.toTag())).inventoryBackup.mainInventory?.size, ps.inventory.size);
   });
 });

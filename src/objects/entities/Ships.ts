@@ -15,9 +15,10 @@ import { Tag } from '../../core/Tag.js';
 import { Tags } from '../../core/TagBuilder.js';
 import { TagType } from '../../core/TagType.js';
 import { readFrom } from '../../core/TagParser.js';
-import { SegmentController } from './SegmentController.js';
+import { SegmentController, type BlockBounds } from './SegmentController.js';
 import { SectorPosition, EntityTransform } from '../components/Transform.js';
 import { SpawnController } from '../components/SpawnData.js';
+import { ManagerContainer } from '../components/ManagerContainer.js';
 
 // ── Helper: build from parsed data ─────────────────────────────
 
@@ -58,6 +59,16 @@ function cloneWith<T extends SegmentController>(
     spawner: string;
     lastModifier: string;
     creatorId: number;
+    uniqueId: string;
+    bounds: BlockBounds;
+    nonEmptySegments: number;
+    currentOwner: string;
+    lastDockerPlayer: string;
+    lastEditBlocks: bigint;
+    lastDamageTaken: bigint;
+    tagVersion: number;
+    managerContainer: ManagerContainer | null;
+    rootChildren: Tag[];
   }>,
 ): T {
   const p = (SegmentController as any)._parse(entity.toTag());
@@ -89,21 +100,27 @@ function cloneWith<T extends SegmentController>(
     overrides.owner          ?? p.owner,
     overrides.spawnController ?? p.spawnController,
     tc,
-    p.uniqueId,
+    overrides.uniqueId        ?? p.uniqueId,
     overrides.realName       ?? p.realName,
-    p.bounds, p.dockingState, p.controlElementMap,
-    p.managerContainer,
+    overrides.bounds          ?? p.bounds,
+    p.dockingState, p.controlElementMap,
+    Object.prototype.hasOwnProperty.call(overrides, 'managerContainer') ? overrides.managerContainer ?? null : p.managerContainer,
     overrides.creatorId      ?? p.creatorId,
     overrides.spawner        ?? p.spawner,
     overrides.lastModifier   ?? p.lastModifier,
     overrides.seed           ?? p.seed,
-    p.nonEmptySegments, p.hpState, p.textBlocks,
+    overrides.nonEmptySegments ?? p.nonEmptySegments,
+    p.hpState, p.textBlocks,
     overrides.scrap          ?? p.scrap,
     overrides.vulnerable     ?? p.vulnerable,
     overrides.minable        ?? p.minable,
     overrides.factionRights  ?? p.factionRights,
-    p.currentOwner, p.lastDockerPlayer,
-    p.lastEditBlocks, p.lastDamageTaken, p.tagVersion, p.rootChildren,
+    overrides.currentOwner     ?? p.currentOwner,
+    overrides.lastDockerPlayer ?? p.lastDockerPlayer,
+    overrides.lastEditBlocks   ?? p.lastEditBlocks,
+    overrides.lastDamageTaken  ?? p.lastDamageTaken,
+    overrides.tagVersion       ?? p.tagVersion,
+    overrides.rootChildren ?? p.rootChildren,
   );
 }
 

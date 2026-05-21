@@ -24,7 +24,7 @@ import type { Tag } from '../src/core/Tag.js';
 
 registerAllFactories();
 
-const S = path.resolve('/mnt/c/Users/init-/source/repos/StarMade-Decoder/samples');
+const S = path.resolve('samples');
 const load = (f: string) => readFrom(fs.readFileSync(path.join(S, f)));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

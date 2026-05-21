@@ -1,5 +1,89 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+#### Blueprint high-level API (`src/smd3/`)
+
+**`.smbpm` — `BlueprintMeta`**
+- `parseSmbpm()` now returns `BlueprintMeta` instead of raw `SmbpmFile`.
+- Exposes `manager`, `aiConfig` (`AiConfig` / `AiConfigEntry`), `thrustConfig`, and `railChildren` (`RailChildEntry[]`).
+- Adds `BlueprintChildOffset`, `BlueprintChildTransform`, `RailChildRequest`, and `RailPieceRef` types.
+- Adds helpers: `childOffsetFor()`, `withAiValue()`, `withRailChildRequest()`, `withRailUID()`, `getRailChildOffsetFromTag()`, `parseAiConfigTag()`, and `aiConfigToTag()`.
+- Keeps internal state in non-enumerable slots for exact binary round-trips.
+
+**`.sment` / `.smbph` — `BlueprintArchive` / `BlueprintHeader` / `BlueprintEntity`**
+- `parseSment()` returns `BlueprintArchive` with `entities`, `findEntity()`, `totalBlockCount`, local/world offsets, and `meta` per entity.
+- `parseSmbph()` returns `BlueprintHeader` with `classificationOrdinal`, `classificationName`, `withEntityType()`, and `withClassification()`.
+- Adds `BlueprintClassification`, `blueprintClassificationName()`, `blueprintTypeOrdinal()`, `BlueprintBlockCount`, `BlueprintIndexScore`, `BlueprintIndexScoreInput`, and `normalizeBlueprintHeader()`.
+
+**`.smbpl` — `BlueprintLogic`**
+- `parseSmbpl()` returns `BlueprintLogic` with access by controller, block type, and target.
+- Adds `ControlController`, `ControlGroup`, `ControlLink`, `addLink()`, `removeLink()`, `moveController()`, and `clearController()`.
+- `writeSmbpl()` remains binary-compatible.
+
+**`.smbmm` / `.sim` — updated high-level wrappers**
+- `SmbmmFile` exposes `SmbmmFormat` and `ModMapping[]`; `writeSmbmm()` encodes int32 BE mappings.
+- `SimParser` / `SimWriter` expose `SimulationState` and `SimGroup` with typed `version`, `type`, `members`, `startTime`, `startSector`, and `programId`; deprecated fields are marked `@deprecated`.
+
+#### Entity high-level API (`src/objects/entities/`)
+
+**`.ent` deep modeling — all opaque slots now have object APIs**
+- `SegmentController` slots: `npcData`, `railController`, `coreTimer`, `blueprintInfo`, `itemsToSpawnWith`, and `quarterManager` (`QuarterManagerState` / `QuarterState`).
+- `PlayerStateEntity` slots: `hostHistory`, `scanHistory`, `inventoryBackup`, `savedCoordinates`, `ignoredPlayers`, and `cargoInventoryBlock`.
+- `ManagerContainer` slots: `warpGateInfo`, `modules` (`ManagerModulesState`), `aiConfiguration`, `raceGateInfo`, `unloadedDummies`, `moduleExplosions` (`ModuleExplosionsState`), and `modData`.
+- Adds immutable mutation helpers such as `with...`, `clear`, `add`, `remove`, `withSetting`, `withScanEntry`, and `withSavedCoord`.
+- Adds `EntityFieldView`, a named/typed field view with `canSet`, `withValue(value)`, and `setValue(value)`.
+- Keeps internal `Tag` storage private/non-enumerable to preserve exact round-trips.
+
+**`GameEntity` / `Ships` / `PlayerCharacterEntity` / `PlayerStateEntity`**
+- Adds `transformable` / `transformableFields` typed views.
+- Expands the `fields` API with setters for identifiers, names, bounds, sector, faction, owner, seed, flags, credits, creative mode, health, stepHeight, and `pullPermission`.
+
+#### BlockConfig / ElementInfo
+
+- `BlockConfig` now parses and exposes StarMade-Open-inspired block metadata needed by renderers and editors:
+  - render fields: texture IDs, transparency, raw animation flag, activation textures, light sources, LOD shape data, build-mode-only blocks, extended textures, resource injection, and LOD collision behavior
+  - gameplay/logic fields: controller relationships, logic flags, door/beacon/enterable/sensor/system flags, factory data, source references, wildcard IDs, and effect armor values
+  - recipe fields: consistence, cubatom consistence, recipe buy resources, inventory group, and block resource type
+  - reactor chamber fields: root/parent/children/prerequisites/exclusions/upgrades, capacity, permissions, config groups, reactor HP, and reactor general icon index
+- `BlockDefinition.metadata` stores the extended parsed XML fields while preserving the existing constructor-facing core fields.
+- Adds StarMade-Open style helpers: `getBlockStyleDescriptor()`, `getResourceInjectionDescriptor()`, `BlockDefinition.style`, `BlockDefinition.resourceInjectionInfo`, `BlockDefinition.defaultOrientation`, `BlockDefinition.isNormalBlockStyle`, `BlockDefinition.isSolidBlockStyle`, `BlockDefinition.isBlendBlockStyle`, `BlockDefinition.isReactorChamberAny`, and `BlockDefinition.sourceReferenceId`.
+- Adds the ElementInformation-inspired semantic block API: `BlockDefinition.toElementInfo(config?)`, `BlockConfig.elementInfo`, `BlockConfig.getElementInfoById(id)`, `BlockConfig.getElementInfoByName(name)`, `BlockConfig.getElementInfoByTypeName(typeName)`, `BlockConfig.resolveReference(typeNameOrId)`, and `BlockConfig.resolveIngredient(ingredient)`.
+- Adds exported grouped view types: `BlockElementInfo`, `BlockIdentityView`, `BlockRenderView`, `BlockLogicView`, `BlockRecipeView`, `BlockFactoryView`, `BlockCollisionView`, `BlockChamberView`, `BlockClassificationView`, `BlockReference`, `BlockIngredientReference`, `BlockStyleDescriptor`, and `ResourceInjectionDescriptor`.
+
+#### Auxiliary formats (`src/config/` / `src/db/`)
+
+- `parseSystemNames()` / `writeSystemNames()` for `data/config/systemNames.syl`.
+- `parseWorldSeed()` / `writeWorldSeed()` for `server-database/world0/.seed` (Java long BE).
+- `parsePersistentObjects()` / `writePersistentObjects()` for `moddata/*/persistent/*.smdat`.
+- `parseSbvSubtitles()` / `writeSbvSubtitles()` for StarMade `.sbv` subtitle files, matching StarMade-Open `SvbSubtitleManager` timing blocks.
+- Live `/srv/StarMade/language/**/*.sbv` parse/write coverage for the new subtitle helpers.
+
+#### Documentation tooling
+
+- `npm run docs:check`, backed by `scripts/check-jsdoc-coverage.mjs`, verifies source-level documentation coverage.
+- The documentation check enforces `@fileoverview` on every `src/*.ts` file and JSDoc on every top-level declaration, class constructor/method/accessor, and interface method signature.
+
+### Changed
+
+- `BlockConfig` XML parsing and serialization now preserve the newly parsed metadata through immutable `BlockDefinition.with()` updates and custom XML output.
+- The earlier generic naming for the new semantic block view was replaced before release with StarMade-Open-aligned `ElementInfo` terminology.
+- `README.md`, `docs/API.md`, and `docs/GUIDE.md` now document the `BlockElementInfo` API and the new documentation coverage command.
+
+### Documentation
+
+- Added JSDoc/fileoverview coverage across the complete `src` tree: internal helpers, public APIs, classes, constructors, methods, accessors, top-level constants, interfaces, and type aliases are documented.
+- Manually refined `BlockConfig`/`BlockElementInfo` comments after the bulk pass so the central API uses StarMade domain terminology rather than generic generated wording.
+
+### Coverage
+
+- **681 tests passing**, 0 pending
+- `npm run docs:check` passes
+
+---
+
 ## 1.4.0 — 2026-05-20
 
 ### Added
