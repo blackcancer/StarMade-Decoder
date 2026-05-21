@@ -28,6 +28,9 @@
 import { Tag } from '../core/Tag.js';
 import { TagType } from '../core/TagType.js';
 
+/**
+ * Describes the FactionEntry data shape used by legacy typed entity parsing.
+ */
 export interface FactionEntry {
   id: number;
   name?: string;
@@ -36,6 +39,9 @@ export interface FactionEntry {
   memberCount?: number;
 }
 
+/**
+ * Describes the FactionsData data shape used by legacy typed entity parsing.
+ */
 export interface FactionsData {
   version: number;
   factions: FactionEntry[];

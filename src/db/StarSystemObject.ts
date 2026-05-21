@@ -28,12 +28,21 @@ export {
 
 // ── StarSystem ────────────────────────────────────────────────────────────────
 
+/**
+ * Represents the StarSystem model used by StarMade database object parsing.
+ */
 export class StarSystem {
   /** Non-VOID sector entries. Full 16³ grid is reconstructed on encode. */
   readonly sectors: ReadonlyArray<SectorInfo>;
   /** Resource densities (index 0–18). */
   readonly resources: ReadonlyArray<SystemResource>;
 
+  /**
+   * Creates a StarSystem instance.
+   *
+   * @param sectors - Input value for the constructor operation.
+   * @param resources - Input value for the constructor operation.
+   */
   private constructor(sectors: SectorInfo[], resources: SystemResource[]) {
     this.sectors   = Object.freeze([...sectors]);
     this.resources = Object.freeze([...resources]);
@@ -83,10 +92,35 @@ export class StarSystem {
     return this.sectors.filter(s => s.sectorType === type);
   }
 
+  /**
+   * Handles the sunSectors operation used by StarMade database object parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get sunSectors():    SectorInfo[] { return this.bySectorType('SUN'); }
+  /**
+   * Handles the planets operation used by StarMade database object parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get planets():       SectorInfo[] { return this.bySectorType('PLANET'); }
+  /**
+   * Handles the gasPlanets operation used by StarMade database object parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get gasPlanets():    SectorInfo[] { return this.bySectorType('GAS_PLANET'); }
+  /**
+   * Handles the asteroidFields operation used by StarMade database object parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get asteroidFields():SectorInfo[] { return this.bySectorType('ASTEROID'); }
+  /**
+   * Handles the stations operation used by StarMade database object parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get stations():      SectorInfo[] { return this.bySectorType('SPACE_STATION'); }
 
   // ── Resource accessors ─────────────────────────────────────────────────────
@@ -173,6 +207,11 @@ export class StarSystem {
     return encodeSystemResources([...this.resources]);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     const sun    = this.sunSectors.length;
     const planet = this.planets.length + this.gasPlanets.length;

@@ -35,6 +35,9 @@ import type { BlockPosition } from '../ElementPosition.js';
 
 // ── Enriched Control Links ───────────────────────────────────────────────────
 
+/**
+ * Describes the ControlLinkRich data shape used by enriched object views.
+ */
 export interface ControlLinkRich {
   /** Original control-link payload. */
   readonly link: ControlLink;
@@ -44,6 +47,12 @@ export interface ControlLinkRich {
   readonly blockDef: BlockDefinition | null;
 }
 
+/**
+ * Handles the enrichControlLinks operation used by enriched object views.
+ *
+ * @param mapper - Input value for the enrichControlLinks operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function enrichControlLinks(mapper: ControlElementMapper): ControlLinkRich[] {
   return mapper.links.map(link => ({
     link,
@@ -54,6 +63,9 @@ export function enrichControlLinks(mapper: ControlElementMapper): ControlLinkRic
 
 // ── Enriched Block Counts ─────────────────────────────────────────────────────
 
+/**
+ * Describes the BlockCountRich data shape used by enriched object views.
+ */
 export interface BlockCountRich {
   /** Original block-count payload. */
   readonly count: BlockCount;
@@ -69,6 +81,12 @@ export interface BlockCountRich {
   readonly blockDef: BlockDefinition | null;
 }
 
+/**
+ * Handles the enrichBlockCounts operation used by enriched object views.
+ *
+ * @param ecm - Input value for the enrichBlockCounts operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function enrichBlockCounts(ecm: ElementCountMap): BlockCountRich[] {
   return ecm.counts
     .filter(c => c.count > 0)
@@ -95,6 +113,12 @@ export interface BlockCountStats {
   byType:      BlockCountRich[];
 }
 
+/**
+ * Returns BlockCountStats.
+ *
+ * @param ecm - Input value for the getBlockCountStats operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function getBlockCountStats(ecm: ElementCountMap): BlockCountStats {
   const entries = enrichBlockCounts(ecm);
   return {
@@ -108,6 +132,9 @@ export function getBlockCountStats(ecm: ElementCountMap): BlockCountStats {
 
 // ── Enriched .smd3 Block Data ────────────────────────────────────────────────
 
+/**
+ * Describes the BlockDataRich data shape used by enriched object views.
+ */
 export interface BlockDataRich {
   /** Local position within the segment. */
   readonly position: BlockPosition;
@@ -156,6 +183,12 @@ export interface SegmentStats {
   topTypes:       Array<{ type: number; name: string; count: number; mass: number }>;
 }
 
+/**
+ * Returns SegmentStats.
+ *
+ * @param seg - Input value for the getSegmentStats operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function getSegmentStats(seg: SegmentData): SegmentStats {
   const typeCounts = new Map<number, number>();
   for (const b of seg.blocks) {
@@ -182,6 +215,9 @@ export function getSegmentStats(seg: SegmentData): SegmentStats {
 
 // ── Enriched Item Stacks ─────────────────────────────────────────────────────
 
+/**
+ * Describes the ItemStackRich data shape used by enriched object views.
+ */
 export interface ItemStackRich {
   readonly item: ItemStack;
   readonly blockName: string;
@@ -190,6 +226,12 @@ export interface ItemStackRich {
   readonly blockDef:   BlockDefinition | null;
 }
 
+/**
+ * Handles the enrichInventory operation used by enriched object views.
+ *
+ * @param inventory - Input value for the enrichInventory operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function enrichInventory(inventory: Inventory): ItemStackRich[] {
   return inventory.items.map(item => {
     const def = BlockRegistry.get(item.type);
@@ -205,7 +247,15 @@ export function enrichInventory(inventory: Inventory): ItemStackRich[] {
 
 // ── RichSegmentController Entity View ────────────────────────────────────────
 
+/**
+ * Represents the RichSegmentController model used by enriched object views.
+ */
 export class RichSegmentController {
+  /**
+   * Creates a RichSegmentController instance.
+   *
+   * @param entity - Input value for the constructor operation.
+   */
   constructor(private readonly entity: SegmentController) {}
 
   /** Control links enriched with block names and definitions. */

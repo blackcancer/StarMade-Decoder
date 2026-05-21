@@ -51,7 +51,20 @@ import type { Vector3i } from '../types/Vectors.js';
 
 // ── SimulationGroup ────────────────────────────────────────────────────────────
 
+/**
+ * Represents the SimulationGroup model used by high-level StarMade object modelling.
+ */
 export class SimulationGroup {
+  /**
+   * Creates a SimulationGroup instance.
+   *
+   * @param version - Input value for the constructor operation.
+   * @param type - Input value for the constructor operation.
+   * @param members - Input value for the constructor operation.
+   * @param startTime - Input value for the constructor operation.
+   * @param startSector - Input value for the constructor operation.
+   * @param programId - Input value for the constructor operation.
+   */
   constructor(
     public version: number,
     public type: number,
@@ -61,6 +74,12 @@ export class SimulationGroup {
     public programId: number,
   ) {}
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): SimulationGroup {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     const version     = s[0]?.type === TagType.BYTE    ? s[0].getByte()     : 0;
@@ -77,6 +96,11 @@ export class SimulationGroup {
     return new SimulationGroup(version, type, members, startTime, startSector, programId);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     const memberTags = [...this.members.map(m => Tags.string(null, m)), FINISH_TAG];
     const children: Tag[] = [
@@ -92,6 +116,11 @@ export class SimulationGroup {
     return Tags.struct(null, children);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `SimulationGroup(type=${this.type}, members=${this.members.length}, sector=${JSON.stringify(this.startSector)})`;
   }
@@ -99,7 +128,15 @@ export class SimulationGroup {
 
 // ── NPCFactionManager ─────────────────────────────────────────────────────────
 
+/**
+ * Represents the NPCFactionManager model used by high-level StarMade object modelling.
+ */
 export class NPCFactionManager {
+  /**
+   * Creates a NPCFactionManager instance.
+   *
+   * @param version - Input value for the constructor operation.
+   */
   constructor(
     /** File format version (always 0 in current StarMade). */
     public version: number,
@@ -107,6 +144,12 @@ export class NPCFactionManager {
 
   // ── Serialization ─────────────────────────────────────────────────────────
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param root - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(root: Tag): NPCFactionManager {
     if (root.type !== TagType.STRUCT) throw new TypeError('NPCFactionManager: expected STRUCT');
     const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
@@ -114,6 +157,11 @@ export class NPCFactionManager {
     return new NPCFactionManager(version);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     return Tags.struct(null, [Tags.byte(null, this.version)]);
   }
@@ -121,16 +169,37 @@ export class NPCFactionManager {
   /** Encodes to binary for NPCFACTIONS_*.tag. */
   toBuffer(): Buffer { return writeTo(this.toTag()); }
 
+  /**
+   * Creates a value from Buffer.
+   *
+   * @param data - Input value for the fromBuffer operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromBuffer(data: Buffer | Uint8Array): NPCFactionManager {
     return NPCFactionManager.fromTag(readFrom(data));
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string { return `NPCFactionManager(v${this.version})`; }
 }
 
 // ── SimulationState ────────────────────────────────────────────────────────────
 
+/**
+ * Represents the SimulationState model used by high-level StarMade object modelling.
+ */
 export class SimulationState {
+  /**
+   * Creates a SimulationState instance.
+   *
+   * @param version - Input value for the constructor operation.
+   * @param groups - Input value for the constructor operation.
+   * @param lastUpdate - Input value for the constructor operation.
+   */
   constructor(
     public version: number,
     public groups: SimulationGroup[],
@@ -139,20 +208,44 @@ export class SimulationState {
 
   // ── Updates ──────────────────────────────────────────────────────────
 
+  /**
+   * Handles the addGroup operation used by high-level StarMade object modelling.
+   *
+   * @param group - Input value for the addGroup operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   addGroup(group: SimulationGroup): SimulationState {
     return new SimulationState(this.version, [...this.groups, group], this.lastUpdate);
   }
 
+  /**
+   * Handles the removeGroup operation used by high-level StarMade object modelling.
+   *
+   * @param idx - Input value for the removeGroup operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   removeGroup(idx: number): SimulationState {
     return new SimulationState(this.version, this.groups.filter((_, i) => i !== idx), this.lastUpdate);
   }
 
+  /**
+   * Returns a copy updated with LastUpdate.
+   *
+   * @param ts - Input value for the withLastUpdate operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withLastUpdate(ts: bigint): SimulationState {
     return new SimulationState(this.version, this.groups, ts);
   }
 
   // ── Serialization ─────────────────────────────────────────────────────────
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param root - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(root: Tag): SimulationState {
     if (root.type !== TagType.STRUCT) throw new TypeError('SimulationState: expected STRUCT');
     const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
@@ -169,6 +262,11 @@ export class SimulationState {
     return new SimulationState(version, groups, lastUpdate);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     const groupTags = [...this.groups.map(g => g.toTag()), FINISH_TAG];
     return Tags.struct('SimulationState', [
@@ -181,10 +279,21 @@ export class SimulationState {
   /** Encodes to binary for SIMULATION_STATE.sim. */
   toBuffer(): Buffer { return writeTo(this.toTag()); }
 
+  /**
+   * Creates a value from Buffer.
+   *
+   * @param data - Input value for the fromBuffer operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromBuffer(data: Buffer | Uint8Array): SimulationState {
     return SimulationState.fromTag(readFrom(data));
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `SimulationState(v${this.version}, ${this.groups.length} groups, lastUpdate=${this.lastUpdate})`;
   }

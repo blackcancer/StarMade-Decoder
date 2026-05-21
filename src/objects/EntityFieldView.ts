@@ -13,11 +13,17 @@ import type { TagValue } from '../core/Tag.js';
 import { RawElement } from '../serializable/Factories.js';
 import { decodeSerializable } from './Serializables.js';
 
+/**
+ * Describes the EntityFieldSchemaEntry data shape used by high-level StarMade object modelling.
+ */
 export interface EntityFieldSchemaEntry {
   readonly key: string;
   readonly description?: string;
 }
 
+/**
+ * Describes the SerializableFieldValue data shape used by high-level StarMade object modelling.
+ */
 export interface SerializableFieldValue {
   readonly factoryId: number;
   readonly factoryName: string;
@@ -25,11 +31,17 @@ export interface SerializableFieldValue {
   readonly decoded: unknown;
 }
 
+/**
+ * Describes the ByteArrayFieldValue data shape used by high-level StarMade object modelling.
+ */
 export interface ByteArrayFieldValue {
   readonly byteLength: number;
   readonly hexPreview: string;
 }
 
+/**
+ * Defines the EntityFieldValue type used by high-level StarMade object modelling.
+ */
 export type EntityFieldValue =
   | null
   | boolean
@@ -41,6 +53,9 @@ export type EntityFieldValue =
   | SerializableFieldValue
   | ByteArrayFieldValue;
 
+/**
+ * Describes the EntityFieldView data shape used by high-level StarMade object modelling.
+ */
 export interface EntityFieldView {
   readonly index: number;
   readonly key: string;
@@ -51,8 +66,17 @@ export interface EntityFieldView {
   readonly value: EntityFieldValue;
 }
 
+/**
+ * Defines the EntityFieldSchema type used by high-level StarMade object modelling.
+ */
 export type EntityFieldSchema = readonly EntityFieldSchemaEntry[];
+/**
+ * Defines the EntityFieldSetter type used by high-level StarMade object modelling.
+ */
 export type EntityFieldSetter<TParent> = (value: unknown, field: EntityField<TParent>) => TParent;
+/**
+ * Defines the EntityFieldSetterMap type used by high-level StarMade object modelling.
+ */
 export type EntityFieldSetterMap<TParent> = Readonly<Record<string, EntityFieldSetter<TParent>>>;
 
 /**
@@ -72,6 +96,12 @@ export class EntityField<TParent = never> implements EntityFieldView {
 
   private readonly _setter?: EntityFieldSetter<TParent>;
 
+  /**
+   * Creates a EntityField instance.
+   *
+   * @param view - Input value for the constructor operation.
+   * @param setter - Input value for the constructor operation.
+   */
   constructor(view: EntityFieldView, setter?: EntityFieldSetter<TParent>) {
     this.index = view.index;
     this.key = view.key;
@@ -83,10 +113,21 @@ export class EntityField<TParent = never> implements EntityFieldView {
     Object.defineProperty(this, '_setter', { value: setter, enumerable: false });
   }
 
+  /**
+   * Reports whether canSet is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get canSet(): boolean {
     return typeof this._setter === 'function';
   }
 
+  /**
+   * Returns a copy updated with Value.
+   *
+   * @param value - Input value for the withValue operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withValue(value: unknown): TParent {
     if (!this._setter) {
       throw new TypeError(`Entity field "${this.key}" is read-only in this high-level object`);
@@ -94,10 +135,21 @@ export class EntityField<TParent = never> implements EntityFieldView {
     return this._setter(value, this);
   }
 
+  /**
+   * Stores Value.
+   *
+   * @param value - Input value for the setValue operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   setValue(value: unknown): TParent {
     return this.withValue(value);
   }
 
+  /**
+   * Builds a JSON-safe representation of this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toJSON(): EntityFieldView & { readonly canSet: boolean } {
     return {
       index: this.index,
@@ -112,6 +164,9 @@ export class EntityField<TParent = never> implements EntityFieldView {
   }
 }
 
+/**
+ * Defines TRANSFORMABLE_FIELD_SCHEMA for high-level StarMade object modelling.
+ */
 export const TRANSFORMABLE_FIELD_SCHEMA: EntityFieldSchema = [
   { key: 'mass', description: 'SimpleTransformableSendableObject mass' },
   { key: 'transform', description: 'OpenGL Matrix4f transform list' },
@@ -122,6 +177,9 @@ export const TRANSFORMABLE_FIELD_SCHEMA: EntityFieldSchema = [
   { key: 'spawnController', description: 'Spawn markers/controller state' },
 ];
 
+/**
+ * Defines PLAYER_CHARACTER_FIELD_SCHEMA for high-level StarMade object modelling.
+ */
 export const PLAYER_CHARACTER_FIELD_SCHEMA: EntityFieldSchema = [
   { key: 'id', description: 'Player character entity id' },
   { key: 'speed', description: 'Movement speed' },
@@ -129,6 +187,9 @@ export const PLAYER_CHARACTER_FIELD_SCHEMA: EntityFieldSchema = [
   { key: 'transformable', description: 'SimpleTransformableSendableObject payload' },
 ];
 
+/**
+ * Defines PLAYER_STATE_FIELD_SCHEMA for high-level StarMade object modelling.
+ */
 export const PLAYER_STATE_FIELD_SCHEMA: EntityFieldSchema = [
   { key: 'credits' },
   { key: 'spawnData' },
@@ -163,6 +224,9 @@ export const PLAYER_STATE_FIELD_SCHEMA: EntityFieldSchema = [
   { key: 'mineAutoArmSecs' },
 ];
 
+/**
+ * Defines SEGMENT_CONTROLLER_FIELD_SCHEMA for high-level StarMade object modelling.
+ */
 export const SEGMENT_CONTROLLER_FIELD_SCHEMA: EntityFieldSchema = [
   { key: 'uniqueId' },
   { key: 'minPos' },
@@ -208,6 +272,9 @@ export const SEGMENT_CONTROLLER_FIELD_SCHEMA: EntityFieldSchema = [
   { key: 'quarterManager' },
 ];
 
+/**
+ * Defines MANAGER_CONTAINER_FIELD_SCHEMA for high-level StarMade object modelling.
+ */
 export const MANAGER_CONTAINER_FIELD_SCHEMA: EntityFieldSchema = [
   { key: 'inventories' },
   { key: 'distribution' },
@@ -229,6 +296,13 @@ export const MANAGER_CONTAINER_FIELD_SCHEMA: EntityFieldSchema = [
   { key: 'modData' },
 ];
 
+/**
+ * Builds EntityFieldViews for high-level StarMade object modelling.
+ *
+ * @param tags - Input value for the buildEntityFieldViews operation.
+ * @param schema - Input value for the buildEntityFieldViews operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function buildEntityFieldViews(
   tags: readonly Tag[],
   schema: EntityFieldSchema
@@ -236,6 +310,14 @@ export function buildEntityFieldViews(
   return buildEditableEntityFields(tags, schema);
 }
 
+/**
+ * Builds EditableEntityFields for high-level StarMade object modelling.
+ *
+ * @param tags - Input value for the buildEditableEntityFields operation.
+ * @param schema - Input value for the buildEditableEntityFields operation.
+ * @param setters - Input value for the buildEditableEntityFields operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function buildEditableEntityFields<TParent = never>(
   tags: readonly Tag[],
   schema: EntityFieldSchema,
@@ -251,6 +333,14 @@ export function buildEditableEntityFields<TParent = never>(
   return views;
 }
 
+/**
+ * Converts this value to EntityFieldView.
+ *
+ * @param index - Input value for the toEntityFieldView operation.
+ * @param spec - Input value for the toEntityFieldView operation.
+ * @param tag - Input value for the toEntityFieldView operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function toEntityFieldView(
   index: number,
   spec: EntityFieldSchemaEntry,
@@ -279,6 +369,12 @@ export function toEntityFieldView(
   };
 }
 
+/**
+ * Handles the tagValueToFieldValue operation used by high-level StarMade object modelling.
+ *
+ * @param tag - Input value for the tagValueToFieldValue operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function tagValueToFieldValue(tag: Tag): EntityFieldValue {
   switch (tag.type) {
     case TagType.BYTE:
@@ -352,6 +448,12 @@ export function tagValueToFieldValue(tag: Tag): EntityFieldValue {
   }
 }
 
+/**
+ * Handles the serializableToFieldValue operation used by high-level StarMade object modelling.
+ *
+ * @param value - Input value for the serializableToFieldValue operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function serializableToFieldValue(value: TagValue): SerializableFieldValue {
   const raw = value instanceof RawElement
     ? value
@@ -370,6 +472,12 @@ function serializableToFieldValue(value: TagValue): SerializableFieldValue {
   };
 }
 
+/**
+ * Handles the primitiveFallback operation used by high-level StarMade object modelling.
+ *
+ * @param value - Input value for the primitiveFallback operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function primitiveFallback(value: TagValue): EntityFieldValue {
   if (value === null || value === undefined) return null;
   if (
@@ -383,10 +491,22 @@ function primitiveFallback(value: TagValue): EntityFieldValue {
   return String(value);
 }
 
+/**
+ * Handles the tagTypeName operation used by high-level StarMade object modelling.
+ *
+ * @param type - Input value for the tagTypeName operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function tagTypeName(type: TagType): string {
   return TAG_TYPE_NAMES[type] ?? TagType[type] ?? String(type);
 }
 
+/**
+ * Handles the serializableFactoryName operation used by high-level StarMade object modelling.
+ *
+ * @param factoryId - Input value for the serializableFactoryName operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function serializableFactoryName(factoryId: number): string {
   switch (factoryId) {
     case 0: return 'ControlElementMapper';
@@ -400,6 +520,13 @@ function serializableFactoryName(factoryId: number): string {
   }
 }
 
+/**
+ * Handles the fieldValueAsNumber operation used by high-level StarMade object modelling.
+ *
+ * @param value - Input value for the fieldValueAsNumber operation.
+ * @param key - Input value for the fieldValueAsNumber operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function fieldValueAsNumber(value: unknown, key: string): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'bigint') return Number(value);
@@ -410,6 +537,13 @@ export function fieldValueAsNumber(value: unknown, key: string): number {
   throw new TypeError(`Entity field "${key}" expects a finite number`);
 }
 
+/**
+ * Handles the fieldValueAsInteger operation used by high-level StarMade object modelling.
+ *
+ * @param value - Input value for the fieldValueAsInteger operation.
+ * @param key - Input value for the fieldValueAsInteger operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function fieldValueAsInteger(value: unknown, key: string): number {
   const number = fieldValueAsNumber(value, key);
   if (!Number.isInteger(number)) {
@@ -418,6 +552,13 @@ export function fieldValueAsInteger(value: unknown, key: string): number {
   return number;
 }
 
+/**
+ * Handles the fieldValueAsBigInt operation used by high-level StarMade object modelling.
+ *
+ * @param value - Input value for the fieldValueAsBigInt operation.
+ * @param key - Input value for the fieldValueAsBigInt operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function fieldValueAsBigInt(value: unknown, key: string): bigint {
   if (typeof value === 'bigint') return value;
   if (typeof value === 'number' && Number.isInteger(value)) return BigInt(value);
@@ -425,6 +566,13 @@ export function fieldValueAsBigInt(value: unknown, key: string): bigint {
   throw new TypeError(`Entity field "${key}" expects an integer bigint value`);
 }
 
+/**
+ * Handles the fieldValueAsString operation used by high-level StarMade object modelling.
+ *
+ * @param value - Input value for the fieldValueAsString operation.
+ * @param key - Input value for the fieldValueAsString operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function fieldValueAsString(value: unknown, key: string): string {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean') {
@@ -433,6 +581,13 @@ export function fieldValueAsString(value: unknown, key: string): string {
   throw new TypeError(`Entity field "${key}" expects a string`);
 }
 
+/**
+ * Handles the fieldValueAsBoolean operation used by high-level StarMade object modelling.
+ *
+ * @param value - Input value for the fieldValueAsBoolean operation.
+ * @param key - Input value for the fieldValueAsBoolean operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function fieldValueAsBoolean(value: unknown, key: string): boolean {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value !== 0;

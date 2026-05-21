@@ -30,6 +30,9 @@ import zlib from 'node:zlib';
 import { BufferReader } from '../core/BufferReader.js';
 import { BufferWriter } from '../core/BufferWriter.js';
 
+/**
+ * Describes the TradePriceEntry data shape used by StarMade database object parsing.
+ */
 export interface TradePriceEntry {
   /**
    * Block type ID.
@@ -49,6 +52,9 @@ export interface TradePriceEntry {
   limit: number;
 }
 
+/**
+ * Describes the TradePrices data shape used by StarMade database object parsing.
+ */
 export interface TradePrices {
   /** Entity DB ID of the shop/station owning this price list. */
   entDbId: bigint;

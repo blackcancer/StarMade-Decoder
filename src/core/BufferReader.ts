@@ -19,11 +19,22 @@ export class BufferReader {
   private readonly buf: Buffer;
   private _offset: number;
 
+  /**
+   * Creates a BufferReader instance.
+   *
+   * @param buf - Input value for the constructor operation.
+   */
   private constructor(buf: Buffer) {
     this.buf = buf;
     this._offset = 0;
   }
 
+  /**
+   * Creates a value from input data.
+   *
+   * @param data - Input value for the from operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static from(data: Buffer | Uint8Array): BufferReader {
     return new BufferReader(Buffer.isBuffer(data) ? data : Buffer.from(data));
   }
@@ -36,24 +47,54 @@ export class BufferReader {
   /** Exposes the internal buffer as read-only data */
   get rawBuffer(): Buffer { return this.buf; }
 
+  /**
+   * Handles the offset operation used by core binary tag parsing and serialization.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get offset(): number { return this._offset; }
 
+  /**
+   * Reports whether isEOF is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   isEOF(): boolean { return this._offset >= this.buf.length; }
 
+  /**
+   * Handles the remaining operation used by core binary tag parsing and serialization.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   remaining(): number { return this.buf.length - this._offset; }
 
   // ── Primitives ────────────────────────────────────────────────────────────
 
+  /**
+   * Reads Int8 from the StarMade binary representation.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   readInt8(): number {
     this._check(1);
     return this.buf.readInt8(this._offset++);
   }
 
+  /**
+   * Reads UInt8 from the StarMade binary representation.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   readUInt8(): number {
     this._check(1);
     return this.buf.readUInt8(this._offset++);
   }
 
+  /**
+   * Reads Int16BE from the StarMade binary representation.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   readInt16BE(): number {
     this._check(2);
     const v = this.buf.readInt16BE(this._offset);
@@ -61,6 +102,11 @@ export class BufferReader {
     return v;
   }
 
+  /**
+   * Reads UInt16BE from the StarMade binary representation.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   readUInt16BE(): number {
     this._check(2);
     const v = this.buf.readUInt16BE(this._offset);
@@ -68,6 +114,11 @@ export class BufferReader {
     return v;
   }
 
+  /**
+   * Reads Int32BE from the StarMade binary representation.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   readInt32BE(): number {
     this._check(4);
     const v = this.buf.readInt32BE(this._offset);
@@ -75,6 +126,11 @@ export class BufferReader {
     return v;
   }
 
+  /**
+   * Reads UInt32BE from the StarMade binary representation.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   readUInt32BE(): number {
     this._check(4);
     const v = this.buf.readUInt32BE(this._offset);
@@ -82,6 +138,11 @@ export class BufferReader {
     return v;
   }
 
+  /**
+   * Reads Int64BE from the StarMade binary representation.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   readInt64BE(): bigint {
     this._check(8);
     const v = this.buf.readBigInt64BE(this._offset);
@@ -89,6 +150,11 @@ export class BufferReader {
     return v;
   }
 
+  /**
+   * Reads Float32BE from the StarMade binary representation.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   readFloat32BE(): number {
     this._check(4);
     const v = this.buf.readFloatBE(this._offset);
@@ -96,6 +162,11 @@ export class BufferReader {
     return v;
   }
 
+  /**
+   * Reads Float64BE from the StarMade binary representation.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   readFloat64BE(): number {
     this._check(8);
     const v = this.buf.readDoubleBE(this._offset);
@@ -103,6 +174,12 @@ export class BufferReader {
     return v;
   }
 
+  /**
+   * Reads Bytes from the StarMade binary representation.
+   *
+   * @param n - Input value for the readBytes operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   readBytes(n: number): Uint8Array {
     this._check(n);
     const slice = this.buf.slice(this._offset, this._offset + n);
@@ -170,6 +247,11 @@ export class BufferReader {
 
   // ── Internal ──────────────────────────────────────────────────────────────
 
+  /**
+   * Handles the check operation used by core binary tag parsing and serialization.
+   *
+   * @param n - Input value for the _check operation.
+   */
   private _check(n: number): void {
     if (this._offset + n > this.buf.length) {
       throw new Error(

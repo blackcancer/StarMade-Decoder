@@ -16,7 +16,31 @@ export type { SMToolConfigData, StarMadePaths } from './SMToolConfig.js';
 export { ServerConfig, SERVER_CONFIG_SCHEMA } from './ServerConfig.js';
 export type { ConfigEntryMeta, ConfigValueType, ConfigValue } from './ServerConfig.js';
 
-export { BlockConfig, BlockDefinition } from './BlockConfig.js';
+export {
+  BlockConfig,
+  BlockDefinition,
+  getBlockStyleDescriptor,
+  getResourceInjectionDescriptor,
+} from './BlockConfig.js';
+export type {
+  BlockClassificationView,
+  BlockChamberView,
+  BlockCollisionShape,
+  BlockCollisionView,
+  BlockDefinitionMetadata,
+  BlockEffectArmor,
+  BlockFactoryView,
+  BlockElementInfo,
+  BlockIdentityView,
+  BlockIngredient,
+  BlockIngredientReference,
+  BlockLogicView,
+  BlockRecipeView,
+  BlockReference,
+  BlockRenderView,
+  BlockStyleDescriptor,
+  ResourceInjectionDescriptor,
+} from './BlockConfig.js';
 
 export { BlockBehaviorConfig } from './BlockBehaviorConfig.js';
 export type { BehaviorValue } from './BlockBehaviorConfig.js';
@@ -30,3 +54,11 @@ export {
   writeSystemNames,
 } from './SystemNames.js';
 export type { SystemNamesFile, SystemNameSyllable } from './SystemNames.js';
+
+export {
+  formatSbvTimeCode,
+  parseSbvSubtitles,
+  parseSbvTimeCode,
+  writeSbvSubtitles,
+} from './SbvSubtitles.js';
+export type { SbvSubtitleCue, SbvSubtitleFile } from './SbvSubtitles.js';

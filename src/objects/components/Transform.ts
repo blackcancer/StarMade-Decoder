@@ -19,7 +19,17 @@ import { Tags } from '../../core/TagBuilder.js';
 import { TagType } from '../../core/TagType.js';
 import { FINISH_TAG } from '../../core/Tag.js';
 
+/**
+ * Represents the SectorPosition model used by high-level entity component modelling.
+ */
 export class SectorPosition {
+  /**
+   * Creates a SectorPosition instance.
+   *
+   * @param x - Input value for the constructor operation.
+   * @param y - Input value for the constructor operation.
+   * @param z - Input value for the constructor operation.
+   */
   constructor(
     readonly x: number,
     readonly y: number,
@@ -28,24 +38,55 @@ export class SectorPosition {
 
   static ZERO = new SectorPosition(0, 0, 0);
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): SectorPosition {
     if (tag.type !== TagType.VECTOR3i) throw new TypeError('SectorPosition: expected VECTOR3i');
     const v = tag.getVector3i();
     return new SectorPosition(v.x, v.y, v.z);
   }
 
+  /**
+   * Creates a value from Values.
+   *
+   * @param x - Input value for the fromValues operation.
+   * @param y - Input value for the fromValues operation.
+   * @param z - Input value for the fromValues operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromValues(x: number, y: number, z: number): SectorPosition {
     return new SectorPosition(x, y, z);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @param name - Input value for the toTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(name: string | null = null): Tag {
     return Tags.vector3i(name, this.x, this.y, this.z);
   }
 
+  /**
+   * Handles the equals operation used by high-level entity component modelling.
+   *
+   * @param other - Input value for the equals operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   equals(other: SectorPosition): boolean {
     return this.x === other.x && this.y === other.y && this.z === other.z;
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string { return `SectorPosition(${this.x}, ${this.y}, ${this.z})`; }
 }
 
@@ -66,6 +107,22 @@ export class SectorPosition {
  */
 
 export class EntityTransform {
+  /**
+   * Creates a EntityTransform instance.
+   *
+   * @param originX - Input value for the constructor operation.
+   * @param originY - Input value for the constructor operation.
+   * @param originZ - Input value for the constructor operation.
+   * @param m00 - Input value for the constructor operation.
+   * @param m01 - Input value for the constructor operation.
+   * @param m02 - Input value for the constructor operation.
+   * @param m10 - Input value for the constructor operation.
+   * @param m11 - Input value for the constructor operation.
+   * @param m12 - Input value for the constructor operation.
+   * @param m20 - Input value for the constructor operation.
+   * @param m21 - Input value for the constructor operation.
+   * @param m22 - Input value for the constructor operation.
+   */
   constructor(
     /** Position in local sector coordinates */
     readonly originX: number,
@@ -121,6 +178,12 @@ export class EntityTransform {
     return Tags.list(name, floats);
   }
 
+  /**
+   * Returns a copy updated with the requested value.
+   *
+   * @param overrides - Input value for the with operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   with(overrides: Partial<{
     originX: number; originY: number; originZ: number;
     m00: number; m01: number; m02: number;
@@ -137,6 +200,11 @@ export class EntityTransform {
     );
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `EntityTransform(origin=(${this.originX.toFixed(2)},${this.originY.toFixed(2)},${this.originZ.toFixed(2)}))`;
   }

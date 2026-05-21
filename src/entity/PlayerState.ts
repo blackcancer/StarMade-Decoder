@@ -33,6 +33,9 @@ import { Tag } from '../core/Tag.js';
 import { TagType } from '../core/TagType.js';
 import type { Vector3i, Vector3f } from '../types/Vectors.js';
 
+/**
+ * Describes the PlayerStateData data shape used by legacy typed entity parsing.
+ */
 export interface PlayerStateData {
   credits: bigint;
   currentSector?: Vector3i;

@@ -33,12 +33,27 @@ import { TagType } from '../core/TagType.js';
 import { FINISH_TAG } from '../core/Tag.js';
 import { readFrom, writeTo } from '../core/TagParser.js';
 
+/**
+ * Represents the FloatingItem model used by high-level StarMade object modelling.
+ */
 export class FloatingItem {
+  /**
+   * Creates a FloatingItem instance.
+   *
+   * @param blockType - Input value for the constructor operation.
+   * @param count - Input value for the constructor operation.
+   */
   constructor(
     public blockType: number,
     public count: number,
   ) {}
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): FloatingItem {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     return new FloatingItem(
@@ -47,14 +62,35 @@ export class FloatingItem {
     );
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     return Tags.struct(null, [Tags.short(null, this.blockType), Tags.int(null, this.count)]);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string { return `FloatingItem(type=${this.blockType}, count=${this.count})`; }
 }
 
+/**
+ * Represents the FloatingItemsArchive model used by high-level StarMade object modelling.
+ */
 export class FloatingItemsArchive {
+  /**
+   * Creates a FloatingItemsArchive instance.
+   *
+   * @param version - Input value for the constructor operation.
+   * @param declaredCount - Input value for the constructor operation.
+   * @param items - Input value for the constructor operation.
+   * @param _rootName - Input value for the constructor operation.
+   */
   constructor(
     public version: number,
     public declaredCount: number,
@@ -64,14 +100,31 @@ export class FloatingItemsArchive {
 
   // ── Accessors ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Handles the byType operation used by high-level StarMade object modelling.
+   *
+   * @param blockType - Input value for the byType operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   byType(blockType: number): FloatingItem | undefined {
     return this.items.find(i => i.blockType === blockType);
   }
 
+  /**
+   * Converts this value to talCount.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get totalCount(): number { return this.items.reduce((s, i) => s + i.count, 0); }
 
   // ── Updates ──────────────────────────────────────────────────────────
 
+  /**
+   * Handles the addItem operation used by high-level StarMade object modelling.
+   *
+   * @param item - Input value for the addItem operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   addItem(item: FloatingItem): FloatingItemsArchive {
     const existing = this.items.find(i => i.blockType === item.blockType);
     if (existing) {
@@ -82,6 +135,12 @@ export class FloatingItemsArchive {
     return new FloatingItemsArchive(this.version, this.declaredCount, [...this.items, item], this._rootName);
   }
 
+  /**
+   * Handles the removeItem operation used by high-level StarMade object modelling.
+   *
+   * @param blockType - Input value for the removeItem operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   removeItem(blockType: number): FloatingItemsArchive {
     return new FloatingItemsArchive(this.version, this.declaredCount,
       this.items.filter(i => i.blockType !== blockType), this._rootName);
@@ -89,6 +148,12 @@ export class FloatingItemsArchive {
 
   // ── Serialization ─────────────────────────────────────────────────────────
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param root - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(root: Tag): FloatingItemsArchive {
     if (root.type !== TagType.STRUCT) throw new TypeError('FloatingItemsArchive: expected STRUCT');
     const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
@@ -109,6 +174,11 @@ export class FloatingItemsArchive {
     return new FloatingItemsArchive(version, declaredCount, items, root.name);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     const itemTags = [...this.items.map(i => i.toTag()), FINISH_TAG];
     return Tags.struct(this._rootName, [
@@ -121,10 +191,21 @@ export class FloatingItemsArchive {
   /** Encodes to binary for FLOATING_ITEMS_ARCHIVE.ent. */
   toBuffer(): Buffer { return writeTo(this.toTag()); }
 
+  /**
+   * Creates a value from Buffer.
+   *
+   * @param data - Input value for the fromBuffer operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromBuffer(data: Buffer | Uint8Array): FloatingItemsArchive {
     return FloatingItemsArchive.fromTag(readFrom(data));
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `FloatingItemsArchive(v${this.version}, declared=${this.declaredCount}, actual=${this.items.length})`;
   }

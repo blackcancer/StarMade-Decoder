@@ -35,6 +35,12 @@ import type { Smd3File, SegmentData, BlockData } from './Smd3Parser.js';
 
 // ── Block Encoding ────────────────────────────────────────────────────────────
 
+/**
+ * Serializes 4Byte for StarMade blueprint and segment file parsing.
+ *
+ * @param block - Input value for the _encode4Byte operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _encode4Byte(block: BlockData): number {
   let v = 0;
   v |= (block.type & 0x1FFF);
@@ -46,6 +52,13 @@ function _encode4Byte(block: BlockData): number {
 
 // ── Writer de segment ─────────────────────────────────────────────────────────
 
+/**
+ * Serializes Segment for StarMade blueprint and segment file parsing.
+ *
+ * @param seg - Input value for the _encodeSegment operation.
+ * @param fileVersion - Input value for the _encodeSegment operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _encodeSegment(seg: SegmentData, fileVersion: number): Buffer {
   const buf = Buffer.alloc(SEGMENT_SECTOR);
   let off = 0;
@@ -143,10 +156,22 @@ function _getLocalIndex(segX: number, segY: number, segZ: number): number {
   return (lz * DIM * DIM) + (ly * DIM) + lx;
 }
 
+/**
+ * Handles the divUSeg operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param i - Input value for the _divUSeg operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _divUSeg(i: number): number {
   return i >> 5; // div par 32 (Chunk32 mode)
 }
 
+/**
+ * Handles the modU16 operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param i - Input value for the _modU16 operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _modU16(i: number): number {
   return ((i % 16) + 16) % 16;
 }

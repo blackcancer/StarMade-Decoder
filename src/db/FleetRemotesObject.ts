@@ -12,11 +12,20 @@
 
 import { decodeFleetRemotes, encodeFleetRemotes } from './FleetDb.js';
 
+/**
+ * Represents the FleetRemotesObject model used by StarMade database object parsing.
+ */
 export class FleetRemotesObject {
   readonly remotes: ReadonlyMap<string, boolean>;
   /** @deprecated raw fallback bytes for unrecognized formats. Prefer remotes. */
   readonly raw?: Buffer;
 
+  /**
+   * Creates a FleetRemotesObject instance.
+   *
+   * @param remotes - Input value for the constructor operation.
+   * @param raw - Input value for the constructor operation.
+   */
   private constructor(remotes: Map<string, boolean>, raw?: Buffer) {
     this.remotes = new Map(remotes);
     if (raw) this.raw = raw;
@@ -68,10 +77,27 @@ export class FleetRemotesObject {
 
   // ── Accessors ──────────────────────────────────────────────────────────────
 
+  /**
+   * Returns the number of values exposed by this collection.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get size(): number { return this.remotes.size; }
 
+  /**
+   * Reports whether isActive is true for the current value.
+   *
+   * @param name - Input value for the isActive operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   isActive(name: string): boolean { return this.remotes.get(name) ?? false; }
 
+  /**
+   * Reports whether has is true for the current value.
+   *
+   * @param name - Input value for the has operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   has(name: string): boolean { return this.remotes.has(name); }
 
   /** All active remote names. */
@@ -89,6 +115,11 @@ export class FleetRemotesObject {
     return encodeFleetRemotes(new Map(this.remotes));
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     if (this.remotes.size === 0) return 'FleetRemotes(empty)';
     const entries = [...this.remotes.entries()].map(([k, v]) => `${k}=${v}`).join(', ');

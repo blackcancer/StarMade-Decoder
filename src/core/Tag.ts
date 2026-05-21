@@ -23,6 +23,9 @@ import type { SerializableTagElement } from '../serializable/SerializableTagElem
 
 // ── Supported Value Union ───────────────────────────────────────────────
 
+/**
+ * Defines the TagValue type used by core binary tag parsing and serialization.
+ */
 export type TagValue =
   | null                    // FINISH, NOTHING
   | number                  // BYTE, SHORT, INT, FLOAT, DOUBLE
@@ -40,10 +43,16 @@ export type TagValue =
 
 // ── Constante Java ──────────────────────────────────────────────────────────
 
+/**
+ * Defines NULL_STRING for core binary tag parsing and serialization.
+ */
 export const NULL_STRING = 'null';
 
 // ── Tag class ───────────────────────────────────────────────────────────────
 
+/**
+ * Represents the Tag model used by core binary tag parsing and serialization.
+ */
 export class Tag {
   readonly type: TagType;
   readonly name: string | null;
@@ -55,6 +64,14 @@ export class Tag {
   /** Byte length read from the stream (optional, diagnostic only) */
   size: bigint = 0n;
 
+  /**
+   * Creates a Tag instance.
+   *
+   * @param type - Input value for the constructor operation.
+   * @param name - Input value for the constructor operation.
+   * @param value - Input value for the constructor operation.
+   * @param listType - Input value for the constructor operation.
+   */
   constructor(type: TagType, name: string | null, value: TagValue, listType?: TagType) {
     this.type     = type;
     this.name     = name === NULL_STRING ? null : name;
@@ -64,90 +81,180 @@ export class Tag {
 
   // ── Typed Accessors (matching Java getters) ─────────────────────────
 
+  /**
+   * Returns Byte.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getByte(): number {
     this._assert(TagType.BYTE);
     return this.value as number;
   }
 
+  /**
+   * Returns Short.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getShort(): number {
     this._assert(TagType.SHORT);
     return this.value as number;
   }
 
+  /**
+   * Returns Int.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getInt(): number {
     this._assert(TagType.INT);
     return this.value as number;
   }
 
+  /**
+   * Returns Long.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getLong(): bigint {
     this._assert(TagType.LONG);
     return this.value as bigint;
   }
 
+  /**
+   * Returns Float.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getFloat(): number {
     this._assert(TagType.FLOAT);
     return this.value as number;
   }
 
+  /**
+   * Returns Double.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getDouble(): number {
     this._assert(TagType.DOUBLE);
     return this.value as number;
   }
 
+  /**
+   * Returns String.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getString(): string {
     this._assert(TagType.STRING);
     return this.value as string;
   }
 
+  /**
+   * Returns ByteArray.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getByteArray(): Uint8Array {
     this._assert(TagType.BYTE_ARRAY);
     return this.value as Uint8Array;
   }
 
+  /**
+   * Returns Struct.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getStruct(): Tag[] {
     this._assert(TagType.STRUCT);
     return this.value as Tag[];
   }
 
+  /**
+   * Returns List.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getList(): Tag[] {
     this._assert(TagType.LIST);
     return this.value as Tag[];
   }
 
+  /**
+   * Returns Vector3b.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getVector3b(): Vector3b {
     this._assert(TagType.VECTOR3b);
     return this.value as Vector3b;
   }
 
+  /**
+   * Returns Vector3i.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getVector3i(): Vector3i {
     this._assert(TagType.VECTOR3i);
     return this.value as Vector3i;
   }
 
+  /**
+   * Returns Vector3f.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getVector3f(): Vector3f {
     this._assert(TagType.VECTOR3f);
     return this.value as Vector3f;
   }
 
+  /**
+   * Returns Vector4f.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getVector4f(): Vector4f {
     this._assert(TagType.VECTOR4f);
     return this.value as Vector4f;
   }
 
+  /**
+   * Returns Matrix3f.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getMatrix3f(): Matrix3f {
     this._assert(TagType.MATRIX3f);
     return this.value as Matrix3f;
   }
 
+  /**
+   * Returns Matrix4f.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getMatrix4f(): Matrix4f {
     this._assert(TagType.MATRIX4f);
     return this.value as Matrix4f;
   }
 
+  /**
+   * Returns Boolean.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getBoolean(): boolean {
     return this.getByte() !== 0;
   }
 
+  /**
+   * Returns Serializable.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getSerializable(): SerializableTagElement {
     this._assert(TagType.SERIALIZABLE);
     return this.value as SerializableTagElement;
@@ -172,6 +279,11 @@ export class Tag {
 
   // ── Debug Display ────────────────────────────────────────────────────────
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     const typeName = TAG_TYPE_NAMES[this.type];
     const valStr = Array.isArray(this.value) ? 'STRUCT/LIST' :
@@ -209,6 +321,11 @@ export class Tag {
 
   // ── Private ────────────────────────────────────────────────────────────────
 
+  /**
+   * Validates input data for core binary tag parsing and serialization.
+   *
+   * @param expected - Input value for the _assert operation.
+   */
   private _assert(expected: TagType): void {
     if (this.type !== expected) {
       throw new TypeError(

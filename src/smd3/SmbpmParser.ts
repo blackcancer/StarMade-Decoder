@@ -36,18 +36,48 @@ import { ThrustConfig } from '../objects/components/PowerAndThrust.js';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
+/**
+ * Defines FINISH_BYTE for StarMade blueprint and segment file parsing.
+ */
 const FINISH_BYTE       = 1;
+/**
+ * Defines SEG_MANAGER_BYTE for StarMade blueprint and segment file parsing.
+ */
 const SEG_MANAGER_BYTE  = 2;
+/**
+ * Defines DOCKING_BYTE for StarMade blueprint and segment file parsing.
+ */
 const DOCKING_BYTE      = 3;
+/**
+ * Defines RAIL_BYTE for StarMade blueprint and segment file parsing.
+ */
 const RAIL_BYTE         = 4;
+/**
+ * Defines AI_CONFIG_BYTE for StarMade blueprint and segment file parsing.
+ */
 const AI_CONFIG_BYTE    = 5;
+/**
+ * Defines RAIL_DOCKER_BYTE for StarMade blueprint and segment file parsing.
+ */
 const RAIL_DOCKER_BYTE  = 6;
+/**
+ * Defines CARGO_BYTE for StarMade blueprint and segment file parsing.
+ */
 const CARGO_BYTE        = 7;
+/**
+ * Defines LOCK_BOX_BYTE for StarMade blueprint and segment file parsing.
+ */
 const LOCK_BOX_BYTE     = 8;
+/**
+ * Defines THRUST_CONFIG_BYTE for StarMade blueprint and segment file parsing.
+ */
 const THRUST_CONFIG_BYTE = 9;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Describes the DockingEntry data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface DockingEntry {
   name: string;
   posX: number; posY: number; posZ: number;
@@ -58,11 +88,17 @@ export interface DockingEntry {
   offset: BlueprintChildOffset;
 }
 
+/**
+ * Describes the CargoPoint data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface CargoPoint {
   posIndex: bigint;
   capacity: number;
 }
 
+/**
+ * Describes the RailDockerPiece data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface RailDockerPiece {
   posX: number; posY: number; posZ: number;
   type: number;
@@ -71,18 +107,27 @@ export interface RailDockerPiece {
   hp: number;
 }
 
+/**
+ * Describes the Vector3f data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface Vector3f {
   x: number;
   y: number;
   z: number;
 }
 
+/**
+ * Describes the BlueprintChildOffset data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface BlueprintChildOffset {
   x: number;
   y: number;
   z: number;
 }
 
+/**
+ * Describes the RailChildEntry data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface RailChildEntry {
   name: string;
   /** High-level rail docking request decoded from tag. */
@@ -91,23 +136,35 @@ export interface RailChildEntry {
   offset: BlueprintChildOffset | null;
 }
 
+/**
+ * Describes the BlueprintChildTransform data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface BlueprintChildTransform {
   name: string;
   mode: 'docking' | 'rail';
   offset: BlueprintChildOffset;
 }
 
+/**
+ * Describes the AiConfigEntry data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface AiConfigEntry {
   id: number;
   value: string;
 }
 
+/**
+ * Describes the AiConfig data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface AiConfig {
   tagName: string | null;
   entries: AiConfigEntry[];
   values: Record<number, string>;
 }
 
+/**
+ * Describes the RailPieceRef data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface RailPieceRef {
   kind: number;
   uid: string;
@@ -118,6 +175,9 @@ export interface RailPieceRef {
   hp: number;
 }
 
+/**
+ * Describes the RailChildRequest data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface RailChildRequest {
   railTagType: number;
   rail: RailPieceRef | null;
@@ -129,6 +189,9 @@ export interface RailChildRequest {
   flags: number[];
 }
 
+/**
+ * Describes the WirelessMarker data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface WirelessMarker {
   /** Rail UID of the destination chain element. */
   marking: string;
@@ -138,6 +201,9 @@ export interface WirelessMarker {
   fromLocation: bigint;
 }
 
+/**
+ * Describes the SmbpmFile data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface SmbpmFile {
   metaVersion: number;
   /** High-level SegmentController view, when present and parseable. */
@@ -168,6 +234,9 @@ export interface SmbpmFile {
   thrustConfig: ThrustConfig | null;
 }
 
+/**
+ * Describes the SmbpmInternalState data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface SmbpmInternalState {
   managerRaw?: Uint8Array | null;
   managerTag?: Tag | null;
@@ -177,14 +246,26 @@ export interface SmbpmInternalState {
   thrustTag?: Tag | null;
 }
 
+/**
+ * Describes the RailChildInternalState data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface RailChildInternalState {
   tagRaw?: Uint8Array | null;
   tag?: Tag | null;
 }
 
+/**
+ * Defines SMBPM_INTERNALS for StarMade blueprint and segment file parsing.
+ */
 const SMBPM_INTERNALS = new WeakMap<object, SmbpmInternalState>();
+/**
+ * Defines RAIL_CHILD_INTERNALS for StarMade blueprint and segment file parsing.
+ */
 const RAIL_CHILD_INTERNALS = new WeakMap<object, RailChildInternalState>();
 
+/**
+ * Represents the BlueprintMeta model used by StarMade blueprint and segment file parsing.
+ */
 export class BlueprintMeta implements SmbpmFile {
   metaVersion: number;
   manager: SegmentControllerObject | null;
@@ -201,6 +282,11 @@ export class BlueprintMeta implements SmbpmFile {
   lockBoxPoints: CargoPoint[];
   thrustConfig: ThrustConfig | null;
 
+  /**
+   * Creates a BlueprintMeta instance.
+   *
+   * @param input - Input value for the constructor operation.
+   */
   constructor(input: SmbpmFile) {
     this.metaVersion = input.metaVersion;
     this.manager = input.manager;
@@ -220,18 +306,39 @@ export class BlueprintMeta implements SmbpmFile {
     this.thrustConfig = input.thrustConfig;
   }
 
+  /**
+   * Reports whether hasManager is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get hasManager(): boolean {
     return this.manager !== null || getSmbpmInternals(this).managerTag != null;
   }
 
+  /**
+   * Reports whether hasRails is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get hasRails(): boolean {
     return Boolean(this.railUID || this.railChildren.length > 0 || this.railDockerPieces.length > 0);
   }
 
+  /**
+   * Handles the attachmentCount operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get attachmentCount(): number {
     return this.childTransforms.length;
   }
 
+  /**
+   * Handles the childTransformFor operation used by StarMade blueprint and segment file parsing.
+   *
+   * @param name - Input value for the childTransformFor operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   childTransformFor(name: string): BlueprintChildTransform | null {
     const wanted = basenameBlueprintEntityName(name);
     return this.childTransforms.find(transform =>
@@ -239,18 +346,42 @@ export class BlueprintMeta implements SmbpmFile {
     ) ?? null;
   }
 
+  /**
+   * Handles the childOffsetFor operation used by StarMade blueprint and segment file parsing.
+   *
+   * @param name - Input value for the childOffsetFor operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   childOffsetFor(name: string): BlueprintChildOffset | null {
     return this.childTransformFor(name)?.offset ?? null;
   }
 
+  /**
+   * Returns a copy updated with MetaVersion.
+   *
+   * @param metaVersion - Input value for the withMetaVersion operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withMetaVersion(metaVersion: number): BlueprintMeta {
     return this._with({ metaVersion });
   }
 
+  /**
+   * Returns a copy updated with Manager.
+   *
+   * @param manager - Input value for the withManager operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withManager(manager: SegmentControllerObject | null): BlueprintMeta {
     return this._with({ manager }, { preserveManager: false });
   }
 
+  /**
+   * Returns a copy updated with DockingEntries.
+   *
+   * @param dockingEntries - Input value for the withDockingEntries operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withDockingEntries(dockingEntries: DockingEntry[]): BlueprintMeta {
     return this._with({
       dockingEntries,
@@ -258,18 +389,43 @@ export class BlueprintMeta implements SmbpmFile {
     });
   }
 
+  /**
+   * Returns a copy updated with RailBounds.
+   *
+   * @param railRootMin - Input value for the withRailBounds operation.
+   * @param railRootMax - Input value for the withRailBounds operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withRailBounds(railRootMin: Vector3f | null, railRootMax: Vector3f | null): BlueprintMeta {
     return this._with({ railRootMin, railRootMax });
   }
 
+  /**
+   * Returns a copy updated with RailUID.
+   *
+   * @param railUID - Input value for the withRailUID operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withRailUID(railUID: string | undefined): BlueprintMeta {
     return this._with({ railUID });
   }
 
+  /**
+   * Returns a copy updated with WirelessMarkers.
+   *
+   * @param wirelessMarkers - Input value for the withWirelessMarkers operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withWirelessMarkers(wirelessMarkers: WirelessMarker[]): BlueprintMeta {
     return this._with({ wirelessMarkers });
   }
 
+  /**
+   * Returns a copy updated with RailChildren.
+   *
+   * @param railChildren - Input value for the withRailChildren operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withRailChildren(railChildren: RailChildEntry[]): BlueprintMeta {
     return this._with({
       railChildren,
@@ -277,6 +433,13 @@ export class BlueprintMeta implements SmbpmFile {
     }, { preserveRailChildren: false });
   }
 
+  /**
+   * Returns a copy updated with RailChildRequest.
+   *
+   * @param nameOrIndex - Input value for the withRailChildRequest operation.
+   * @param request - Input value for the withRailChildRequest operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withRailChildRequest(nameOrIndex: string | number, request: RailChildRequest | null): BlueprintMeta {
     const index = typeof nameOrIndex === 'number'
       ? nameOrIndex
@@ -302,10 +465,23 @@ export class BlueprintMeta implements SmbpmFile {
     return next;
   }
 
+  /**
+   * Returns a copy updated with AiConfig.
+   *
+   * @param aiConfig - Input value for the withAiConfig operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withAiConfig(aiConfig: AiConfig | null): BlueprintMeta {
     return this._with({ aiConfig: aiConfig ? cloneAiConfig(aiConfig) : null }, { preserveAi: false });
   }
 
+  /**
+   * Returns a copy updated with AiValue.
+   *
+   * @param id - Input value for the withAiValue operation.
+   * @param value - Input value for the withAiValue operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withAiValue(id: number, value: string): BlueprintMeta {
     const current = this.aiConfig ?? { tagName: null, entries: [], values: {} };
     const entries = current.entries.some(entry => entry.id === id)
@@ -318,22 +494,53 @@ export class BlueprintMeta implements SmbpmFile {
     });
   }
 
+  /**
+   * Returns a copy updated with RailDockerPieces.
+   *
+   * @param railDockerPieces - Input value for the withRailDockerPieces operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withRailDockerPieces(railDockerPieces: RailDockerPiece[]): BlueprintMeta {
     return this._with({ railDockerPieces });
   }
 
+  /**
+   * Returns a copy updated with CargoPoints.
+   *
+   * @param cargoPoints - Input value for the withCargoPoints operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withCargoPoints(cargoPoints: CargoPoint[]): BlueprintMeta {
     return this._with({ cargoPoints });
   }
 
+  /**
+   * Returns a copy updated with LockBoxPoints.
+   *
+   * @param lockBoxPoints - Input value for the withLockBoxPoints operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withLockBoxPoints(lockBoxPoints: CargoPoint[]): BlueprintMeta {
     return this._with({ lockBoxPoints });
   }
 
+  /**
+   * Returns a copy updated with ThrustConfig.
+   *
+   * @param thrustConfig - Input value for the withThrustConfig operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withThrustConfig(thrustConfig: ThrustConfig | null): BlueprintMeta {
     return this._with({ thrustConfig }, { preserveThrust: false });
   }
 
+  /**
+   * Returns a copy updated with the requested value.
+   *
+   * @param overrides - Input value for the _with operation.
+   * @param options - Input value for the _with operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   private _with(
     overrides: Partial<SmbpmFile>,
     options: {
@@ -384,6 +591,12 @@ export class BlueprintMeta implements SmbpmFile {
   }
 }
 
+/**
+ * Returns SmbpmInternals.
+ *
+ * @param file - Input value for the getSmbpmInternals operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function getSmbpmInternals(file: SmbpmFile): SmbpmInternalState {
   const stored = typeof file === 'object' && file !== null ? SMBPM_INTERNALS.get(file) : undefined;
   if (stored) {
@@ -409,6 +622,12 @@ export function getSmbpmInternals(file: SmbpmFile): SmbpmInternalState {
   };
 }
 
+/**
+ * Returns RailChildInternals.
+ *
+ * @param child - Input value for the getRailChildInternals operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function getRailChildInternals(child: RailChildEntry): RailChildInternalState {
   const stored = typeof child === 'object' && child !== null ? RAIL_CHILD_INTERNALS.get(child) : undefined;
   if (stored) {
@@ -426,14 +645,33 @@ export function getRailChildInternals(child: RailChildEntry): RailChildInternalS
   };
 }
 
+/**
+ * Handles the defineSmbpmInternals operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param file - Input value for the defineSmbpmInternals operation.
+ * @param internals - Input value for the defineSmbpmInternals operation.
+ */
 function defineSmbpmInternals(file: SmbpmFile, internals: SmbpmInternalState): void {
   SMBPM_INTERNALS.set(file, internals);
 }
 
+/**
+ * Handles the defineRailChildInternals operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param child - Input value for the defineRailChildInternals operation.
+ * @param internals - Input value for the defineRailChildInternals operation.
+ */
 function defineRailChildInternals(child: RailChildEntry, internals: RailChildInternalState): void {
   RAIL_CHILD_INTERNALS.set(child, internals);
 }
 
+/**
+ * Handles the finalizeSmbpm operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param input - Input value for the finalizeSmbpm operation.
+ * @param internals - Input value for the finalizeSmbpm operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function finalizeSmbpm(input: SmbpmFile, internals: SmbpmInternalState): BlueprintMeta {
   const meta = new BlueprintMeta(input);
   defineSmbpmInternals(meta, internals);
@@ -449,6 +687,12 @@ function finalizeSmbpm(input: SmbpmFile, internals: SmbpmInternalState): Bluepri
   return meta;
 }
 
+/**
+ * Handles the cloneAiConfig operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param config - Input value for the cloneAiConfig operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function cloneAiConfig(config: AiConfig): AiConfig {
   return {
     tagName: config.tagName,
@@ -457,6 +701,13 @@ function cloneAiConfig(config: AiConfig): AiConfig {
   };
 }
 
+/**
+ * Builds ChildTransforms for StarMade blueprint and segment file parsing.
+ *
+ * @param dockingEntries - Input value for the buildChildTransforms operation.
+ * @param railChildren - Input value for the buildChildTransforms operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function buildChildTransforms(
   dockingEntries: DockingEntry[],
   railChildren: RailChildEntry[]
@@ -473,12 +724,24 @@ function buildChildTransforms(
   return transforms;
 }
 
+/**
+ * Handles the basenameBlueprintEntityName operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param name - Input value for the basenameBlueprintEntityName operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function basenameBlueprintEntityName(name: string): string {
   return name.split('/').filter(Boolean).slice(-1)[0] ?? name;
 }
 
 // ── Parser principal ──────────────────────────────────────────────────────────
 
+/**
+ * Parses Smbpm for StarMade blueprint and segment file parsing.
+ *
+ * @param data - Input value for the parseSmbpm operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const r = BufferReader.from(buf);
@@ -644,10 +907,22 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
   return finalizeSmbpm(result, internals);
 }
 
+/**
+ * Returns RailChildOffsetFromTag.
+ *
+ * @param tag - Input value for the getRailChildOffsetFromTag operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function getRailChildOffsetFromTag(tag: Tag | null): BlueprintChildOffset | null {
   return getRailChildOffsetFromRequest(parseRailChildRequestFromTag(tag));
 }
 
+/**
+ * Parses AiConfigTag for StarMade blueprint and segment file parsing.
+ *
+ * @param tag - Input value for the parseAiConfigTag operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function parseAiConfigTag(tag: Tag | null): AiConfig | null {
   if (!tag || tag.type !== TagType.STRUCT) {
     return null;
@@ -668,6 +943,13 @@ export function parseAiConfigTag(tag: Tag | null): AiConfig | null {
   return { tagName: tag.name, entries, values };
 }
 
+/**
+ * Handles the aiConfigToTag operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param config - Input value for the aiConfigToTag operation.
+ * @param fallback - Input value for the aiConfigToTag operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function aiConfigToTag(config: AiConfig, fallback: Tag | null = null): Tag {
   const fallbackChildren = fallback?.type === TagType.STRUCT
     ? fallback.getStruct().filter(t => t.type !== TagType.FINISH)
@@ -711,6 +993,12 @@ export function aiConfigToTag(config: AiConfig, fallback: Tag | null = null): Ta
   return Tags.struct(config.tagName ?? fallback?.name ?? null, children);
 }
 
+/**
+ * Parses RailChildRequestFromTag for StarMade blueprint and segment file parsing.
+ *
+ * @param tag - Input value for the parseRailChildRequestFromTag operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function parseRailChildRequestFromTag(tag: Tag | null): RailChildRequest | null {
   if (!tag || tag.type !== TagType.STRUCT) {
     return null;
@@ -754,6 +1042,12 @@ export function parseRailChildRequestFromTag(tag: Tag | null): RailChildRequest 
   };
 }
 
+/**
+ * Returns RailChildOffsetFromRequest.
+ *
+ * @param request - Input value for the getRailChildOffsetFromRequest operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function getRailChildOffsetFromRequest(request: RailChildRequest | null): BlueprintChildOffset | null {
   if (!request?.rail || !request.docked || !request.movingAtDockTransform) {
     return null;
@@ -769,6 +1063,13 @@ export function getRailChildOffsetFromRequest(request: RailChildRequest | null):
   };
 }
 
+/**
+ * Handles the railChildRequestToTag operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param request - Input value for the railChildRequestToTag operation.
+ * @param fallback - Input value for the railChildRequestToTag operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function railChildRequestToTag(request: RailChildRequest, fallback: Tag | null = null): Tag {
   const fallbackRoot = fallback?.type === TagType.STRUCT
     ? fallback.getStruct().filter(t => t.type !== TagType.FINISH)
@@ -801,6 +1102,12 @@ export function railChildRequestToTag(request: RailChildRequest, fallback: Tag |
   return Tags.struct(fallback?.name ?? null, newRootChildren);
 }
 
+/**
+ * Parses RailRequestPiece for StarMade blueprint and segment file parsing.
+ *
+ * @param tag - Input value for the parseRailRequestPiece operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function parseRailRequestPiece(tag: Tag | undefined): RailPieceRef | null {
   if (!tag || tag.type !== TagType.STRUCT) {
     return null;
@@ -830,6 +1137,13 @@ function parseRailRequestPiece(tag: Tag | undefined): RailPieceRef | null {
   };
 }
 
+/**
+ * Builds RailRequestPiece for StarMade blueprint and segment file parsing.
+ *
+ * @param piece - Input value for the buildRailRequestPiece operation.
+ * @param fallback - Input value for the buildRailRequestPiece operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function buildRailRequestPiece(piece: RailPieceRef | null, fallback: Tag | undefined): Tag | undefined {
   if (!piece) {
     return fallback;
@@ -850,6 +1164,13 @@ function buildRailRequestPiece(piece: RailPieceRef | null, fallback: Tag | undef
   ]);
 }
 
+/**
+ * Builds RailRequestFlags for StarMade blueprint and segment file parsing.
+ *
+ * @param flags - Input value for the buildRailRequestFlags operation.
+ * @param fallback - Input value for the buildRailRequestFlags operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function buildRailRequestFlags(flags: number[], fallback: Tag[]): Tag[] {
   if (flags.length === 0) {
     return fallback;
@@ -858,11 +1179,21 @@ function buildRailRequestFlags(flags: number[], fallback: Tag[]): Tag[] {
   return flags.map((flag, index) => Tags.byte(fallback[index]?.name ?? null, flag));
 }
 
+/**
+ * Stores At.
+ *
+ * @param target - Input value for the setAt operation.
+ * @param index - Input value for the setAt operation.
+ * @param value - Input value for the setAt operation.
+ */
 function setAt<T>(target: T[], index: number, value: T): void {
   while (target.length <= index) target.push(undefined as T);
   target[index] = value;
 }
 
+/**
+ * Defines normal24PrimaryOrientations for StarMade blueprint and segment file parsing.
+ */
 const normal24PrimaryOrientations = [
   'front', 'front', 'front', 'front',
   'back', 'back', 'back', 'back',
@@ -872,8 +1203,20 @@ const normal24PrimaryOrientations = [
   'left', 'left', 'left', 'left',
 ] as const;
 
+/**
+ * Defines the OriencubePrimarySide type used by StarMade blueprint and segment file parsing.
+ */
 type OriencubePrimarySide = typeof normal24PrimaryOrientations[number];
 
+/**
+ * Handles the orientedRailBlockOrigin operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param position - Input value for the orientedRailBlockOrigin operation.
+ * @param orientation - Input value for the orientedRailBlockOrigin operation.
+ * @param mirrored - Input value for the orientedRailBlockOrigin operation.
+ * @param move - Input value for the orientedRailBlockOrigin operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function orientedRailBlockOrigin(
   position: BlueprintChildOffset,
   orientation: number,
@@ -896,6 +1239,12 @@ function orientedRailBlockOrigin(
   return origin;
 }
 
+/**
+ * Handles the mirrorPrimarySide operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param side - Input value for the mirrorPrimarySide operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function mirrorPrimarySide(side: OriencubePrimarySide): OriencubePrimarySide {
   switch (side) {
     case 'front': return 'back';
@@ -907,6 +1256,13 @@ function mirrorPrimarySide(side: OriencubePrimarySide): OriencubePrimarySide {
   }
 }
 
+/**
+ * Handles the modulo operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param value - Input value for the modulo operation.
+ * @param divisor - Input value for the modulo operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function modulo(value: number, divisor: number): number {
   return ((Math.trunc(value) % divisor) + divisor) % divisor;
 }

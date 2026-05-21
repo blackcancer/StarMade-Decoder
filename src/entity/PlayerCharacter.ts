@@ -32,6 +32,9 @@ import { TagType } from '../core/TagType.js';
 import type { Vector3i } from '../types/Vectors.js';
 import type { Matrix4f } from '../types/Matrices.js';
 
+/**
+ * Describes the PlayerCharacterData data shape used by legacy typed entity parsing.
+ */
 export interface PlayerCharacterData {
   id: number;
   speed: number;
@@ -85,14 +88,35 @@ export function parsePlayerCharacter(root: Tag): PlayerCharacterData {
 
 // ── Helpers internes ─────────────────────────────────────────────────────────
 
+/**
+ * Finds Int in legacy typed entity parsing.
+ *
+ * @param tags - Input value for the _findInt operation.
+ * @param name - Input value for the _findInt operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _findInt(tags: Tag[], name: string): number | undefined {
   return tags.find(t => t.name === name && t.type === TagType.INT)?.getInt();
 }
 
+/**
+ * Finds Float in legacy typed entity parsing.
+ *
+ * @param tags - Input value for the _findFloat operation.
+ * @param name - Input value for the _findFloat operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _findFloat(tags: Tag[], name: string): number | undefined {
   return tags.find(t => t.name === name && t.type === TagType.FLOAT)?.getFloat();
 }
 
+/**
+ * Finds Struct in legacy typed entity parsing.
+ *
+ * @param tags - Input value for the _findStruct operation.
+ * @param name - Input value for the _findStruct operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _findStruct(tags: Tag[], name: string): Tag | undefined {
   return tags.find(t => t.name === name && t.type === TagType.STRUCT);
 }

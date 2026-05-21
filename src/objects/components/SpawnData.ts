@@ -56,7 +56,22 @@ import { SectorPosition } from './Transform.js';
 
 // ── SpawnPoint ────────────────────────────────────────────────────────────────
 
+/**
+ * Represents the SpawnPoint model used by high-level entity component modelling.
+ */
 export class SpawnPoint {
+  /**
+   * Creates a SpawnPoint instance.
+   *
+   * @param entityUID - Input value for the constructor operation.
+   * @param sector - Input value for the constructor operation.
+   * @param localX - Input value for the constructor operation.
+   * @param localY - Input value for the constructor operation.
+   * @param localZ - Input value for the constructor operation.
+   * @param gravX - Input value for the constructor operation.
+   * @param gravY - Input value for the constructor operation.
+   * @param gravZ - Input value for the constructor operation.
+   */
   constructor(
     /** UID de l'spawn entity (empty for free spawn) */
     readonly entityUID: string,
@@ -74,6 +89,12 @@ export class SpawnPoint {
 
   static ZERO = new SpawnPoint('', SectorPosition.ZERO, 0, 0, 0, 0, 0, 0);
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): SpawnPoint {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     const uid    = s[0]?.type === TagType.STRING   ? s[0].getString()  : '';
@@ -88,6 +109,11 @@ export class SpawnPoint {
     );
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     return Tags.struct(null, [
       Tags.string(null, this.entityUID),
@@ -97,6 +123,12 @@ export class SpawnPoint {
     ]);
   }
 
+  /**
+   * Returns a copy updated with the requested value.
+   *
+   * @param overrides - Input value for the with operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   with(overrides: Partial<{
     entityUID: string; sector: SectorPosition;
     localX: number; localY: number; localZ: number;
@@ -114,6 +146,11 @@ export class SpawnPoint {
     );
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `SpawnPoint(uid="${this.entityUID}", sector=${this.sector}, local=(${this.localX.toFixed(1)},${this.localY.toFixed(1)},${this.localZ.toFixed(1)}))`;
   }
@@ -121,7 +158,21 @@ export class SpawnPoint {
 
 // ── PlayerSpawnData ────────────────────────────────────────────────────────────
 
+/**
+ * Represents the PlayerSpawnData model used by high-level entity component modelling.
+ */
 export class PlayerSpawnData {
+  /**
+   * Creates a PlayerSpawnData instance.
+   *
+   * @param version - Input value for the constructor operation.
+   * @param deathSpawn - Input value for the constructor operation.
+   * @param logoutSpawn - Input value for the constructor operation.
+   * @param preSpecialSector - Input value for the constructor operation.
+   * @param preSpecialOriginX - Input value for the constructor operation.
+   * @param preSpecialOriginY - Input value for the constructor operation.
+   * @param preSpecialOriginZ - Input value for the constructor operation.
+   */
   constructor(
     readonly version: number,
     readonly deathSpawn: SpawnPoint,
@@ -135,6 +186,12 @@ export class PlayerSpawnData {
 
   static EMPTY = new PlayerSpawnData(0, SpawnPoint.ZERO, SpawnPoint.ZERO, null, 0, 0, 0);
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): PlayerSpawnData {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     const version     = s[0]?.type === TagType.BYTE   ? s[0].getByte() : 0;
@@ -154,6 +211,11 @@ export class PlayerSpawnData {
     return new PlayerSpawnData(version, deathSpawn, logoutSpawn, preSpecialSector, ox, oy, oz);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     const children: Tag[] = [
       Tags.byte(null, this.version),
@@ -169,16 +231,33 @@ export class PlayerSpawnData {
     return Tags.struct(null, children);
   }
 
+  /**
+   * Returns a copy updated with DeathSpawn.
+   *
+   * @param spawn - Input value for the withDeathSpawn operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withDeathSpawn(spawn: SpawnPoint): PlayerSpawnData {
     return new PlayerSpawnData(this.version, spawn, this.logoutSpawn,
       this.preSpecialSector, this.preSpecialOriginX, this.preSpecialOriginY, this.preSpecialOriginZ);
   }
 
+  /**
+   * Returns a copy updated with LogoutSpawn.
+   *
+   * @param spawn - Input value for the withLogoutSpawn operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withLogoutSpawn(spawn: SpawnPoint): PlayerSpawnData {
     return new PlayerSpawnData(this.version, this.deathSpawn, spawn,
       this.preSpecialSector, this.preSpecialOriginX, this.preSpecialOriginY, this.preSpecialOriginZ);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `PlayerSpawnData(v${this.version}, death=${this.deathSpawn}, logout=${this.logoutSpawn})`;
   }
@@ -186,7 +265,18 @@ export class PlayerSpawnData {
 
 // ── SpawnMarker (for entity SpawnController values) ────────────────────────────
 
+/**
+ * Represents the SpawnMarker model used by high-level entity component modelling.
+ */
 export class SpawnMarker {
+  /**
+   * Creates a SpawnMarker instance.
+   *
+   * @param lastSpawned - Input value for the constructor operation.
+   * @param sectorX - Input value for the constructor operation.
+   * @param sectorY - Input value for the constructor operation.
+   * @param sectorZ - Input value for the constructor operation.
+   */
   constructor(
     readonly lastSpawned: bigint,
     readonly sectorX: number,
@@ -194,6 +284,12 @@ export class SpawnMarker {
     readonly sectorZ: number,
   ) {}
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): SpawnMarker {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     // [0] = spawner struct, [1] = long lastSpawned, [2] = Vector3i pos
@@ -202,6 +298,11 @@ export class SpawnMarker {
     return new SpawnMarker(lastSpawned, pos?.x ?? 0, pos?.y ?? 0, pos?.z ?? 0);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     // spawner = empty struct
     return Tags.struct(null, [
@@ -211,6 +312,11 @@ export class SpawnMarker {
     ]);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `SpawnMarker(last=${this.lastSpawned}, pos=(${this.sectorX},${this.sectorY},${this.sectorZ}))`;
   }
@@ -218,11 +324,25 @@ export class SpawnMarker {
 
 // ── SpawnController ───────────────────────────────────────────────────────────
 
+/**
+ * Represents the SpawnController model used by high-level entity component modelling.
+ */
 export class SpawnController {
+  /**
+   * Creates a SpawnController instance.
+   *
+   * @param markers - Input value for the constructor operation.
+   */
   constructor(readonly markers: SpawnMarker[]) {}
 
   static EMPTY = new SpawnController([]);
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): SpawnController {
     const outer = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     // outer[0] = STRUCT markers list
@@ -235,6 +355,11 @@ export class SpawnController {
     return new SpawnController(markers);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     const markerTags = [...this.markers.map(m => m.toTag()), FINISH_TAG];
     return Tags.struct(null, [
@@ -242,10 +367,21 @@ export class SpawnController {
     ]);
   }
 
+  /**
+   * Handles the addMarker operation used by high-level entity component modelling.
+   *
+   * @param marker - Input value for the addMarker operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   addMarker(marker: SpawnMarker): SpawnController {
     return new SpawnController([...this.markers, marker]);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `SpawnController(${this.markers.length} markers)`;
   }

@@ -69,10 +69,22 @@ import { readFrom, writeTo } from '../core/TagParser.js';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
+/**
+ * Defines RELATION_WAR for high-level StarMade object modelling.
+ */
 export const RELATION_WAR     = -1;
+/**
+ * Defines RELATION_NEUTRAL for high-level StarMade object modelling.
+ */
 export const RELATION_NEUTRAL =  0;
+/**
+ * Defines RELATION_ALLY for high-level StarMade object modelling.
+ */
 export const RELATION_ALLY    =  1;
 
+/**
+ * Defines RELATION_NAMES for high-level StarMade object modelling.
+ */
 export const RELATION_NAMES: Record<number, string> = {
   [-1]: 'WAR',
   [0]:  'NEUTRAL',
@@ -81,12 +93,27 @@ export const RELATION_NAMES: Record<number, string> = {
 
 // ── Faction member ──────────────────────────────────────────────────────
 
+/**
+ * Represents the FactionMember model used by high-level StarMade object modelling.
+ */
 export class FactionMember {
+  /**
+   * Creates a FactionMember instance.
+   *
+   * @param playerUID - Input value for the constructor operation.
+   * @param role - Input value for the constructor operation.
+   */
   constructor(
     public playerUID: string,
     public role: number,
   ) {}
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): FactionMember {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     return new FactionMember(
@@ -95,6 +122,11 @@ export class FactionMember {
     );
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     return Tags.struct(null, [
       Tags.string(null, this.playerUID),
@@ -105,7 +137,17 @@ export class FactionMember {
 
 // ── Relation between two factions ──────────────────────────────────────────────
 
+/**
+ * Represents the FactionRelation model used by high-level StarMade object modelling.
+ */
 export class FactionRelation {
+  /**
+   * Creates a FactionRelation instance.
+   *
+   * @param factionA - Input value for the constructor operation.
+   * @param factionB - Input value for the constructor operation.
+   * @param relation - Input value for the constructor operation.
+   */
   constructor(
     public factionA: number,
     public factionB: number,
@@ -113,11 +155,37 @@ export class FactionRelation {
     public relation: number,
   ) {}
 
+  /**
+   * Handles the relationName operation used by high-level StarMade object modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get relationName(): string { return RELATION_NAMES[this.relation] ?? 'UNKNOWN'; }
+  /**
+   * Reports whether isWar is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get isWar():     boolean { return this.relation === RELATION_WAR; }
+  /**
+   * Reports whether isNeutral is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get isNeutral(): boolean { return this.relation === RELATION_NEUTRAL; }
+  /**
+   * Reports whether isAlly is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get isAlly():    boolean { return this.relation === RELATION_ALLY; }
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): FactionRelation {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     return new FactionRelation(
@@ -127,6 +195,11 @@ export class FactionRelation {
     );
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     return Tags.struct(null, [
       Tags.int(null, this.factionA),
@@ -138,7 +211,28 @@ export class FactionRelation {
 
 // ── Faction ───────────────────────────────────────────────────────────────────
 
+/**
+ * Represents the Faction model used by high-level StarMade object modelling.
+ */
 export class Faction {
+  /**
+   * Creates a Faction instance.
+   *
+   * @param id - Input value for the constructor operation.
+   * @param name - Input value for the constructor operation.
+   * @param description - Input value for the constructor operation.
+   * @param dateCreated - Input value for the constructor operation.
+   * @param members - Input value for the constructor operation.
+   * @param openToJoin - Input value for the constructor operation.
+   * @param homebaseUID - Input value for the constructor operation.
+   * @param password - Input value for the constructor operation.
+   * @param allyNeutral - Input value for the constructor operation.
+   * @param attackNeutral - Input value for the constructor operation.
+   * @param factionPoints - Input value for the constructor operation.
+   * @param factionMode - Input value for the constructor operation.
+   * @param showInHub - Input value for the constructor operation.
+   * @param isNPC - Input value for the constructor operation.
+   */
   constructor(
     public id: number,
     public name: string,
@@ -156,6 +250,11 @@ export class Faction {
     public isNPC: boolean,
   ) {}
 
+  /**
+   * Handles the memberCount operation used by high-level StarMade object modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get memberCount(): number { return this.members.length; }
 
   /** Rebuilds a faction tag as stored in the file. */
@@ -184,6 +283,13 @@ export class Faction {
     ]);
   }
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param factionTag - Input value for the fromTag operation.
+   * @param id - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(factionTag: Tag, id: number): Faction {
     const s = factionTag.getStruct().filter(t => t.type !== TagType.FINISH);
 
@@ -216,6 +322,11 @@ export class Faction {
       factionPoints, factionMode, showInHub, isNPC);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `Faction(id=${this.id}, name="${this.name}", members=${this.memberCount}, npc=${this.isNPC})`;
   }
@@ -223,7 +334,18 @@ export class Faction {
 
 // ── FactionManager (the full file) ──────────────────────────────────────
 
+/**
+ * Represents the FactionManager model used by high-level StarMade object modelling.
+ */
 export class FactionManager {
+  /**
+   * Creates a FactionManager instance.
+   *
+   * @param version - Input value for the constructor operation.
+   * @param factions - Input value for the constructor operation.
+   * @param relations - Input value for the constructor operation.
+   * @param lastUpdate - Input value for the constructor operation.
+   */
   constructor(
     public version: number,
     public factions: Map<number, Faction>,
@@ -233,12 +355,40 @@ export class FactionManager {
 
   // ── Accessors ──────────────────────────────────────────────────────────────────
 
+  /**
+   * Returns the requested value.
+   *
+   * @param id - Input value for the get operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   get(id: number): Faction | undefined { return this.factions.get(id); }
 
+  /**
+   * Returns all values exposed by this collection.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get all(): Faction[] { return [...this.factions.values()]; }
+  /**
+   * Handles the playerFactions operation used by high-level StarMade object modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get playerFactions(): Faction[] { return this.all.filter(f => !f.isNPC); }
+  /**
+   * Handles the npcFactions operation used by high-level StarMade object modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get npcFactions(): Faction[] { return this.all.filter(f => f.isNPC); }
 
+  /**
+   * Returns Relation.
+   *
+   * @param a - Input value for the getRelation operation.
+   * @param b - Input value for the getRelation operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getRelation(a: number, b: number): FactionRelation | undefined {
     return this.relations.find(r =>
       (r.factionA === a && r.factionB === b) ||
@@ -246,6 +396,12 @@ export class FactionManager {
     );
   }
 
+  /**
+   * Returns RelationsOf.
+   *
+   * @param id - Input value for the getRelationsOf operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getRelationsOf(id: number): FactionRelation[] {
     return this.relations.filter(r => r.factionA === id || r.factionB === id);
   }
@@ -280,6 +436,12 @@ export class FactionManager {
 
   // ── Parsing / Serialization ──────────────────────────────────────────────────
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param root - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(root: Tag): FactionManager {
     if (root.type !== TagType.STRUCT) {
       throw new TypeError('FactionManager.fromTag: expected STRUCT root');
@@ -320,6 +482,11 @@ export class FactionManager {
     return new FactionManager(version, factions, relations, lastUpdate);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     // Root Tag reconstruction (current version = 0)
     const factionEntries: Tag[] = [];
@@ -356,6 +523,11 @@ export class FactionManager {
     return FactionManager.fromTag(readFrom(data));
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `FactionManager(v${this.version}, ${this.factions.size} factions, ${this.relations.length} relations)`;
   }

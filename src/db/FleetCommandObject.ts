@@ -21,12 +21,22 @@ import {
 
 export { FLEET_COMMAND_TYPES, type FleetCommandType, type CommandArg };
 
+/**
+ * Represents the FleetCommandObject model used by StarMade database object parsing.
+ */
 export class FleetCommandObject {
   readonly fleetDbId: bigint;
   readonly commandOrdinal: number;
   readonly commandType: FleetCommandType | undefined;
   readonly args: ReadonlyArray<CommandArg>;
 
+  /**
+   * Creates a FleetCommandObject instance.
+   *
+   * @param fleetDbId - Input value for the constructor operation.
+   * @param commandOrdinal - Input value for the constructor operation.
+   * @param args - Input value for the constructor operation.
+   */
   private constructor(
     fleetDbId: bigint,
     commandOrdinal: number,
@@ -69,16 +79,35 @@ export class FleetCommandObject {
 
   // ── Immutable mutations ────────────────────────────────────────────────────
 
+  /**
+   * Returns a copy updated with FleetDbId.
+   *
+   * @param id - Input value for the withFleetDbId operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withFleetDbId(id: bigint): FleetCommandObject {
     return new FleetCommandObject(id, this.commandOrdinal, [...this.args]);
   }
 
+  /**
+   * Returns a copy updated with Command.
+   *
+   * @param type - Input value for the withCommand operation.
+   * @param args - Input value for the withCommand operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withCommand(type: FleetCommandType, args: CommandArg[] = []): FleetCommandObject {
     const ordinal = FLEET_COMMAND_TYPES.indexOf(type);
     if (ordinal === -1) throw new RangeError(`Unknown fleet command type: ${type}`);
     return new FleetCommandObject(this.fleetDbId, ordinal, args);
   }
 
+  /**
+   * Returns a copy updated with Args.
+   *
+   * @param args - Input value for the withArgs operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withArgs(args: CommandArg[]): FleetCommandObject {
     return new FleetCommandObject(this.fleetDbId, this.commandOrdinal, args);
   }
@@ -110,6 +139,11 @@ export class FleetCommandObject {
     );
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     const type = this.commandType ?? `#${this.commandOrdinal}`;
     const arg = this.firstStringArg ?? this.firstVec3iArg

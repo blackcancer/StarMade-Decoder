@@ -29,6 +29,9 @@ export const FREE_ITEM_BYTE_SIZE = 22;
 /** Maximum items per sector (itemArraySize / itemDataSize). */
 export const MAX_ITEMS_PER_SECTOR = Math.floor((22 * 1024) / FREE_ITEM_BYTE_SIZE);
 
+/**
+ * Describes the FreeItem data shape used by StarMade database object parsing.
+ */
 export interface FreeItem {
   /** Block type ID (short; signed negative = buy order in shop context). */
   blockType: number;

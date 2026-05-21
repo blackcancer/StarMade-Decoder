@@ -47,7 +47,23 @@ import { BLUEPRINT_TYPE } from '../smd3/SmentParser.js';
 
 // ── Catalog entry ──────────────────────────────────────────────────────────
 
+/**
+ * Represents the CatalogEntry model used by high-level StarMade object modelling.
+ */
 export class CatalogEntry {
+  /**
+   * Creates a CatalogEntry instance.
+   *
+   * @param uid - Input value for the constructor operation.
+   * @param ownerUID - Input value for the constructor operation.
+   * @param price - Input value for the constructor operation.
+   * @param description - Input value for the constructor operation.
+   * @param mass - Input value for the constructor operation.
+   * @param blueprintType - Input value for the constructor operation.
+   * @param dateCreated - Input value for the constructor operation.
+   * @param timeSpawned - Input value for the constructor operation.
+   * @param classification - Input value for the constructor operation.
+   */
   constructor(
     /** Unique blueprint identifier (= blueprint name) */
     public uid: string,
@@ -109,7 +125,16 @@ export class CatalogEntry {
 
 // ── Catalogue complet ─────────────────────────────────────────────────────────
 
+/**
+ * Represents the Catalog model used by high-level StarMade object modelling.
+ */
 export class Catalog {
+  /**
+   * Creates a Catalog instance.
+   *
+   * @param entries - Input value for the constructor operation.
+   * @param systemEntries - Input value for the constructor operation.
+   */
   constructor(
     /** Player entries (pv0) */
     public entries: CatalogEntry[],
@@ -209,6 +234,11 @@ export class Catalog {
     return Catalog.fromTag(readFrom(data));
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `Catalog(${this.entries.length} player entries, ${this.systemEntries.length} system entries)`;
   }

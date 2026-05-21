@@ -87,6 +87,9 @@ import {
 
 // ── Position blocks ─────────────────────────────────────────────────────────
 
+/**
+ * Describes the BlockBounds data shape used by high-level StarMade entity modelling.
+ */
 export interface BlockBounds {
   minX: number; minY: number; minZ: number;
   maxX: number; maxY: number; maxZ: number;
@@ -94,7 +97,44 @@ export interface BlockBounds {
 
 // ── SegmentController ─────────────────────────────────────────────────────────
 
+/**
+ * Represents the SegmentController model used by high-level StarMade entity modelling.
+ */
 export abstract class SegmentController extends GameEntity {
+  /**
+   * Creates a SegmentController instance.
+   *
+   * @param mass - Input value for the constructor operation.
+   * @param transform - Input value for the constructor operation.
+   * @param sectorPosition - Input value for the constructor operation.
+   * @param factionId - Input value for the constructor operation.
+   * @param owner - Input value for the constructor operation.
+   * @param spawnController - Input value for the constructor operation.
+   * @param _transformableChildren - Input value for the constructor operation.
+   * @param uniqueId - Input value for the constructor operation.
+   * @param realName - Input value for the constructor operation.
+   * @param bounds - Input value for the constructor operation.
+   * @param dockingState - Input value for the constructor operation.
+   * @param controlElementMap - Input value for the constructor operation.
+   * @param managerContainer - Input value for the constructor operation.
+   * @param creatorId - Input value for the constructor operation.
+   * @param spawner - Input value for the constructor operation.
+   * @param lastModifier - Input value for the constructor operation.
+   * @param seed - Input value for the constructor operation.
+   * @param nonEmptySegments - Input value for the constructor operation.
+   * @param hpState - Input value for the constructor operation.
+   * @param textBlocks - Input value for the constructor operation.
+   * @param scrap - Input value for the constructor operation.
+   * @param vulnerable - Input value for the constructor operation.
+   * @param minable - Input value for the constructor operation.
+   * @param factionRights - Input value for the constructor operation.
+   * @param currentOwner - Input value for the constructor operation.
+   * @param lastDockerPlayer - Input value for the constructor operation.
+   * @param lastEditBlocks - Input value for the constructor operation.
+   * @param lastDamageTaken - Input value for the constructor operation.
+   * @param tagVersion - Input value for the constructor operation.
+   * @param _rootChildren - Input value for the constructor operation.
+   */
   constructor(
     // GameEntity
     mass: number, transform: EntityTransform,
@@ -132,6 +172,12 @@ export abstract class SegmentController extends GameEntity {
   }
 
   // Widens _clone to also accept SegmentController-specific overrides
+  /**
+   * Returns a cloned copy of this value.
+   *
+   * @param overrides - Input value for the _clone operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   protected abstract _clone(overrides: Partial<{
     mass: number; transform: EntityTransform;
     sectorPosition: SectorPosition; factionId: number;
@@ -148,8 +194,23 @@ export abstract class SegmentController extends GameEntity {
 
   // ── Accesseurs pratiques ───────────────────────────────────────────────────
 
+  /**
+   * Reports whether isDocked is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get isDocked(): boolean        { return this.dockingState.isDocked; }
+  /**
+   * Reports whether isAlive is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get isAlive(): boolean         { return this.hpState.isAlive; }
+  /**
+   * Handles the hpPercent operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get hpPercent(): number        { return this.hpState.hpPercent; }
 
   /** StarMade-Open SegmentController slot view, without raw Tag exposure. */
@@ -181,24 +242,100 @@ export abstract class SegmentController extends GameEntity {
     });
   }
 
+  /**
+   * Returns Field.
+   *
+   * @param key - Input value for the getField operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getField(key: string): EntityField<this> | null {
     return this.fields.find(field => field.key === key) ?? null;
   }
 
+  /**
+   * Handles the extraTagDataField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get extraTagDataField(): EntityField<this> | null { return this.fields[13] ?? null; }
+  /**
+   * Handles the npcDataField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get npcDataField(): EntityField<this> | null { return this.fields[14] ?? null; }
+  /**
+   * Handles the railControllerField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get railControllerField(): EntityField<this> | null { return this.fields[19] ?? null; }
+  /**
+   * Handles the coreTimerField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get coreTimerField(): EntityField<this> | null { return this.fields[22] ?? null; }
+  /**
+   * Handles the blueprintInfoField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get blueprintInfoField(): EntityField<this> | null { return this.fields[24] ?? null; }
+  /**
+   * Handles the itemsToSpawnWithField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get itemsToSpawnWithField(): EntityField<this> | null { return this.fields[28] ?? null; }
+  /**
+   * Handles the blockKillRecorderField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get blockKillRecorderField(): EntityField<this> | null { return this.fields[36] ?? null; }
+  /**
+   * Handles the quarterManagerField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get quarterManagerField(): EntityField<this> | null { return this.fields[41] ?? null; }
 
+  /**
+   * Handles the npcData operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get npcData(): NpcDataState { return new NpcDataState(this._rootChildren[14]); }
+  /**
+   * Handles the railController operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get railController(): RailControllerState { return new RailControllerState(this._rootChildren[19]); }
+  /**
+   * Handles the coreTimer operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get coreTimer(): CoreTimerState { return new CoreTimerState(this._rootChildren[22]); }
+  /**
+   * Handles the blueprintInfo operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get blueprintInfo(): BlueprintInfo { return new BlueprintInfo(this._rootChildren[24]); }
+  /**
+   * Handles the itemsToSpawnWith operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get itemsToSpawnWith(): ItemsToSpawnWith { return new ItemsToSpawnWith(this._rootChildren[28]); }
+  /**
+   * Handles the quarterManager operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get quarterManager(): QuarterManagerState { return new QuarterManagerState(this._rootChildren[41]); }
 
   // ── SegmentController-specific mutations ─────────────────────────────────
@@ -258,58 +395,143 @@ export abstract class SegmentController extends GameEntity {
     return this._clone({ creatorId });
   }
 
+  /**
+   * Returns a copy updated with NonEmptySegments.
+   *
+   * @param nonEmptySegments - Input value for the withNonEmptySegments operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withNonEmptySegments(nonEmptySegments: number): this {
     return this._clone({ nonEmptySegments });
   }
 
+  /**
+   * Returns a copy updated with CurrentOwner.
+   *
+   * @param currentOwner - Input value for the withCurrentOwner operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withCurrentOwner(currentOwner: string): this {
     return this._clone({ currentOwner });
   }
 
+  /**
+   * Returns a copy updated with LastDockerPlayer.
+   *
+   * @param lastDockerPlayer - Input value for the withLastDockerPlayer operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withLastDockerPlayer(lastDockerPlayer: string): this {
     return this._clone({ lastDockerPlayer });
   }
 
+  /**
+   * Returns a copy updated with LastEditBlocks.
+   *
+   * @param lastEditBlocks - Input value for the withLastEditBlocks operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withLastEditBlocks(lastEditBlocks: bigint): this {
     return this._clone({ lastEditBlocks });
   }
 
+  /**
+   * Returns a copy updated with LastDamageTaken.
+   *
+   * @param lastDamageTaken - Input value for the withLastDamageTaken operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withLastDamageTaken(lastDamageTaken: bigint): this {
     return this._clone({ lastDamageTaken });
   }
 
+  /**
+   * Returns a copy updated with TagVersion.
+   *
+   * @param tagVersion - Input value for the withTagVersion operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withTagVersion(tagVersion: number): this {
     return this._clone({ tagVersion });
   }
 
+  /**
+   * Returns a copy updated with ManagerContainer.
+   *
+   * @param managerContainer - Input value for the withManagerContainer operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withManagerContainer(managerContainer: ManagerContainer | null): this {
     return this._clone({ managerContainer });
   }
 
+  /**
+   * Returns a copy updated with NpcData.
+   *
+   * @param npcData - Input value for the withNpcData operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withNpcData(npcData: NpcDataState): this {
     return this._withRootChild(14, npcData.toTag());
   }
 
+  /**
+   * Returns a copy updated with RailController.
+   *
+   * @param railController - Input value for the withRailController operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withRailController(railController: RailControllerState): this {
     return this._withRootChild(19, railController.toTag());
   }
 
+  /**
+   * Returns a copy updated with CoreTimer.
+   *
+   * @param coreTimer - Input value for the withCoreTimer operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withCoreTimer(coreTimer: CoreTimerState): this {
     return this._withRootChild(22, coreTimer.toTag());
   }
 
+  /**
+   * Returns a copy updated with BlueprintInfo.
+   *
+   * @param blueprintInfo - Input value for the withBlueprintInfo operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withBlueprintInfo(blueprintInfo: BlueprintInfo): this {
     return this._withRootChild(24, blueprintInfo.toTag());
   }
 
+  /**
+   * Returns a copy updated with ItemsToSpawnWith.
+   *
+   * @param itemsToSpawnWith - Input value for the withItemsToSpawnWith operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withItemsToSpawnWith(itemsToSpawnWith: ItemsToSpawnWith): this {
     return this._withRootChild(28, itemsToSpawnWith.toTag());
   }
 
+  /**
+   * Returns a copy updated with QuarterManager.
+   *
+   * @param quarterManager - Input value for the withQuarterManager operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withQuarterManager(quarterManager: QuarterManagerState): this {
     return this._withRootChild(41, quarterManager.toTag());
   }
 
+  /**
+   * Returns a copy updated with RootChild.
+   *
+   * @param index - Input value for the _withRootChild operation.
+   * @param tag - Input value for the _withRootChild operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   private _withRootChild(index: number, tag: Tag): this {
     const children = [...this._rootChildren];
     while (children.length <= index) children.push(Tags.nothing(null));
@@ -322,6 +544,11 @@ export abstract class SegmentController extends GameEntity {
 
   // ── Serialization ─────────────────────────────────────────────────────────
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     const c = [...this._rootChildren];
 
@@ -362,12 +589,28 @@ export abstract class SegmentController extends GameEntity {
     return new Tag(TagType.STRUCT, this._rootTag_name(), [...c, FINISH_TAG]);
   }
 
+  /**
+   * Handles the rootTag_name operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   protected _rootTag_name(): string | null { return null; }
 
+  /**
+   * Converts this value to Buffer.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toBuffer(): Buffer { return writeTo(this.toTag()); }
 
   // ── Parse statique ────────────────────────────────────────────────────────
 
+  /**
+   * Parses input data for high-level StarMade entity modelling.
+   *
+   * @param root - Input value for the _parse operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   protected static _parse(root: Tag): {
     // GameEntity
     mass: number; transform: EntityTransform;
@@ -478,11 +721,23 @@ export abstract class SegmentController extends GameEntity {
     };
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `${this.entityType}(id="${this.uniqueId}", name="${this.realName}", sector=${this.sectorPosition}, hp=${this.hpState.hpPercent}%)`;
   }
 }
 
+/**
+ * Handles the vectorFromFieldValue operation used by high-level StarMade entity modelling.
+ *
+ * @param value - Input value for the vectorFromFieldValue operation.
+ * @param key - Input value for the vectorFromFieldValue operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function vectorFromFieldValue(value: unknown, key: string): { x: number; y: number; z: number } {
   if (value !== null && typeof value === 'object') {
     const candidate = value as Record<string, unknown>;
@@ -495,16 +750,38 @@ function vectorFromFieldValue(value: unknown, key: string): { x: number; y: numb
   throw new TypeError(`Entity field "${key}" expects {x,y,z}`);
 }
 
+/**
+ * Handles the minBoundsFromFieldValue operation used by high-level StarMade entity modelling.
+ *
+ * @param value - Input value for the minBoundsFromFieldValue operation.
+ * @param key - Input value for the minBoundsFromFieldValue operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function minBoundsFromFieldValue(value: unknown, key: string): Pick<BlockBounds, 'minX' | 'minY' | 'minZ'> {
   const v = vectorFromFieldValue(value, key);
   return { minX: v.x, minY: v.y, minZ: v.z };
 }
 
+/**
+ * Handles the maxBoundsFromFieldValue operation used by high-level StarMade entity modelling.
+ *
+ * @param value - Input value for the maxBoundsFromFieldValue operation.
+ * @param key - Input value for the maxBoundsFromFieldValue operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function maxBoundsFromFieldValue(value: unknown, key: string): Pick<BlockBounds, 'maxX' | 'maxY' | 'maxZ'> {
   const v = vectorFromFieldValue(value, key);
   return { maxX: v.x, maxY: v.y, maxZ: v.z };
 }
 
+/**
+ * Handles the requireInstance operation used by high-level StarMade entity modelling.
+ *
+ * @param value - Input value for the requireInstance operation.
+ * @param ctor - Input value for the requireInstance operation.
+ * @param key - Input value for the requireInstance operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function requireInstance<T>(value: unknown, ctor: new (...args: any[]) => T, key: string): T {
   if (value instanceof ctor) return value;
   throw new TypeError(`Entity field "${key}" expects a ${ctor.name} object`);

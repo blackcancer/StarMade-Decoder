@@ -53,12 +53,18 @@ export const SECTOR_TYPES = [
   'DOUBLE_STAR',   // 10
 ] as const;
 
+/**
+ * Defines the SectorType type used by StarMade database object parsing.
+ */
 export type SectorType = typeof SECTOR_TYPES[number];
 
 // ── PlanetType enum (StellarSystem.PlanetType, ordinal order) ─────────────────
 
 // Retrieved from StellarSystem.java (getPlanetType uses values()[min(len-1, infos[dataIndex+1])]).
 // The enum declaration order determines ordinals. Based on StarMade-Open source:
+/**
+ * Defines PLANET_TYPES for StarMade database object parsing.
+ */
 export const PLANET_TYPES = [
   'ICE',
   'DESERT',
@@ -69,6 +75,9 @@ export const PLANET_TYPES = [
   'BARREN',
 ] as const;
 
+/**
+ * Defines the PlanetType type used by StarMade database object parsing.
+ */
 export type PlanetType = typeof PLANET_TYPES[number];
 
 // ── Resource index → item ID mapping ─────────────────────────────────────────
@@ -101,6 +110,9 @@ export const RESOURCE_ITEM_IDS: ReadonlyArray<{ index: number; id: number; name:
 
 // ── Sector info entry ─────────────────────────────────────────────────────────
 
+/**
+ * Describes the SectorInfo data shape used by StarMade database object parsing.
+ */
 export interface SectorInfo {
   /** Local X coordinate within the system (0–15). */
   x: number;
@@ -183,6 +195,9 @@ export function encodeSystemInfos(entries: SectorInfo[]): Buffer {
 
 // ── Resource density ──────────────────────────────────────────────────────────
 
+/**
+ * Describes the SystemResource data shape used by StarMade database object parsing.
+ */
 export interface SystemResource {
   /** Resource array index (0–18). */
   index: number;

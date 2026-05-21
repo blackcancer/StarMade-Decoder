@@ -6,15 +6,27 @@
  * object lines and terminated by "_end_".
  */
 
+/**
+ * One persistent-object class block and the JSON objects recorded for it.
+ */
 export interface PersistentObjectEntry {
   className: string;
   objects: unknown[];
 }
 
+/**
+ * Describes the PersistentObjectFile data shape used by StarMade database object parsing.
+ */
 export interface PersistentObjectFile {
   entries: PersistentObjectEntry[];
 }
 
+/**
+ * Parses PersistentObjects for StarMade database object parsing.
+ *
+ * @param data - Input value for the parsePersistentObjects operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function parsePersistentObjects(data: Buffer | Uint8Array | string): PersistentObjectFile {
   const text = typeof data === 'string'
     ? data
@@ -40,6 +52,12 @@ export function parsePersistentObjects(data: Buffer | Uint8Array | string): Pers
   return { entries };
 }
 
+/**
+ * Writes PersistentObjects to the StarMade binary representation.
+ *
+ * @param file - Input value for the writePersistentObjects operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function writePersistentObjects(file: PersistentObjectFile): Buffer {
   const lines: string[] = [];
   for (const entry of file.entries) {

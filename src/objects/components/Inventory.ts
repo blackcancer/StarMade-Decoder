@@ -34,6 +34,9 @@ import { FINISH_TAG } from '../../core/Tag.js';
 
 // ── ItemStack ─────────────────────────────────────────────────────────────────
 
+/**
+ * Describes the ItemMeta data shape used by high-level entity component modelling.
+ */
 export interface ItemMeta {
   id: number;
   type: number;
@@ -41,7 +44,18 @@ export interface ItemMeta {
   subId: number;
 }
 
+/**
+ * Represents the ItemStack model used by high-level entity component modelling.
+ */
 export class ItemStack {
+  /**
+   * Creates a ItemStack instance.
+   *
+   * @param slot - Input value for the constructor operation.
+   * @param type - Input value for the constructor operation.
+   * @param count - Input value for the constructor operation.
+   * @param meta - Input value for the constructor operation.
+   */
   constructor(
     readonly slot: number,
     /** Block type ID */
@@ -52,14 +66,31 @@ export class ItemStack {
     readonly meta?: ItemMeta,
   ) {}
 
+  /**
+   * Returns a copy updated with Count.
+   *
+   * @param count - Input value for the withCount operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withCount(count: number): ItemStack {
     return new ItemStack(this.slot, this.type, count, this.meta);
   }
 
+  /**
+   * Returns a copy updated with Type.
+   *
+   * @param type - Input value for the withType operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withType(type: number): ItemStack {
     return new ItemStack(this.slot, type, this.count, this.meta);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `ItemStack(slot=${this.slot}, type=${this.type}, count=${this.count}${this.meta ? ', meta='+JSON.stringify(this.meta) : ''})`;
   }
@@ -67,12 +98,21 @@ export class ItemStack {
 
 // ── Inventory ─────────────────────────────────────────────────────────────────
 
+/**
+ * Represents the Inventory model used by high-level entity component modelling.
+ */
 export class Inventory {
   /** Map<slot, ItemStack> */
   private readonly _slots: Map<number, ItemStack>;
 
   readonly maxSlots: number;
 
+  /**
+   * Creates a Inventory instance.
+   *
+   * @param slots - Input value for the constructor operation.
+   * @param maxSlots - Input value for the constructor operation.
+   */
   constructor(slots: Map<number, ItemStack>, maxSlots = 36) {
     this._slots   = slots;
     this.maxSlots = maxSlots;
@@ -80,6 +120,12 @@ export class Inventory {
 
   static EMPTY = new Inventory(new Map());
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): Inventory {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
 
@@ -141,6 +187,11 @@ export class Inventory {
     return new Inventory(slots);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     const items = [...this._slots.values()].sort((a, b) => a.slot - b.slot);
 
@@ -170,10 +221,37 @@ export class Inventory {
 
   // ── Accessors ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Returns the requested value.
+   *
+   * @param slot - Input value for the get operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   get(slot: number): ItemStack | undefined  { return this._slots.get(slot); }
+  /**
+   * Reports whether has is true for the current value.
+   *
+   * @param slot - Input value for the has operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   has(slot: number): boolean                { return this._slots.has(slot); }
+  /**
+   * Handles the items operation used by high-level entity component modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get items(): ItemStack[]                   { return [...this._slots.values()]; }
+  /**
+   * Returns the number of values exposed by this collection.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get size(): number                         { return this._slots.size; }
+  /**
+   * Reports whether isFull is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get isFull(): boolean                      { return this._slots.size >= this.maxSlots; }
 
   /** All items of a given block type. */
@@ -188,20 +266,42 @@ export class Inventory {
 
   // ── Immutable updates ──────────────────────────────────────────────
 
+  /**
+   * Stores the requested value.
+   *
+   * @param item - Input value for the set operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   set(item: ItemStack): Inventory {
     const m = new Map(this._slots);
     m.set(item.slot, item);
     return new Inventory(m, this.maxSlots);
   }
 
+  /**
+   * Handles the remove operation used by high-level entity component modelling.
+   *
+   * @param slot - Input value for the remove operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   remove(slot: number): Inventory {
     const m = new Map(this._slots);
     m.delete(slot);
     return new Inventory(m, this.maxSlots);
   }
 
+  /**
+   * Returns a cleared copy of this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   clear(): Inventory { return new Inventory(new Map(), this.maxSlots); }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `Inventory(${this._slots.size}/${this.maxSlots} slots)`;
   }

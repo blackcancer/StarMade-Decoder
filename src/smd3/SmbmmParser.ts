@@ -19,11 +19,17 @@
 
 export type SmbmmFormat = 'empty' | 'int32Pairs' | 'unknown';
 
+/**
+ * Describes the ModMapping data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface ModMapping {
   from: number;
   to: number;
 }
 
+/**
+ * Describes the SmbmmFile data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface SmbmmFile {
   /** File size */
   size: number;
@@ -37,6 +43,12 @@ export interface SmbmmFile {
   raw: Uint8Array;
 }
 
+/**
+ * Parses Smbmm for StarMade blueprint and segment file parsing.
+ *
+ * @param data - Input value for the parseSmbmm operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function parseSmbmm(data: Buffer | Uint8Array): SmbmmFile {
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const isEmpty = buf.length === 0;

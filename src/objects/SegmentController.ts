@@ -24,7 +24,28 @@ import { ControlElementMapper, ElementCountMap, Long2Vector3fMap, Long2Transform
 import type { Vector3i } from '../types/Vectors.js';
 import type { Matrix4f } from '../types/Matrices.js';
 
+/**
+ * Represents the SegmentControllerObject model used by high-level StarMade object modelling.
+ */
 export class SegmentControllerObject {
+  /**
+   * Creates a SegmentControllerObject instance.
+   *
+   * @param uniqueId - Input value for the constructor operation.
+   * @param realName - Input value for the constructor operation.
+   * @param minPos - Input value for the constructor operation.
+   * @param maxPos - Input value for the constructor operation.
+   * @param factionCode - Input value for the constructor operation.
+   * @param owner - Input value for the constructor operation.
+   * @param sectorPosition - Input value for the constructor operation.
+   * @param transform - Input value for the constructor operation.
+   * @param creatorId - Input value for the constructor operation.
+   * @param spawner - Input value for the constructor operation.
+   * @param lastModifier - Input value for the constructor operation.
+   * @param seed - Input value for the constructor operation.
+   * @param nonEmptySegments - Input value for the constructor operation.
+   * @param _rootTag - Input value for the constructor operation.
+   */
   constructor(
     public uniqueId: string,
     public realName: string,
@@ -46,6 +67,11 @@ export class SegmentControllerObject {
 
   // ── Business-object SERIALIZABLE accessors ──────────────────────────────
 
+  /**
+   * Finds Serializables in high-level StarMade object modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   private _findSerializables(): Tag[] {
     const results: Tag[] = [];
     const walk = (tag: Tag) => {
@@ -86,14 +112,32 @@ export class SegmentControllerObject {
 
   // ── Updates ──────────────────────────────────────────────────────────
 
+  /**
+   * Returns a copy updated with Name.
+   *
+   * @param name - Input value for the withName operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withName(name: string): SegmentControllerObject {
     return SegmentControllerObject.fromTag(Tags.setField(this._rootTag, 'uniqueId', Tags.string('uniqueId', name)));
   }
 
+  /**
+   * Returns a copy updated with RealName.
+   *
+   * @param name - Input value for the withRealName operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withRealName(name: string): SegmentControllerObject {
     return SegmentControllerObject.fromTag(Tags.setField(this._rootTag, 'realName', Tags.string('realName', name)));
   }
 
+  /**
+   * Returns a copy updated with FactionCode.
+   *
+   * @param code - Input value for the withFactionCode operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withFactionCode(code: number): SegmentControllerObject {
     let tag = this._rootTag;
     // factionCode is in the child struct "transformable" at index [4]
@@ -111,9 +155,24 @@ export class SegmentControllerObject {
 
   // ── Serialization ─────────────────────────────────────────────────────────
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag { return this._rootTag; }
+  /**
+   * Converts this value to Buffer.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toBuffer(): Buffer { return writeTo(this._rootTag); }
 
+  /**
+   * Finds Transformable in high-level StarMade object modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   private _findTransformable(): Tag | null {
     const s = this._rootTag.type === TagType.STRUCT
       ? this._rootTag.getStruct().filter(t => t.type !== TagType.FINISH)
@@ -121,6 +180,12 @@ export class SegmentControllerObject {
     return s[6]?.type === TagType.STRUCT ? s[6] : (s.find(t => t.name === 'transformable' && t.type === TagType.STRUCT) ?? null);
   }
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param root - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(root: Tag): SegmentControllerObject {
     // Wrapper handling (Shop, SpaceStation)
     let sc = root;
@@ -164,10 +229,21 @@ export class SegmentControllerObject {
       lastModifier, seed, nonEmptySegs, root);
   }
 
+  /**
+   * Creates a value from Buffer.
+   *
+   * @param data - Input value for the fromBuffer operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromBuffer(data: Buffer | Uint8Array): SegmentControllerObject {
     return SegmentControllerObject.fromTag(readFrom(data));
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `SegmentControllerObject(id="${this.uniqueId}", name="${this.realName}", sector=${JSON.stringify(this.sectorPosition)}, faction=${this.factionCode})`;
   }

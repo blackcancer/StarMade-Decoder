@@ -18,6 +18,9 @@
 
 import type { Tag } from '../../core/Tag.js';
 
+/**
+ * Represents the StarMadeEntity model used by high-level StarMade entity modelling.
+ */
 export abstract class StarMadeEntity {
   /** Entity discriminator type */
   abstract readonly entityType: string;
@@ -25,5 +28,10 @@ export abstract class StarMadeEntity {
   /** Rebuilds the root Tag. */
   abstract toTag(): Tag;
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string { return `${this.entityType}`; }
 }

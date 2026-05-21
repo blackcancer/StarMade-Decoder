@@ -14,9 +14,17 @@ import { decodeSectorItems, encodeSectorItems, MAX_ITEMS_PER_SECTOR, type FreeIt
 
 export { type FreeItem };
 
+/**
+ * Represents the SectorItemsObject model used by StarMade database object parsing.
+ */
 export class SectorItemsObject {
   readonly items: ReadonlyArray<FreeItem>;
 
+  /**
+   * Creates a SectorItemsObject instance.
+   *
+   * @param items - Input value for the constructor operation.
+   */
   private constructor(items: FreeItem[]) {
     this.items = Object.freeze([...items]);
   }
@@ -43,8 +51,18 @@ export class SectorItemsObject {
 
   // ── Accessors ──────────────────────────────────────────────────────────────
 
+  /**
+   * Returns the number of values exposed by this collection.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get size(): number { return this.items.length; }
 
+  /**
+   * Reports whether isEmpty is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get isEmpty(): boolean { return this.items.length === 0; }
 
   /** All items of a given block type. */
@@ -105,6 +123,11 @@ export class SectorItemsObject {
     return encodeSectorItems([...this.items]);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     if (this.isEmpty) return 'SectorItems(empty)';
     const summary = this.types.map(t => `type${t}×${this.totalCount(t)}`).join(', ');

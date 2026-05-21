@@ -40,16 +40,49 @@ import {
   type SmbpmFile,
 } from './SmbpmParser.js';
 
+/**
+ * Defines FINISH_BYTE for StarMade blueprint and segment file parsing.
+ */
 const FINISH_BYTE        = 1;
+/**
+ * Defines SEG_MANAGER_BYTE for StarMade blueprint and segment file parsing.
+ */
 const SEG_MANAGER_BYTE   = 2;
+/**
+ * Defines DOCKING_BYTE for StarMade blueprint and segment file parsing.
+ */
 const DOCKING_BYTE       = 3;
+/**
+ * Defines RAIL_BYTE for StarMade blueprint and segment file parsing.
+ */
 const RAIL_BYTE          = 4;
+/**
+ * Defines AI_CONFIG_BYTE for StarMade blueprint and segment file parsing.
+ */
 const AI_CONFIG_BYTE     = 5;
+/**
+ * Defines RAIL_DOCKER_BYTE for StarMade blueprint and segment file parsing.
+ */
 const RAIL_DOCKER_BYTE   = 6;
+/**
+ * Defines CARGO_BYTE for StarMade blueprint and segment file parsing.
+ */
 const CARGO_BYTE         = 7;
+/**
+ * Defines LOCK_BOX_BYTE for StarMade blueprint and segment file parsing.
+ */
 const LOCK_BOX_BYTE      = 8;
+/**
+ * Defines THRUST_CONFIG_BYTE for StarMade blueprint and segment file parsing.
+ */
 const THRUST_CONFIG_BYTE = 9;
 
+/**
+ * Writes Smbpm to the StarMade binary representation.
+ *
+ * @param file - Input value for the writeSmbpm operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function writeSmbpm(file: SmbpmFile): Buffer {
   const w = new BufferWriter();
   const internals = getSmbpmInternals(file);
@@ -181,6 +214,13 @@ export function writeSmbpm(file: SmbpmFile): Buffer {
   return w.toBuffer();
 }
 
+/**
+ * Handles the selectRailChildTag operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param request - Input value for the selectRailChildTag operation.
+ * @param fallback - Input value for the selectRailChildTag operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function selectRailChildTag(request: RailChildRequest | null | undefined, fallback: Tag | null): Tag | null {
   if (!request) {
     return fallback;
@@ -191,6 +231,13 @@ function selectRailChildTag(request: RailChildRequest | null | undefined, fallba
   return railChildRequestToTag(request, fallback);
 }
 
+/**
+ * Handles the selectAiTag operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param config - Input value for the selectAiTag operation.
+ * @param fallback - Input value for the selectAiTag operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function selectAiTag(config: AiConfig | null | undefined, fallback: Tag | null): Tag | null {
   if (!config) {
     return fallback;
@@ -201,6 +248,13 @@ function selectAiTag(config: AiConfig | null | undefined, fallback: Tag | null):
   return aiConfigToTag(config, fallback);
 }
 
+/**
+ * Reports whether isAiConfigUnchanged is true for the current value.
+ *
+ * @param config - Input value for the isAiConfigUnchanged operation.
+ * @param fallback - Input value for the isAiConfigUnchanged operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function isAiConfigUnchanged(config: AiConfig, fallback: Tag): boolean {
   const parsed = parseAiConfigTag(fallback);
   if (!parsed || parsed.entries.length !== config.entries.length) {
@@ -213,6 +267,13 @@ function isAiConfigUnchanged(config: AiConfig, fallback: Tag): boolean {
   );
 }
 
+/**
+ * Reports whether isRailRequestUnchanged is true for the current value.
+ *
+ * @param request - Input value for the isRailRequestUnchanged operation.
+ * @param fallback - Input value for the isRailRequestUnchanged operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function isRailRequestUnchanged(request: RailChildRequest, fallback: Tag): boolean {
   const parsed = parseRailChildRequestFromTag(fallback);
   if (!parsed) {
@@ -222,6 +283,12 @@ function isRailRequestUnchanged(request: RailChildRequest, fallback: Tag): boole
   return JSON.stringify(normalizeRailRequest(parsed)) === JSON.stringify(normalizeRailRequest(request));
 }
 
+/**
+ * Normalizes RailRequest for StarMade blueprint and segment file parsing.
+ *
+ * @param request - Input value for the normalizeRailRequest operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function normalizeRailRequest(request: RailChildRequest): unknown {
   return {
     railTagType: request.railTagType,
@@ -235,6 +302,12 @@ function normalizeRailRequest(request: RailChildRequest): unknown {
   };
 }
 
+/**
+ * Normalizes Matrix4f for StarMade blueprint and segment file parsing.
+ *
+ * @param matrix - Input value for the normalizeMatrix4f operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function normalizeMatrix4f(matrix: RailChildRequest['railTransform']): number[] | null {
   if (!matrix) {
     return null;

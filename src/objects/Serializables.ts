@@ -37,10 +37,22 @@ import type { BlockPosition } from './ElementPosition.js';
 
 // ── Encoding/decoding helpers ───────────────────────────────────────────────
 
+/**
+ * Handles the rawReader operation used by high-level StarMade object modelling.
+ *
+ * @param raw - Input value for the rawReader operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function rawReader(raw: Uint8Array): BufferReader {
   return BufferReader.from(Buffer.from(raw));
 }
 
+/**
+ * Builds Raw for high-level StarMade object modelling.
+ *
+ * @param fn - Input value for the makeRaw operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function makeRaw(fn: (w: BufferWriter) => void): Uint8Array {
   const w = new BufferWriter();
   fn(w);
@@ -49,6 +61,9 @@ function makeRaw(fn: (w: BufferWriter) => void): Uint8Array {
 
 // ── 0 : ControlElementMapper ──────────────────────────────────────────────────
 
+/**
+ * Describes the ControlLink data shape used by high-level StarMade object modelling.
+ */
 export interface ControlLink {
   /** Controller block position (x, y, z en short) */
   from: BlockPosition;
@@ -71,8 +86,19 @@ export class ControlElementMapper {
   static readonly FACTORY_ID = 0;
   static readonly DISK_HEADER = -(1024 + 2); // -1026
 
+  /**
+   * Creates a ControlElementMapper instance.
+   *
+   * @param links - Input value for the constructor operation.
+   */
   constructor(public links: ControlLink[]) {}
 
+  /**
+   * Creates a value from Raw.
+   *
+   * @param raw - Input value for the fromRaw operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromRaw(raw: Uint8Array): ControlElementMapper {
     const r = rawReader(raw);
     const links: ControlLink[] = [];
@@ -112,6 +138,11 @@ export class ControlElementMapper {
     return new ControlElementMapper(links);
   }
 
+  /**
+   * Converts this value to Raw.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRaw(): Uint8Array {
     // Group by controller position
     const byFrom = new Map<string, ControlLink[]>();
@@ -140,6 +171,11 @@ export class ControlElementMapper {
     });
   }
 
+  /**
+   * Converts this value to RawElement.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRawElement(): RawElement {
     return new RawElement(ControlElementMapper.FACTORY_ID, this.toRaw());
   }
@@ -156,11 +192,17 @@ export class ControlElementMapper {
     );
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   */
   toString() { return `ControlElementMapper(${this.links.length} links)`; }
 }
 
 // ── 1 : ElementCountMap ───────────────────────────────────────────────────────
 
+/**
+ * Describes the BlockCount data shape used by high-level StarMade object modelling.
+ */
 export interface BlockCount { type: number; count: number; }
 
 /**
@@ -171,8 +213,19 @@ export interface BlockCount { type: number; count: number; }
 export class ElementCountMap {
   static readonly FACTORY_ID = 1;
 
+  /**
+   * Creates a ElementCountMap instance.
+   *
+   * @param counts - Input value for the constructor operation.
+   */
   constructor(public counts: BlockCount[]) {}
 
+  /**
+   * Creates a value from Raw.
+   *
+   * @param raw - Input value for the fromRaw operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromRaw(raw: Uint8Array): ElementCountMap {
     const r = rawReader(raw);
     const counts: BlockCount[] = [];
@@ -184,6 +237,11 @@ export class ElementCountMap {
     return new ElementCountMap(counts);
   }
 
+  /**
+   * Converts this value to Raw.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRaw(): Uint8Array {
     const nonZero = this.counts.filter(c => c.count > 0);
     return makeRaw(w => {
@@ -192,23 +250,55 @@ export class ElementCountMap {
     });
   }
 
+  /**
+   * Converts this value to RawElement.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRawElement(): RawElement { return new RawElement(ElementCountMap.FACTORY_ID, this.toRaw()); }
 
+  /**
+   * Converts this value to talBlocks.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get totalBlocks(): number { return this.counts.reduce((s, c) => s + c.count, 0); }
 
+  /**
+   * Returns Count.
+   *
+   * @param type - Input value for the getCount operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getCount(type: number): number { return this.counts.find(c => c.type === type)?.count ?? 0; }
 
+  /**
+   * Stores Count.
+   *
+   * @param type - Input value for the setCount operation.
+   * @param count - Input value for the setCount operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   setCount(type: number, count: number): ElementCountMap {
     const existing = this.counts.filter(c => c.type !== type);
     return new ElementCountMap(count > 0 ? [...existing, { type, count }] : existing);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   */
   toString() { return `ElementCountMap(${this.counts.length} types, ${this.totalBlocks} total)`; }
 }
 
 // ── 2 : NPCFactionNewsEvent ───────────────────────────────────────────────────
 
+/**
+ * Defines the NPCEventType type used by high-level StarMade object modelling.
+ */
 export type NPCEventType = 'GROWN' | 'WAR' | 'PEACE' | 'ALLIES' | 'TRADING' | 'LOST_STATION' | 'LOST_TERRITORY';
+/**
+ * Defines NPC_EVENT_TYPES for high-level StarMade object modelling.
+ */
 const NPC_EVENT_TYPES: NPCEventType[] = ['GROWN', 'WAR', 'PEACE', 'ALLIES', 'TRADING', 'LOST_STATION', 'LOST_TERRITORY'];
 
 /**
@@ -222,6 +312,15 @@ const NPC_EVENT_TYPES: NPCEventType[] = ['GROWN', 'WAR', 'PEACE', 'ALLIES', 'TRA
 export class NPCFactionNewsEvent {
   static readonly FACTORY_ID = 2;
 
+  /**
+   * Creates a NPCFactionNewsEvent instance.
+   *
+   * @param eventType - Input value for the constructor operation.
+   * @param time - Input value for the constructor operation.
+   * @param factionId - Input value for the constructor operation.
+   * @param system - Input value for the constructor operation.
+   * @param otherEnt - Input value for the constructor operation.
+   */
   constructor(
     public eventType: NPCEventType,
     public time: bigint,
@@ -232,8 +331,19 @@ export class NPCFactionNewsEvent {
     public otherEnt?: string,
   ) {}
 
+  /**
+   * Handles the eventTypeName operation used by high-level StarMade object modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get eventTypeName(): NPCEventType { return this.eventType; }
 
+  /**
+   * Creates a value from Raw.
+   *
+   * @param raw - Input value for the fromRaw operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromRaw(raw: Uint8Array): NPCFactionNewsEvent {
     const r = rawReader(raw);
     const typeIdx = r.readUInt8();
@@ -256,6 +366,11 @@ export class NPCFactionNewsEvent {
     return new NPCFactionNewsEvent(eventType, time, factionId, system, otherEnt);
   }
 
+  /**
+   * Converts this value to Raw.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRaw(): Uint8Array {
     const typeIdx = NPC_EVENT_TYPES.indexOf(this.eventType);
     return makeRaw(w => {
@@ -270,8 +385,16 @@ export class NPCFactionNewsEvent {
     });
   }
 
+  /**
+   * Converts this value to RawElement.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRawElement(): RawElement { return new RawElement(NPCFactionNewsEvent.FACTORY_ID, this.toRaw()); }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   */
   toString() {
     return `NPCFactionNewsEvent(${this.eventType}, faction=${this.factionId}, time=${this.time})`;
   }
@@ -287,8 +410,19 @@ export class NPCFactionNewsEvent {
 export class LongSet {
   static readonly FACTORY_ID = 3;
 
+  /**
+   * Creates a LongSet instance.
+   *
+   * @param values - Input value for the constructor operation.
+   */
   constructor(public values: bigint[]) {}
 
+  /**
+   * Creates a value from Raw.
+   *
+   * @param raw - Input value for the fromRaw operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromRaw(raw: Uint8Array): LongSet {
     const r = rawReader(raw);
     if (r.isEOF()) return new LongSet([]);
@@ -298,6 +432,11 @@ export class LongSet {
     return new LongSet(values);
   }
 
+  /**
+   * Converts this value to Raw.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRaw(): Uint8Array {
     return makeRaw(w => {
       w.writeInt32BE(this.values.length);
@@ -305,21 +444,58 @@ export class LongSet {
     });
   }
 
+  /**
+   * Converts this value to RawElement.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRawElement(): RawElement { return new RawElement(LongSet.FACTORY_ID, this.toRaw()); }
 
   /** Positions decoded from long indexes. */
   get positions(): BlockPosition[] { return this.values.map(indexToPos); }
 
+  /**
+   * Reports whether has is true for the current value.
+   *
+   * @param index - Input value for the has operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   has(index: bigint): boolean { return this.values.includes(index); }
+  /**
+   * Handles the add operation used by high-level StarMade object modelling.
+   *
+   * @param index - Input value for the add operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   add(index: bigint): LongSet { return new LongSet([...this.values, index]); }
+  /**
+   * Handles the addPos operation used by high-level StarMade object modelling.
+   *
+   * @param x - Input value for the addPos operation.
+   * @param y - Input value for the addPos operation.
+   * @param z - Input value for the addPos operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   addPos(x: number, y: number, z: number): LongSet { return this.add(posToIndex(x, y, z)); }
+  /**
+   * Handles the remove operation used by high-level StarMade object modelling.
+   *
+   * @param index - Input value for the remove operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   remove(index: bigint): LongSet { return new LongSet(this.values.filter(v => v !== index)); }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   */
   toString() { return `LongSet(${this.values.length} entries)`; }
 }
 
 // ── 4 : BlockBuffer ───────────────────────────────────────────────────────────
 
+/**
+ * Describes the BufferedBlock data shape used by high-level StarMade object modelling.
+ */
 export interface BufferedBlock {
   x: number; y: number; z: number;
   data: number;
@@ -339,8 +515,19 @@ export interface BufferedBlock {
 export class BlockBuffer {
   static readonly FACTORY_ID = 4;
 
+  /**
+   * Creates a BlockBuffer instance.
+   *
+   * @param blocks - Input value for the constructor operation.
+   */
   constructor(public blocks: BufferedBlock[]) {}
 
+  /**
+   * Creates a value from Raw.
+   *
+   * @param raw - Input value for the fromRaw operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromRaw(raw: Uint8Array): BlockBuffer {
     const r = rawReader(raw);
     if (r.isEOF()) return new BlockBuffer([]);
@@ -365,6 +552,11 @@ export class BlockBuffer {
     return new BlockBuffer(blocks);
   }
 
+  /**
+   * Converts this value to Raw.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRaw(): Uint8Array {
     const metaBlocks = this.blocks.filter(b => b.hasMeta);
     const conSize = metaBlocks.reduce((s, b) => s + (b.connectedFrom?.length ?? 0) + 1, 0);
@@ -386,13 +578,29 @@ export class BlockBuffer {
     });
   }
 
+  /**
+   * Converts this value to RawElement.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRawElement(): RawElement { return new RawElement(BlockBuffer.FACTORY_ID, this.toRaw()); }
+  /**
+   * Handles the blockCount operation used by high-level StarMade object modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get blockCount(): number { return this.blocks.length; }
+  /**
+   * Builds the diagnostic string representation for this value.
+   */
   toString() { return `BlockBuffer(${this.blocks.length} blocks)`; }
 }
 
 // ── 5 : Long2Vector3fMap ──────────────────────────────────────────────────────
 
+/**
+ * Describes the Vec3fEntry data shape used by high-level StarMade object modelling.
+ */
 export interface Vec3fEntry { key: bigint; x: number; y: number; z: number; }
 
 /**
@@ -403,8 +611,19 @@ export interface Vec3fEntry { key: bigint; x: number; y: number; z: number; }
 export class Long2Vector3fMap {
   static readonly FACTORY_ID = 5;
 
+  /**
+   * Creates a Long2Vector3fMap instance.
+   *
+   * @param entries - Input value for the constructor operation.
+   */
   constructor(public entries: Vec3fEntry[]) {}
 
+  /**
+   * Creates a value from Raw.
+   *
+   * @param raw - Input value for the fromRaw operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromRaw(raw: Uint8Array): Long2Vector3fMap {
     const r = rawReader(raw);
     if (r.isEOF()) return new Long2Vector3fMap([]);
@@ -416,6 +635,11 @@ export class Long2Vector3fMap {
     return new Long2Vector3fMap(entries);
   }
 
+  /**
+   * Converts this value to Raw.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRaw(): Uint8Array {
     return makeRaw(w => {
       w.writeInt32BE(this.entries.length);
@@ -425,20 +649,52 @@ export class Long2Vector3fMap {
     });
   }
 
+  /**
+   * Converts this value to RawElement.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRawElement(): RawElement { return new RawElement(Long2Vector3fMap.FACTORY_ID, this.toRaw()); }
 
+  /**
+   * Returns the requested value.
+   *
+   * @param key - Input value for the get operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   get(key: bigint): Vec3fEntry | undefined { return this.entries.find(e => e.key === key); }
+  /**
+   * Stores the requested value.
+   *
+   * @param key - Input value for the set operation.
+   * @param x - Input value for the set operation.
+   * @param y - Input value for the set operation.
+   * @param z - Input value for the set operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   set(key: bigint, x: number, y: number, z: number): Long2Vector3fMap {
     const filtered = this.entries.filter(e => e.key !== key);
     return new Long2Vector3fMap([...filtered, { key, x, y, z }]);
   }
+  /**
+   * Handles the delete operation used by high-level StarMade object modelling.
+   *
+   * @param key - Input value for the delete operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   delete(key: bigint): Long2Vector3fMap { return new Long2Vector3fMap(this.entries.filter(e => e.key !== key)); }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   */
   toString() { return `Long2Vector3fMap(${this.entries.length} entries)`; }
 }
 
 // ── 6 : Long2TransformMap ─────────────────────────────────────────────────────
 
+/**
+ * Describes the Transform data shape used by high-level StarMade object modelling.
+ */
 export interface Transform {
   /** Origine (position) */
   originX: number; originY: number; originZ: number;
@@ -448,6 +704,9 @@ export interface Transform {
   m20: number; m21: number; m22: number;
 }
 
+/**
+ * Describes the TransformEntry data shape used by high-level StarMade object modelling.
+ */
 export interface TransformEntry { key: bigint; transform: Transform; }
 
 /**
@@ -459,8 +718,19 @@ export interface TransformEntry { key: bigint; transform: Transform; }
 export class Long2TransformMap {
   static readonly FACTORY_ID = 6;
 
+  /**
+   * Creates a Long2TransformMap instance.
+   *
+   * @param entries - Input value for the constructor operation.
+   */
   constructor(public entries: TransformEntry[]) {}
 
+  /**
+   * Creates a value from Raw.
+   *
+   * @param raw - Input value for the fromRaw operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromRaw(raw: Uint8Array): Long2TransformMap {
     const r = rawReader(raw);
     if (r.isEOF()) return new Long2TransformMap([]);
@@ -477,6 +747,11 @@ export class Long2TransformMap {
     return new Long2TransformMap(entries);
   }
 
+  /**
+   * Converts this value to Raw.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRaw(): Uint8Array {
     return makeRaw(w => {
       w.writeInt32BE(this.entries.length);
@@ -491,15 +766,42 @@ export class Long2TransformMap {
     });
   }
 
+  /**
+   * Converts this value to RawElement.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toRawElement(): RawElement { return new RawElement(Long2TransformMap.FACTORY_ID, this.toRaw()); }
 
+  /**
+   * Returns the requested value.
+   *
+   * @param key - Input value for the get operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   get(key: bigint): TransformEntry | undefined { return this.entries.find(e => e.key === key); }
+  /**
+   * Stores the requested value.
+   *
+   * @param key - Input value for the set operation.
+   * @param transform - Input value for the set operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   set(key: bigint, transform: Transform): Long2TransformMap {
     const filtered = this.entries.filter(e => e.key !== key);
     return new Long2TransformMap([...filtered, { key, transform }]);
   }
+  /**
+   * Handles the delete operation used by high-level StarMade object modelling.
+   *
+   * @param key - Input value for the delete operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   delete(key: bigint): Long2TransformMap { return new Long2TransformMap(this.entries.filter(e => e.key !== key)); }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   */
   toString() { return `Long2TransformMap(${this.entries.length} entries)`; }
 }
 

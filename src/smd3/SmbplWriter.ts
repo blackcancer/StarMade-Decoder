@@ -20,8 +20,17 @@ import { BufferWriter } from '../core/BufferWriter.js';
 import type { SmbplFile, ControlController, ControlLink } from './SmbplParser.js';
 
 // SERIALIZATION_VERSION = 2, isDisk flag → header = -(1024 + 2) = -1026
+/**
+ * Defines DISK_HEADER for StarMade blueprint and segment file parsing.
+ */
 const DISK_HEADER = -(1024 + 2);
 
+/**
+ * Writes Smbpl to the StarMade binary representation.
+ *
+ * @param file - Input value for the writeSmbpl operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function writeSmbpl(file: SmbplFile): Buffer {
   const w = new BufferWriter();
 
@@ -63,6 +72,12 @@ export function writeSmbpl(file: SmbplFile): Buffer {
   return w.toBuffer();
 }
 
+/**
+ * Returns Controllers.
+ *
+ * @param file - Input value for the getControllers operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function getControllers(file: SmbplFile): ControlController[] {
   if (file.controllers?.length) {
     return file.controllers.map(controller => ({
@@ -79,6 +94,12 @@ function getControllers(file: SmbplFile): ControlController[] {
   return controllersFromLinks(file.links ?? []);
 }
 
+/**
+ * Handles the controllersFromLinks operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param links - Input value for the controllersFromLinks operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function controllersFromLinks(links: ControlLink[]): ControlController[] {
   const byController = new Map<string, ControlController>();
 

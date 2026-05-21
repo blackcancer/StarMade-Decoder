@@ -18,10 +18,19 @@ import { decodeTradeNodeItems, encodeTradeNodeItems, type TradePriceEntry } from
 
 export { type TradePriceEntry };
 
+/**
+ * Represents the TradePricesObject model used by StarMade database object parsing.
+ */
 export class TradePricesObject {
   readonly entDbId: bigint;
   readonly entries: ReadonlyArray<TradePriceEntry>;
 
+  /**
+   * Creates a TradePricesObject instance.
+   *
+   * @param entDbId - Input value for the constructor operation.
+   * @param entries - Input value for the constructor operation.
+   */
   private constructor(entDbId: bigint, entries: TradePriceEntry[]) {
     this.entDbId = entDbId;
     this.entries = Object.freeze([...entries]);
@@ -46,8 +55,18 @@ export class TradePricesObject {
 
   // ── Accessors ──────────────────────────────────────────────────────────────
 
+  /**
+   * Returns the number of values exposed by this collection.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get size(): number { return this.entries.length; }
 
+  /**
+   * Reports whether isEmpty is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get isEmpty(): boolean { return this.entries.length === 0; }
 
   /** All buy orders (station buys from player). */
@@ -129,6 +148,11 @@ export class TradePricesObject {
     return encodeTradeNodeItems({ entDbId: this.entDbId, entries: [...this.entries] });
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `TradePrices(entity=${this.entDbId}, buy=${this.buyOrders.length}, sell=${this.sellOrders.length})`;
   }

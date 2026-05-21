@@ -24,8 +24,18 @@ import {
 } from './SmentParser.js';
 import type { BlueprintHeaderInput, BlueprintIndexScore } from './SmentParser.js';
 
+/**
+ * Defines DEFAULT_GAME_VERSION for StarMade blueprint and segment file parsing.
+ */
 const DEFAULT_GAME_VERSION = '0.203.175_20250426_044402';
 
+/**
+ * Writes Smbph to the StarMade binary representation.
+ *
+ * @param headerInput - Input value for the writeSmbph operation.
+ * @param gameVersion - Input value for the writeSmbph operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function writeSmbph(
   headerInput: BlueprintHeader | BlueprintHeaderInput,
   gameVersion?: string
@@ -66,6 +76,12 @@ export function writeSmbph(
   return w.toBuffer();
 }
 
+/**
+ * Writes BlueprintIndexScore to the StarMade binary representation.
+ *
+ * @param w - Input value for the writeBlueprintIndexScore operation.
+ * @param score - Input value for the writeBlueprintIndexScore operation.
+ */
 function writeBlueprintIndexScore(w: BufferWriter, score: BlueprintIndexScore): void {
   w.writeInt16BE(score.version);
   w.writeFloat64BE(score.legacyOffensiveIndex);

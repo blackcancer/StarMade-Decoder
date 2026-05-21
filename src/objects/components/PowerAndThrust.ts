@@ -42,7 +42,16 @@ import { TagType } from '../../core/TagType.js';
 
 // ── PowerState ────────────────────────────────────────────────────────────────
 
+/**
+ * Represents the PowerState model used by high-level entity component modelling.
+ */
 export class PowerState {
+  /**
+   * Creates a PowerState instance.
+   *
+   * @param initialPower - Input value for the constructor operation.
+   * @param initialBatteryPower - Input value for the constructor operation.
+   */
   constructor(
     /** Initial reactor power (double) */
     readonly initialPower: number,
@@ -52,6 +61,12 @@ export class PowerState {
 
   static EMPTY = new PowerState(0, 0);
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): PowerState {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     const power   = s[0]?.type === TagType.DOUBLE ? s[0].getDouble() : 0;
@@ -65,6 +80,11 @@ export class PowerState {
     return PowerState.fromTag(tag);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     return Tags.struct(null, [
       Tags.double(null, this.initialPower),
@@ -72,14 +92,31 @@ export class PowerState {
     ]);
   }
 
+  /**
+   * Returns a copy updated with Power.
+   *
+   * @param power - Input value for the withPower operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withPower(power: number): PowerState {
     return new PowerState(power, this.initialBatteryPower);
   }
 
+  /**
+   * Returns a copy updated with Battery.
+   *
+   * @param battery - Input value for the withBattery operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withBattery(battery: number): PowerState {
     return new PowerState(this.initialPower, battery);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `PowerState(power=${this.initialPower.toFixed(0)}, battery=${this.initialBatteryPower.toFixed(0)})`;
   }
@@ -87,7 +124,24 @@ export class PowerState {
 
 // ── ThrustConfig ──────────────────────────────────────────────────────────────
 
+/**
+ * Represents the ThrustConfig model used by high-level entity component modelling.
+ */
 export class ThrustConfig {
+  /**
+   * Creates a ThrustConfig instance.
+   *
+   * @param version - Input value for the constructor operation.
+   * @param automaticDampeners - Input value for the constructor operation.
+   * @param automaticReactivateDampeners - Input value for the constructor operation.
+   * @param thrustBalanceX - Input value for the constructor operation.
+   * @param thrustBalanceY - Input value for the constructor operation.
+   * @param thrustBalanceZ - Input value for the constructor operation.
+   * @param rotationBalance - Input value for the constructor operation.
+   * @param automaticDampenersOnExit - Input value for the constructor operation.
+   * @param thrustSharing - Input value for the constructor operation.
+   * @param repulsorBalance - Input value for the constructor operation.
+   */
   constructor(
     readonly version: number,
     /** Automatic dampeners while stopped */
@@ -110,6 +164,12 @@ export class ThrustConfig {
 
   static DEFAULT = new ThrustConfig(0, true, false, 0, 0, 0, 0, true, false, 0);
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): ThrustConfig {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     const version = s[0]?.type === TagType.BYTE ? s[0].getByte() : 0;
@@ -135,6 +195,11 @@ export class ThrustConfig {
       autoDampExit, thrustShare, repulsor);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     return Tags.struct(null, [
       Tags.byte(null, this.version),
@@ -148,18 +213,35 @@ export class ThrustConfig {
     ]);
   }
 
+  /**
+   * Returns a copy updated with Dampeners.
+   *
+   * @param enabled - Input value for the withDampeners operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withDampeners(enabled: boolean): ThrustConfig {
     return new ThrustConfig(this.version, enabled, this.automaticReactivateDampeners,
       this.thrustBalanceX, this.thrustBalanceY, this.thrustBalanceZ, this.rotationBalance,
       this.automaticDampenersOnExit, this.thrustSharing, this.repulsorBalance);
   }
 
+  /**
+   * Returns a copy updated with ThrustSharing.
+   *
+   * @param enabled - Input value for the withThrustSharing operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withThrustSharing(enabled: boolean): ThrustConfig {
     return new ThrustConfig(this.version, this.automaticDampeners, this.automaticReactivateDampeners,
       this.thrustBalanceX, this.thrustBalanceY, this.thrustBalanceZ, this.rotationBalance,
       this.automaticDampenersOnExit, enabled, this.repulsorBalance);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `ThrustConfig(dampeners=${this.automaticDampeners}, sharing=${this.thrustSharing}, rotBal=${this.rotationBalance.toFixed(2)})`;
   }

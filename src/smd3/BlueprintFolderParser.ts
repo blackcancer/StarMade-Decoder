@@ -42,6 +42,16 @@ export function parseBlueprintFolder(folderPath: string): BlueprintArchive {
   return new BlueprintArchive(root);
 }
 
+/**
+ * Parses EntityFolder for StarMade blueprint and segment file parsing.
+ *
+ * @param folderPath - Input value for the _parseEntityFolder operation.
+ * @param name - Input value for the _parseEntityFolder operation.
+ * @param depth - Input value for the _parseEntityFolder operation.
+ * @param offset - Input value for the _parseEntityFolder operation.
+ * @param worldOffset - Input value for the _parseEntityFolder operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _parseEntityFolder(
   folderPath: string,
   name: string,
@@ -99,6 +109,11 @@ function _parseEntityFolder(
   return new BlueprintEntity({ name, header, offset, worldOffset, meta, logic, segments, children });
 }
 
+/**
+ * Handles the emptyHeader operation used by StarMade blueprint and segment file parsing.
+ *
+ * @returns The computed StarMade-Decoder value.
+ */
 function _emptyHeader(): BlueprintHeader {
   return new BlueprintHeader({
     headerVersion: -1,
@@ -109,8 +124,17 @@ function _emptyHeader(): BlueprintHeader {
   });
 }
 
+/**
+ * Defines ZERO_OFFSET for StarMade blueprint and segment file parsing.
+ */
 const ZERO_OFFSET: BlueprintChildOffset = Object.freeze({ x: 0, y: 0, z: 0 });
 
+/**
+ * Reads Meta from the StarMade binary representation.
+ *
+ * @param metaPath - Input value for the _readMeta operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _readMeta(metaPath: string): BlueprintMeta | null {
   if (!fs.existsSync(metaPath)) {
     return null;
@@ -123,6 +147,12 @@ function _readMeta(metaPath: string): BlueprintMeta | null {
   }
 }
 
+/**
+ * Reads Logic from the StarMade binary representation.
+ *
+ * @param logicPath - Input value for the _readLogic operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _readLogic(logicPath: string): BlueprintLogic | null {
   if (!fs.existsSync(logicPath)) {
     return null;
@@ -135,6 +165,12 @@ function _readLogic(logicPath: string): BlueprintLogic | null {
   }
 }
 
+/**
+ * Reads ChildOffsets from the StarMade binary representation.
+ *
+ * @param meta - Input value for the _readChildOffsets operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _readChildOffsets(meta: BlueprintMeta | null): Map<string, BlueprintChildOffset> {
   const offsets = new Map<string, BlueprintChildOffset>();
 
@@ -149,10 +185,23 @@ function _readChildOffsets(meta: BlueprintMeta | null): Map<string, BlueprintChi
   return offsets;
 }
 
+/**
+ * Handles the basenameBlueprintEntityName operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param name - Input value for the _basenameBlueprintEntityName operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _basenameBlueprintEntityName(name: string): string {
   return name.split('/').filter(Boolean).slice(-1)[0] ?? name;
 }
 
+/**
+ * Handles the addOffset operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param left - Input value for the _addOffset operation.
+ * @param right - Input value for the _addOffset operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _addOffset(left: BlueprintChildOffset, right: BlueprintChildOffset): BlueprintChildOffset {
   return {
     x: left.x + right.x,

@@ -7,15 +7,27 @@
  * generation algorithm.
  */
 
+/**
+ * One syllable entry and its optional generation flags from systemNames.syl.
+ */
 export interface SystemNameSyllable {
   value: string;
   flags: string[];
 }
 
+/**
+ * Describes the SystemNamesFile data shape used by StarMade configuration loading, editing, and metadata enrichment.
+ */
 export interface SystemNamesFile {
   syllables: SystemNameSyllable[];
 }
 
+/**
+ * Parses SystemNames for StarMade configuration loading, editing, and metadata enrichment.
+ *
+ * @param data - Input value for the parseSystemNames operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function parseSystemNames(data: Buffer | Uint8Array | string): SystemNamesFile {
   const text = typeof data === 'string'
     ? data
@@ -30,6 +42,13 @@ export function parseSystemNames(data: Buffer | Uint8Array | string): SystemName
   return { syllables };
 }
 
+/**
+ * Writes SystemNames to the StarMade binary representation.
+ *
+ * @param file - Input value for the writeSystemNames operation.
+ * @param newline - Input value for the writeSystemNames operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function writeSystemNames(file: SystemNamesFile, newline = '\n'): Buffer {
   const lines = file.syllables.map(syllable =>
     [syllable.value, ...syllable.flags].join(' ')

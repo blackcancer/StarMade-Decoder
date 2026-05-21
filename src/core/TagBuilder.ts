@@ -286,6 +286,11 @@ export class StructBuilder {
   private readonly _name: string | null;
   private readonly _children: Tag[] = [];
 
+  /**
+   * Creates a StructBuilder instance.
+   *
+   * @param name - Input value for the constructor operation.
+   */
   constructor(name: string | null = null) {
     this._name = name;
   }
@@ -323,20 +328,42 @@ export class ListBuilder {
   private readonly _name: string | null;
   private readonly _items: Tag[] = [];
 
+  /**
+   * Creates a ListBuilder instance.
+   *
+   * @param name - Input value for the constructor operation.
+   */
   constructor(name: string | null = null) {
     this._name = name;
   }
 
+  /**
+   * Handles the add operation used by core binary tag parsing and serialization.
+   *
+   * @param tag - Input value for the add operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   add(tag: Tag): this {
     this._items.push(tag);
     return this;
   }
 
+  /**
+   * Handles the addAll operation used by core binary tag parsing and serialization.
+   *
+   * @param tags - Input value for the addAll operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   addAll(tags: Tag[]): this {
     this._items.push(...tags);
     return this;
   }
 
+  /**
+   * Builds a value for core binary tag parsing and serialization.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   build(): Tag {
     return Tags.list(this._name, this._items);
   }

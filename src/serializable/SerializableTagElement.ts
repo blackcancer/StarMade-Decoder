@@ -22,6 +22,9 @@
 
 import type { BufferWriter } from '../core/BufferWriter.js';
 
+/**
+ * Defines FACTORY_IDS for StarMade SERIALIZABLE payload handling.
+ */
 export const FACTORY_IDS = {
   CONTROL_ELEMENT_MAPPER:  0,
   ELEMENT_COUNT_MAP:       1,
@@ -32,7 +35,20 @@ export const FACTORY_IDS = {
   LONG_2_TRANSFORM_MAP:    6,
 } as const;
 
+/**
+ * Describes the SerializableTagElement data shape used by StarMade SERIALIZABLE payload handling.
+ */
 export interface SerializableTagElement {
+  /**
+   * Returns FactoryId.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   getFactoryId(): number;
+  /**
+   * Writes ToTag to the StarMade binary representation.
+   *
+   * @param writer - Input value for the writeToTag operation.
+   */
   writeToTag(writer: BufferWriter): void;
 }

@@ -23,11 +23,17 @@
 import { Tag } from '../core/Tag.js';
 import { TagType } from '../core/TagType.js';
 
+/**
+ * Describes the FloatingItemEntry data shape used by legacy typed entity parsing.
+ */
 export interface FloatingItemEntry {
   type?: number;
   count?: number;
 }
 
+/**
+ * Describes the FloatingItemsData data shape used by legacy typed entity parsing.
+ */
 export interface FloatingItemsData {
   version: number;
   declaredCount: number;

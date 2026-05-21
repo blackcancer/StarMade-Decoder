@@ -69,7 +69,16 @@ import {
 
 // ── FactionMembership ─────────────────────────────────────────────────────────
 
+/**
+ * Represents the FactionMembership model used by high-level StarMade entity modelling.
+ */
 export class FactionMembership {
+  /**
+   * Creates a FactionMembership instance.
+   *
+   * @param factionId - Input value for the constructor operation.
+   * @param rank - Input value for the constructor operation.
+   */
   constructor(
     readonly factionId: number,
     readonly rank: number,
@@ -77,6 +86,12 @@ export class FactionMembership {
 
   static NONE = new FactionMembership(0, 0);
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): FactionMembership {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     return new FactionMembership(
@@ -85,6 +100,11 @@ export class FactionMembership {
     );
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     return Tags.struct(null, [
       Tags.int(null, this.factionId),
@@ -92,14 +112,44 @@ export class FactionMembership {
     ]);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string { return `FactionMembership(id=${this.factionId}, rank=${this.rank})`; }
 }
 
 // ── PlayerStateEntity ─────────────────────────────────────────────────────────
 
+/**
+ * Represents the PlayerStateEntity model used by high-level StarMade entity modelling.
+ */
 export class PlayerStateEntity extends StarMadeEntity {
   readonly entityType = 'PLAYER_STATE';
 
+  /**
+   * Creates a PlayerStateEntity instance.
+   *
+   * @param credits - Input value for the constructor operation.
+   * @param spawnData - Input value for the constructor operation.
+   * @param inventory - Input value for the constructor operation.
+   * @param currentSector - Input value for the constructor operation.
+   * @param logoutSector - Input value for the constructor operation.
+   * @param logoutLocalX - Input value for the constructor operation.
+   * @param logoutLocalY - Input value for the constructor operation.
+   * @param logoutLocalZ - Input value for the constructor operation.
+   * @param faction - Input value for the constructor operation.
+   * @param lastLogin - Input value for the constructor operation.
+   * @param lastLogout - Input value for the constructor operation.
+   * @param hasCreativeMode - Input value for the constructor operation.
+   * @param lastEnteredEntity - Input value for the constructor operation.
+   * @param health - Input value for the constructor operation.
+   * @param capsuleInventory - Input value for the constructor operation.
+   * @param microInventory - Input value for the constructor operation.
+   * @param macroInventory - Input value for the constructor operation.
+   * @param _rootTag - Input value for the constructor operation.
+   */
   constructor(
     readonly credits: bigint,
     readonly spawnData: PlayerSpawnData,
@@ -150,32 +200,115 @@ export class PlayerStateEntity extends StarMadeEntity {
     });
   }
 
+  /**
+   * Returns Field.
+   *
+   * @param key - Input value for the getField operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getField(key: string): EntityField<PlayerStateEntity> | null {
     return this.fields.find(field => field.key === key) ?? null;
   }
 
+  /**
+   * Handles the hostHistoryField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get hostHistoryField(): EntityField<PlayerStateEntity> | null { return this.fields[9] ?? null; }
+  /**
+   * Handles the playerAiManagerField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get playerAiManagerField(): EntityField<PlayerStateEntity> | null { return this.fields[14] ?? null; }
+  /**
+   * Handles the scanHistoryField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get scanHistoryField(): EntityField<PlayerStateEntity> | null { return this.fields[20] ?? null; }
+  /**
+   * Handles the inventoryBackupField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get inventoryBackupField(): EntityField<PlayerStateEntity> | null { return this.fields[22] ?? null; }
+  /**
+   * Saves dCoordinatesField back to StarMade project files.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get savedCoordinatesField(): EntityField<PlayerStateEntity> | null { return this.fields[23] ?? null; }
+  /**
+   * Handles the ignoredPlayersField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get ignoredPlayersField(): EntityField<PlayerStateEntity> | null { return this.fields[26] ?? null; }
+  /**
+   * Handles the cargoInventoryBlockField operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get cargoInventoryBlockField(): EntityField<PlayerStateEntity> | null { return this.fields[28] ?? null; }
 
+  /**
+   * Handles the hostHistory operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get hostHistory(): PlayerInfoHistoryList { return new PlayerInfoHistoryList(this._childAt(9)); }
+  /**
+   * Handles the scanHistory operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get scanHistory(): ScanHistory { return new ScanHistory(this._childAt(20)); }
+  /**
+   * Handles the inventoryBackup operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get inventoryBackup(): InventoryBackupState { return new InventoryBackupState(this._childAt(22)); }
+  /**
+   * Saves dCoordinates back to StarMade project files.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get savedCoordinates(): SavedCoordinates { return new SavedCoordinates(this._childAt(23)); }
+  /**
+   * Handles the ignoredPlayers operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get ignoredPlayers(): IgnoredPlayers { return new IgnoredPlayers(this._childAt(26)); }
+  /**
+   * Handles the cargoInventoryBlock operation used by high-level StarMade entity modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get cargoInventoryBlock(): CargoInventoryBlock { return new CargoInventoryBlock(this._childAt(28)); }
 
   // ── Immutable updates ──────────────────────────────────────────────
 
+  /**
+   * Returns a copy updated with Credits.
+   *
+   * @param credits - Input value for the withCredits operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withCredits(credits: bigint): PlayerStateEntity {
     const newTag = Tags.setField(this._rootTag, 'credits', Tags.long('credits', credits));
     return PlayerStateEntity.fromTag(newTag);
   }
 
+  /**
+   * Returns a copy updated with CreativeMode.
+   *
+   * @param enabled - Input value for the withCreativeMode operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withCreativeMode(enabled: boolean): PlayerStateEntity {
     // [10] = BYTE hasCreativeMode (anonymous, access by index)
     const children = this._rootTag.getStruct();
@@ -187,6 +320,13 @@ export class PlayerStateEntity extends StarMadeEntity {
     return PlayerStateEntity.fromTag(newTag);
   }
 
+  /**
+   * Returns a copy updated with Faction.
+   *
+   * @param factionId - Input value for the withFaction operation.
+   * @param rank - Input value for the withFaction operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withFaction(factionId: number, rank = 0): PlayerStateEntity {
     const membership = new FactionMembership(factionId, rank);
     const facTag = this._rootTag.getStruct().find(
@@ -201,10 +341,22 @@ export class PlayerStateEntity extends StarMadeEntity {
     return this;
   }
 
+  /**
+   * Returns a copy updated with Health.
+   *
+   * @param health - Input value for the withHealth operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withHealth(health: number): PlayerStateEntity {
     return this._withChild(27, Tags.float(null, health));
   }
 
+  /**
+   * Returns a copy updated with Inventory.
+   *
+   * @param inventory - Input value for the withInventory operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withInventory(inventory: Inventory): PlayerStateEntity {
     const children = this._rootTag.getStruct();
     const newChildren = [...children];
@@ -214,51 +366,128 @@ export class PlayerStateEntity extends StarMadeEntity {
     return PlayerStateEntity.fromTag(new Tag(TagType.STRUCT, this._rootTag.name, newChildren));
   }
 
+  /**
+   * Returns a copy updated with LastLogin.
+   *
+   * @param lastLogin - Input value for the withLastLogin operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withLastLogin(lastLogin: bigint): PlayerStateEntity {
     return this._withChild(7, Tags.long(null, lastLogin));
   }
 
+  /**
+   * Returns a copy updated with LastLogout.
+   *
+   * @param lastLogout - Input value for the withLastLogout operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withLastLogout(lastLogout: bigint): PlayerStateEntity {
     return this._withChild(8, Tags.long(null, lastLogout));
   }
 
+  /**
+   * Returns a copy updated with HostHistory.
+   *
+   * @param hostHistory - Input value for the withHostHistory operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withHostHistory(hostHistory: PlayerInfoHistoryList): PlayerStateEntity {
     return this._withChild(9, hostHistory.toTag());
   }
 
+  /**
+   * Returns a copy updated with LastEnteredEntity.
+   *
+   * @param lastEnteredEntity - Input value for the withLastEnteredEntity operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withLastEnteredEntity(lastEnteredEntity: string): PlayerStateEntity {
     return this._withChild(11, Tags.string(null, lastEnteredEntity));
   }
 
+  /**
+   * Returns a copy updated with MineAutoArmSecs.
+   *
+   * @param mineAutoArmSecs - Input value for the withMineAutoArmSecs operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withMineAutoArmSecs(mineAutoArmSecs: number): PlayerStateEntity {
     return this._withChild(30, Tags.int(null, mineAutoArmSecs));
   }
 
+  /**
+   * Returns a copy updated with ScanHistory.
+   *
+   * @param scanHistory - Input value for the withScanHistory operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withScanHistory(scanHistory: ScanHistory): PlayerStateEntity {
     return this._withChild(20, scanHistory.toTag());
   }
 
+  /**
+   * Returns a copy updated with InventoryBackup.
+   *
+   * @param inventoryBackup - Input value for the withInventoryBackup operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withInventoryBackup(inventoryBackup: InventoryBackupState): PlayerStateEntity {
     return this._withChild(22, inventoryBackup.toTag());
   }
 
+  /**
+   * Returns a copy updated with SavedCoordinates.
+   *
+   * @param savedCoordinates - Input value for the withSavedCoordinates operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withSavedCoordinates(savedCoordinates: SavedCoordinates): PlayerStateEntity {
     return this._withChild(23, savedCoordinates.toTag());
   }
 
+  /**
+   * Returns a copy updated with IgnoredPlayers.
+   *
+   * @param ignoredPlayers - Input value for the withIgnoredPlayers operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withIgnoredPlayers(ignoredPlayers: IgnoredPlayers): PlayerStateEntity {
     return this._withChild(26, ignoredPlayers.toTag());
   }
 
+  /**
+   * Returns a copy updated with CargoInventoryBlock.
+   *
+   * @param cargoInventoryBlock - Input value for the withCargoInventoryBlock operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withCargoInventoryBlock(cargoInventoryBlock: CargoInventoryBlock): PlayerStateEntity {
     return this._withChild(28, cargoInventoryBlock.toTag());
   }
 
   // ── Serialization ─────────────────────────────────────────────────────────
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag { return this._rootTag; }
+  /**
+   * Converts this value to Buffer.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toBuffer(): Buffer { return writeTo(this._rootTag); }
 
+  /**
+   * Returns a copy updated with Child.
+   *
+   * @param index - Input value for the _withChild operation.
+   * @param tag - Input value for the _withChild operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   private _withChild(index: number, tag: Tag): PlayerStateEntity {
     const children = this._rootTag.getStruct().filter(t => t.type !== TagType.FINISH);
     while (children.length <= index) children.push(Tags.nothing(null));
@@ -269,12 +498,24 @@ export class PlayerStateEntity extends StarMadeEntity {
     return PlayerStateEntity.fromTag(new Tag(TagType.STRUCT, this._rootTag.name, [...children, FINISH_TAG]));
   }
 
+  /**
+   * Handles the childAt operation used by high-level StarMade entity modelling.
+   *
+   * @param index - Input value for the _childAt operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   private _childAt(index: number): Tag {
     return this._rootTag.getStruct().filter(t => t.type !== TagType.FINISH)[index] ?? Tags.nothing(null);
   }
 
   // ── Parse ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param root - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(root: Tag): PlayerStateEntity {
     const s = root.type === TagType.STRUCT
       ? root.getStruct().filter(t => t.type !== TagType.FINISH)
@@ -332,15 +573,32 @@ export class PlayerStateEntity extends StarMadeEntity {
     );
   }
 
+  /**
+   * Creates a value from Buffer.
+   *
+   * @param data - Input value for the fromBuffer operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromBuffer(data: Buffer | Uint8Array): PlayerStateEntity {
     return PlayerStateEntity.fromTag(readFrom(data));
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `PlayerState(credits=${this.credits}, sector=${this.currentSector}, creative=${this.hasCreativeMode}, health=${this.health})`;
   }
 }
 
+/**
+ * Handles the factionMembershipFromFieldValue operation used by high-level StarMade entity modelling.
+ *
+ * @param value - Input value for the factionMembershipFromFieldValue operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function factionMembershipFromFieldValue(value: unknown): FactionMembership {
   if (value instanceof FactionMembership) return value;
   if (value !== null && typeof value === 'object') {
@@ -353,6 +611,14 @@ function factionMembershipFromFieldValue(value: unknown): FactionMembership {
   throw new TypeError('Entity field "factionMembership" expects a FactionMembership or {factionId,rank}');
 }
 
+/**
+ * Handles the requireInstance operation used by high-level StarMade entity modelling.
+ *
+ * @param value - Input value for the requireInstance operation.
+ * @param ctor - Input value for the requireInstance operation.
+ * @param key - Input value for the requireInstance operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function requireInstance<T>(value: unknown, ctor: new (...args: any[]) => T, key: string): T {
   if (value instanceof ctor) return value;
   throw new TypeError(`Entity field "${key}" expects a ${ctor.name} object`);

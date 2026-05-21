@@ -34,21 +34,56 @@ import { SerializableTagRegister } from './SerializableTagRegister.js';
 
 // ── RawElement: stores raw bytes ───────────────────────────────────────
 
+/**
+ * Represents the RawElement model used by StarMade SERIALIZABLE payload handling.
+ */
 export class RawElement implements SerializableTagElement {
+  /**
+   * Creates a RawElement instance.
+   *
+   * @param factoryId - Input value for the constructor operation.
+   * @param raw - Input value for the constructor operation.
+   */
   constructor(public readonly factoryId: number, public readonly raw: Uint8Array) {}
+  /**
+   * Returns FactoryId.
+   */
   getFactoryId() { return this.factoryId; }
+  /**
+   * Writes ToTag to the StarMade binary representation.
+   *
+   * @param w - Input value for the writeToTag operation.
+   */
   writeToTag(w: BufferWriter) { w.writeBytes(this.raw); }
+  /**
+   * Builds the diagnostic string representation for this value.
+   */
   toString() { return `RawElement(id=${this.factoryId}, ${this.raw.length}B)`; }
 }
 
 // ── SnapshotFactory: wraps a structured factory and preserves raw bytes ────
 
+/**
+ * Represents the SnapshotFactory model used by StarMade SERIALIZABLE payload handling.
+ */
 class SnapshotFactory implements SerializableTagFactory {
+  /**
+   * Creates a SnapshotFactory instance.
+   *
+   * @param factoryId - Input value for the constructor operation.
+   * @param inner - Input value for the constructor operation.
+   */
   constructor(
     private readonly factoryId: number,
     private readonly inner: { parse(reader: BufferReader): void }
   ) {}
 
+  /**
+   * Builds a value for StarMade SERIALIZABLE payload handling.
+   *
+   * @param reader - Input value for the create operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   create(reader: BufferReader): RawElement {
     const start = reader.offset;
     this.inner.parse(reader);
@@ -60,7 +95,15 @@ class SnapshotFactory implements SerializableTagFactory {
 // ── Factory 1 : ElementCountMap ───────────────────────────────────────────────
 // int existingTypeCount + (short type + int count)×size
 
+/**
+ * Represents the ElementCountMapParser model used by StarMade SERIALIZABLE payload handling.
+ */
 class ElementCountMapParser {
+  /**
+   * Parses input data for StarMade SERIALIZABLE payload handling.
+   *
+   * @param r - Input value for the parse operation.
+   */
   parse(r: BufferReader) {
     const size = r.readInt32BE();
     for (let i = 0; i < size; i++) {
@@ -80,7 +123,15 @@ class ElementCountMapParser {
 // System += Vector3i system
 // The remaining event types do not carry additional data
 
+/**
+ * Represents the NPCFactionNewsEventParser model used by StarMade SERIALIZABLE payload handling.
+ */
 class NPCFactionNewsEventParser {
+  /**
+   * Parses input data for StarMade SERIALIZABLE payload handling.
+   *
+   * @param r - Input value for the parse operation.
+   */
   parse(r: BufferReader) {
     const eventType = r.readUInt8();
     // base : long time + int factionId
@@ -113,7 +164,15 @@ class NPCFactionNewsEventParser {
 // ── Factory 3 : LongSet ───────────────────────────────────────────────────────
 // int size + long×size
 
+/**
+ * Represents the LongSetParser model used by StarMade SERIALIZABLE payload handling.
+ */
 class LongSetParser {
+  /**
+   * Parses input data for StarMade SERIALIZABLE payload handling.
+   *
+   * @param r - Input value for the parse operation.
+   */
   parse(r: BufferReader) {
     const size = r.readInt32BE();
     for (let i = 0; i < size; i++) r.readInt64BE();
@@ -132,7 +191,15 @@ class LongSetParser {
 //       int elemSize
 //       elemSize × 3×short — writeIndexAsShortPos
 
+/**
+ * Represents the ControlElementMapperParser model used by StarMade SERIALIZABLE payload handling.
+ */
 class ControlElementMapperParser {
+  /**
+   * Parses input data for StarMade SERIALIZABLE payload handling.
+   *
+   * @param r - Input value for the parse operation.
+   */
   parse(r: BufferReader) {
     const header = r.readInt32BE(); // negative
     if (header >= 0) {
@@ -176,7 +243,15 @@ class ControlElementMapperParser {
 //   3×short position + int data + boolean meta
 //   si meta : long controller + int mSize + mSize×long connectedFromThis
 
+/**
+ * Represents the BlockBufferParser model used by StarMade SERIALIZABLE payload handling.
+ */
 class BlockBufferParser {
+  /**
+   * Parses input data for StarMade SERIALIZABLE payload handling.
+   *
+   * @param r - Input value for the parse operation.
+   */
   parse(r: BufferReader) {
     const size = r.readInt32BE();
     const controllerSize = r.readInt32BE();
@@ -201,7 +276,15 @@ class BlockBufferParser {
 // ── Factory 5 : Long2Vector3fMap ──────────────────────────────────────────────
 // int size + (long key + 3×float32)×size
 
+/**
+ * Represents the Long2Vector3fMapParser model used by StarMade SERIALIZABLE payload handling.
+ */
 class Long2Vector3fMapParser {
+  /**
+   * Parses input data for StarMade SERIALIZABLE payload handling.
+   *
+   * @param r - Input value for the parse operation.
+   */
   parse(r: BufferReader) {
     const size = r.readInt32BE();
     for (let i = 0; i < size; i++) {
@@ -215,7 +298,15 @@ class Long2Vector3fMapParser {
 // TransformTools.serializeFully = Matrix3f (9 floats) + Vector3f (3 floats) = 48 bytes
 // int size + (long key + 12×float32)×size
 
+/**
+ * Represents the Long2TransformMapParser model used by StarMade SERIALIZABLE payload handling.
+ */
 class Long2TransformMapParser {
+  /**
+   * Parses input data for StarMade SERIALIZABLE payload handling.
+   *
+   * @param r - Input value for the parse operation.
+   */
   parse(r: BufferReader) {
     const size = r.readInt32BE();
     for (let i = 0; i < size; i++) {

@@ -28,6 +28,9 @@ import type { Tag } from '../core/Tag.js';
 import type { Vector3i } from '../types/Vectors.js';
 import { SimulationGroup as SimulationGroupObject, SimulationState } from '../objects/Simulation.js';
 
+/**
+ * Describes the SimGroup data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface SimGroup {
   version: number;
   type: number;
@@ -39,6 +42,9 @@ export interface SimGroup {
   raw: Tag;
 }
 
+/**
+ * Describes the SimFile data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface SimFile {
   version: number;
   groups: SimGroup[];
@@ -49,6 +55,12 @@ export interface SimFile {
   rootTag: Tag;
 }
 
+/**
+ * Parses Sim for StarMade blueprint and segment file parsing.
+ *
+ * @param data - Input value for the parseSim operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function parseSim(data: Buffer | Uint8Array): SimFile {
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const root = readFrom(buf);

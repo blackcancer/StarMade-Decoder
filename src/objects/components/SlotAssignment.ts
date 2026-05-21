@@ -29,7 +29,16 @@ import { Tags } from '../../core/TagBuilder.js';
 import { TagType } from '../../core/TagType.js';
 import { FINISH_TAG } from '../../core/Tag.js';
 
+/**
+ * Represents the SlotAssignment model used by high-level entity component modelling.
+ */
 export class SlotAssignment {
+  /**
+   * Creates a SlotAssignment instance.
+   *
+   * @param version - Input value for the constructor operation.
+   * @param slots - Input value for the constructor operation.
+   */
   constructor(
     readonly version: number,
     /** Map<slot (0-9), blockPosIndex> */
@@ -38,6 +47,12 @@ export class SlotAssignment {
 
   static EMPTY = new SlotAssignment(0, new Map());
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): SlotAssignment {
     const top = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     const version = top[0]?.type === TagType.BYTE ? top[0].getByte() : 0;
@@ -56,6 +71,11 @@ export class SlotAssignment {
     return new SlotAssignment(version, slots);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     const entryTags: Tag[] = [];
     for (const [slot, pos] of this.slots) {
@@ -72,6 +92,13 @@ export class SlotAssignment {
     ]);
   }
 
+  /**
+   * Handles the assign operation used by high-level entity component modelling.
+   *
+   * @param slot - Input value for the assign operation.
+   * @param blockPos - Input value for the assign operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   assign(slot: number, blockPos: bigint): SlotAssignment {
     if (slot < 0 || slot > 9) throw new RangeError(`SlotAssignment: slot ${slot} hors limites (0-9)`);
     const m = new Map(this.slots);
@@ -79,12 +106,23 @@ export class SlotAssignment {
     return new SlotAssignment(this.version, m);
   }
 
+  /**
+   * Handles the unassign operation used by high-level entity component modelling.
+   *
+   * @param slot - Input value for the unassign operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   unassign(slot: number): SlotAssignment {
     const m = new Map(this.slots);
     m.delete(slot);
     return new SlotAssignment(this.version, m);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `SlotAssignment(${this.slots.size} slots)`;
   }

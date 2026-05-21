@@ -26,6 +26,9 @@ import path from 'path';
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
+/**
+ * Describes the SMToolConfigData data shape used by StarMade configuration loading, editing, and metadata enrichment.
+ */
 export interface SMToolConfigData {
   /** Absolute StarMade installation directory. Example: D:/Jeux/.../StarMade */
   starmadeDir: string;
@@ -58,6 +61,9 @@ export interface StarMadePaths {
 
 // ── Main class ─────────────────────────────────────────────────────────
 
+/**
+ * Represents the SMToolConfig model used by StarMade configuration loading, editing, and metadata enrichment.
+ */
 export class SMToolConfig {
   static readonly FILE_NAME = 'SMToolConfig.json';
   static readonly DEFAULT_WORLD = 'world0';
@@ -66,6 +72,11 @@ export class SMToolConfig {
   readonly worldDir: string;
   readonly paths: StarMadePaths;
 
+  /**
+   * Creates a SMToolConfig instance.
+   *
+   * @param data - Input value for the constructor operation.
+   */
   private constructor(data: Required<SMToolConfigData>) {
     this.starmadeDir = path.resolve(data.starmadeDir.replace(/\\/g, '/'));
     this.worldDir    = data.worldDir;
@@ -134,10 +145,22 @@ export class SMToolConfig {
 
   // ── Immutable updates ──────────────────────────────────────────────
 
+  /**
+   * Returns a copy updated with StarmadeDir.
+   *
+   * @param dir - Input value for the withStarmadeDir operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withStarmadeDir(dir: string): SMToolConfig {
     return new SMToolConfig({ starmadeDir: dir, worldDir: this.worldDir });
   }
 
+  /**
+   * Returns a copy updated with WorldDir.
+   *
+   * @param world - Input value for the withWorldDir operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withWorldDir(world: string): SMToolConfig {
     return new SMToolConfig({ starmadeDir: this.starmadeDir, worldDir: world });
   }
@@ -171,6 +194,11 @@ export class SMToolConfig {
 
   // ── Internals ───────────────────────────────────────────────────────────────
 
+  /**
+   * Builds Paths for StarMade configuration loading, editing, and metadata enrichment.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   private _buildPaths(): StarMadePaths {
     const r = this.starmadeDir;
     return {
@@ -188,6 +216,11 @@ export class SMToolConfig {
     };
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `SMToolConfig(starmadeDir="${this.starmadeDir}", worldDir="${this.worldDir}")`;
   }

@@ -41,7 +41,8 @@ git clone <repository>
 cd StarMade-Decoder
 npm install
 npm run build      # compile TypeScript → dist/
-npm test           # run all 525 tests
+npm run docs:check # verify source-level JSDoc/fileoverview coverage
+npm test           # run all 681 tests
 ```
 
 **Node.js ≥ 20 required.**

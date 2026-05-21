@@ -62,7 +62,33 @@ import type { Vector3i } from '../types/Vectors.js';
 
 // ── TradeRoute ────────────────────────────────────────────────────────────────
 
+/**
+ * Represents the TradeRoute model used by high-level StarMade object modelling.
+ */
 export class TradeRoute {
+  /**
+   * Creates a TradeRoute instance.
+   *
+   * @param blocks - Input value for the constructor operation.
+   * @param blockPrice - Input value for the constructor operation.
+   * @param deliveryPrice - Input value for the constructor operation.
+   * @param startTime - Input value for the constructor operation.
+   * @param fromId - Input value for the constructor operation.
+   * @param toId - Input value for the constructor operation.
+   * @param fleetId - Input value for the constructor operation.
+   * @param volume - Input value for the constructor operation.
+   * @param startSystem - Input value for the constructor operation.
+   * @param targetSystem - Input value for the constructor operation.
+   * @param currentSector - Input value for the constructor operation.
+   * @param fromFactionId - Input value for the constructor operation.
+   * @param toFactionId - Input value for the constructor operation.
+   * @param fromPlayer - Input value for the constructor operation.
+   * @param toPlayer - Input value for the constructor operation.
+   * @param fromStation - Input value for the constructor operation.
+   * @param toStation - Input value for the constructor operation.
+   * @param startSector - Input value for the constructor operation.
+   * @param sectorWayPoints - Input value for the constructor operation.
+   */
   constructor(
     /** Traded blocks with their quantities */
     public blocks: ElementCountMap,
@@ -104,6 +130,12 @@ export class TradeRoute {
     public sectorWayPoints: Vector3i[],
   ) {}
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): TradeRoute {
     const outer = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     // outer[0] = BYTE version, outer[1] = STRUCT payload
@@ -159,6 +191,11 @@ export class TradeRoute {
       startSector, sectorWayPoints);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     // Encode the ECM inline (duck typing — works around duplicate ESM modules)
     const counts: Array<{type: number; count: number}> =
@@ -205,6 +242,11 @@ export class TradeRoute {
     return Tags.struct(null, [Tags.byte(null, 0), payload]);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `TradeRoute(${this.fromStation}→${this.toStation}, blocks=${this.blocks.totalBlocks}, price=${this.blockPrice}, fleet=${this.fleetId})`;
   }
@@ -212,7 +254,16 @@ export class TradeRoute {
 
 // ── TradingManager ────────────────────────────────────────────────────────────
 
+/**
+ * Represents the TradingManager model used by high-level StarMade object modelling.
+ */
 export class TradingManager {
+  /**
+   * Creates a TradingManager instance.
+   *
+   * @param version - Input value for the constructor operation.
+   * @param routes - Input value for the constructor operation.
+   */
   constructor(
     public version: number,
     public routes: TradeRoute[],
@@ -220,8 +271,27 @@ export class TradingManager {
 
   // ── Accessors ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Handles the routesFrom operation used by high-level StarMade object modelling.
+   *
+   * @param factionId - Input value for the routesFrom operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   routesFrom(factionId: number): TradeRoute[] { return this.routes.filter(r => r.fromFactionId === factionId); }
+  /**
+   * Handles the routesTo operation used by high-level StarMade object modelling.
+   *
+   * @param factionId - Input value for the routesTo operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   routesTo(factionId: number):   TradeRoute[] { return this.routes.filter(r => r.toFactionId   === factionId); }
+  /**
+   * Handles the routesBetween operation used by high-level StarMade object modelling.
+   *
+   * @param a - Input value for the routesBetween operation.
+   * @param b - Input value for the routesBetween operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   routesBetween(a: number, b: number): TradeRoute[] {
     return this.routes.filter(r =>
       (r.fromFactionId === a && r.toFactionId === b) ||
@@ -230,20 +300,45 @@ export class TradingManager {
 
   // ── Immutable updates ───────────────────────────────────────────────
 
+  /**
+   * Handles the addRoute operation used by high-level StarMade object modelling.
+   *
+   * @param route - Input value for the addRoute operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   addRoute(route: TradeRoute): TradingManager {
     return new TradingManager(this.version, [...this.routes, route]);
   }
 
+  /**
+   * Handles the removeRoute operation used by high-level StarMade object modelling.
+   *
+   * @param idx - Input value for the removeRoute operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   removeRoute(idx: number): TradingManager {
     return new TradingManager(this.version, this.routes.filter((_, i) => i !== idx));
   }
 
+  /**
+   * Handles the updateRoute operation used by high-level StarMade object modelling.
+   *
+   * @param idx - Input value for the updateRoute operation.
+   * @param route - Input value for the updateRoute operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   updateRoute(idx: number, route: TradeRoute): TradingManager {
     return new TradingManager(this.version, this.routes.map((r, i) => i === idx ? route : r));
   }
 
   // ── Serialization ─────────────────────────────────────────────────────────
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param root - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(root: Tag): TradingManager {
     if (root.type !== TagType.STRUCT) throw new TypeError('TradingManager: expected STRUCT');
     const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
@@ -260,6 +355,11 @@ export class TradingManager {
     return new TradingManager(version, routes);
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     const routeTags = [...this.routes.map(r => r.toTag()), FINISH_TAG];
     return Tags.struct(null, [
@@ -271,10 +371,21 @@ export class TradingManager {
   /** Encodes to binary for TRADING.tag. */
   toBuffer(): Buffer { return writeTo(this.toTag()); }
 
+  /**
+   * Creates a value from Buffer.
+   *
+   * @param data - Input value for the fromBuffer operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromBuffer(data: Buffer | Uint8Array): TradingManager {
     return TradingManager.fromTag(readFrom(data));
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `TradingManager(v${this.version}, ${this.routes.length} routes)`;
   }

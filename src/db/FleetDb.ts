@@ -45,6 +45,9 @@ export const FLEET_COMMAND_TYPES = [
   'STOP_INTERDICT',   // 21
 ] as const;
 
+/**
+ * Defines the FleetCommandType type used by StarMade database object parsing.
+ */
 export type FleetCommandType = typeof FLEET_COMMAND_TYPES[number];
 
 // ── Command arg types (NetUtil constants) ─────────────────────────────────────
@@ -65,6 +68,9 @@ export const CMD_TYPES = {
   VECTOR4f:   12,
 } as const;
 
+/**
+ * Defines the CommandArg type used by StarMade database object parsing.
+ */
 export type CommandArg =
   | { kind: 'int';    value: number }
   | { kind: 'long';   value: bigint }
@@ -81,6 +87,9 @@ export type CommandArg =
 
 // ── FleetCommand decoder ──────────────────────────────────────────────────────
 
+/**
+ * Describes the FleetCommand data shape used by StarMade database object parsing.
+ */
 export interface FleetCommand {
   /** Database ID of the fleet this command targets. */
   fleetDbId: bigint;
@@ -135,6 +144,12 @@ export function encodeFleetCommand(cmd: FleetCommand, padTo = 1024): Buffer {
 
 // ── Command args read/write (Command.serialize / deserialize) ─────────────────
 
+/**
+ * Reads CommandArgs from the StarMade binary representation.
+ *
+ * @param r - Input value for the readCommandArgs operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function readCommandArgs(r: BufferReader): CommandArg[] {
   const count = r.readUInt8();
   const args: CommandArg[] = [];
@@ -172,6 +187,12 @@ function readCommandArgs(r: BufferReader): CommandArg[] {
   return args;
 }
 
+/**
+ * Writes CommandArgs to the StarMade binary representation.
+ *
+ * @param w - Input value for the writeCommandArgs operation.
+ * @param args - Input value for the writeCommandArgs operation.
+ */
 function writeCommandArgs(w: BufferWriter, args: CommandArg[]): void {
   if (args.length > 255) throw new RangeError(`Too many command args: ${args.length}`);
   w.writeUInt8(args.length);
@@ -211,6 +232,9 @@ function writeCommandArgs(w: BufferWriter, args: CommandArg[]): void {
 
 // ── SAVED_REMOTES ─────────────────────────────────────────────────────────────
 
+/**
+ * Describes the FleetRemotes data shape used by StarMade database object parsing.
+ */
 export interface FleetRemotes {
   remotes: Map<string, boolean>;
   /** @deprecated raw fallback bytes for unrecognized formats. Prefer remotes. */

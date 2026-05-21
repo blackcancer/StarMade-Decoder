@@ -21,6 +21,9 @@
 import { Tag } from '../core/Tag.js';
 import { TagType } from '../core/TagType.js';
 
+/**
+ * Describes the CatalogEntry data shape used by legacy typed entity parsing.
+ */
 export interface CatalogEntry {
   uid?: string;
   name?: string;
@@ -31,6 +34,9 @@ export interface CatalogEntry {
   category?: string;
 }
 
+/**
+ * Describes the CatalogData data shape used by legacy typed entity parsing.
+ */
 export interface CatalogData {
   playerEntries: CatalogEntry[];
   systemEntries: CatalogEntry[];
@@ -62,6 +68,12 @@ export function parseCatalog(root: Tag): CatalogData {
   return { playerEntries, systemEntries, totalCount: playerEntries.length + systemEntries.length };
 }
 
+/**
+ * Parses Entry for legacy typed entity parsing.
+ *
+ * @param tag - Input value for the _parseEntry operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _parseEntry(tag: Tag): CatalogEntry {
   const entry: CatalogEntry = {};
   const fields = tag.getStruct().filter(t => t.type !== TagType.FINISH);

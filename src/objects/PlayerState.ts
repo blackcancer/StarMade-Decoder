@@ -20,7 +20,25 @@ import { FINISH_TAG } from '../core/Tag.js';
 import { readFrom, writeTo } from '../core/TagParser.js';
 import type { Vector3i, Vector3f } from '../types/Vectors.js';
 
+/**
+ * Represents the PlayerState model used by high-level StarMade object modelling.
+ */
 export class PlayerState {
+  /**
+   * Creates a PlayerState instance.
+   *
+   * @param credits - Input value for the constructor operation.
+   * @param currentSector - Input value for the constructor operation.
+   * @param logoutSector - Input value for the constructor operation.
+   * @param logoutLocalPos - Input value for the constructor operation.
+   * @param lastLogin - Input value for the constructor operation.
+   * @param lastLogout - Input value for the constructor operation.
+   * @param hasCreativeMode - Input value for the constructor operation.
+   * @param lastEnteredEntity - Input value for the constructor operation.
+   * @param factionId - Input value for the constructor operation.
+   * @param factionRank - Input value for the constructor operation.
+   * @param _rootTag - Input value for the constructor operation.
+   */
   constructor(
     public credits: bigint,
     public currentSector: Vector3i | null,
@@ -38,11 +56,23 @@ export class PlayerState {
 
   // ── Updates (returns a modified PlayerState) ────────────────────────
 
+  /**
+   * Returns a copy updated with Credits.
+   *
+   * @param credits - Input value for the withCredits operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withCredits(credits: bigint): PlayerState {
     const newTag = Tags.setField(this._rootTag, 'credits', Tags.long('credits', credits));
     return PlayerState.fromTag(newTag);
   }
 
+  /**
+   * Returns a copy updated with CreativeMode.
+   *
+   * @param enabled - Input value for the withCreativeMode operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withCreativeMode(enabled: boolean): PlayerState {
     if (this._rootTag.type !== TagType.STRUCT) return this;
     const children = this._rootTag.getStruct();
@@ -55,6 +85,13 @@ export class PlayerState {
     return PlayerState.fromTag(newTag);
   }
 
+  /**
+   * Returns a copy updated with Faction.
+   *
+   * @param id - Input value for the withFaction operation.
+   * @param rank - Input value for the withFaction operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withFaction(id: number, rank = 0): PlayerState {
     // The faction is in a child struct — search by name
     let tag = this._rootTag;
@@ -71,9 +108,25 @@ export class PlayerState {
 
   // ── Serialization ──────────────────────────────────────────────────────────
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag { return this._rootTag; }
+  /**
+   * Converts this value to Buffer.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toBuffer(): Buffer { return writeTo(this._rootTag); }
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param root - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(root: Tag): PlayerState {
     const s = root.type === TagType.STRUCT
       ? root.getStruct().filter(t => t.type !== TagType.FINISH)
@@ -108,10 +161,21 @@ export class PlayerState {
       lastLogin, lastLogout, creativeMode, lastEntered, factionId, factionRank, root);
   }
 
+  /**
+   * Creates a value from Buffer.
+   *
+   * @param data - Input value for the fromBuffer operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromBuffer(data: Buffer | Uint8Array): PlayerState {
     return PlayerState.fromTag(readFrom(data));
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `PlayerState(credits=${this.credits}, sector=${JSON.stringify(this.currentSector)}, creative=${this.hasCreativeMode})`;
   }

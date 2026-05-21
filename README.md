@@ -10,7 +10,7 @@ It is a faithful port of the Java `org.schema.schine.resource.tag.Tag` binary ta
 - Preserve binary round-trips for supported save files
 - Parse StarMade blueprint formats (`.sment`, `.smd3`, `.smtpl`, `.smbpl`, `.smbpm`, `.smbmm`)
 - Use typed domain objects for ships, stations, players, factions, catalogs, trading, inventories, and serializable payloads
-- Load StarMade configuration files and save custom overrides safely
+- Load StarMade configuration files, inspect BlockConfig element information, and save custom overrides safely
 - Fetch and test public retrocompatibility samples from StarMadeDock
 
 ## Installation
@@ -34,6 +34,23 @@ console.log(toJSON(root, 2));
 
 const out = writeTo(root);
 fs.writeFileSync('FACTIONS.fac', out);
+```
+
+## BlockConfig element information
+
+`BlockConfig` keeps the raw StarMade XML fields available, and also exposes
+StarMade-Open-inspired element information for common tooling needs.
+
+```ts
+import { BlockConfig, SMToolConfig } from 'starmade-decoder';
+
+const cfg = SMToolConfig.fromData({ starmadeDir: '/srv/StarMade' });
+const blocks = BlockConfig.load(cfg);
+const greyHull = blocks.getElementInfoByName('Grey Basic Armor');
+
+console.log(greyHull?.render.style.key);                 // NORMAL
+console.log(greyHull?.recipe.consistence[0].name);       // Metal Mesh
+console.log(blocks.getElementInfoByTypeName('CARGO_SPACE')?.render.defaultOrientation);
 ```
 
 ## Documentation
@@ -98,7 +115,8 @@ scripts/         sample fetch helpers
 
 ```bash
 npm run build
-npm test          # 525 tests
+npm run docs:check
+npm test          # 681 tests
 npm run coverage  # 99% statements, 82% branches
 npm run coverage:check
 ```
@@ -111,4 +129,4 @@ npm run coverage:check
 | Lines | 99% |
 | Functions | 93% |
 | Branches | 82% |
-| Tests | 525 passing |
+| Tests | 681 passing |

@@ -778,7 +778,8 @@ Reads and writes `server.cfg` while preserving all comments and blank lines.
 
 ### `BlockConfig`
 
-Loads and edits `BlockConfig.xml`. Provides typed access to all block definitions.
+Loads and edits `BlockConfig.xml`. Provides typed access to raw block definitions
+and StarMade-Open-inspired `BlockElementInfo` views.
 
 **Parse:**
 - `BlockConfig.load(config)` — reads the vanilla file from `data/config/` and merges any custom override from `customBlockConfig/BlockConfigImport.xml` when present.
@@ -787,8 +788,24 @@ Loads and edits `BlockConfig.xml`. Provides typed access to all block definition
 **Read:**
 - `bc.getById(id)` — `BlockDefinition | undefined`.
 - `bc.getByName(name)` — case-insensitive, `BlockDefinition | undefined`.
-- `bc.getAll()` — all `BlockDefinition[]`.
+- `bc.getByTypeName(typeName)` — BlockTypes XML key lookup, `BlockDefinition | undefined`.
+- `bc.all` — all `BlockDefinition[]`.
+- `bc.elementInfo` — all `BlockElementInfo[]` views.
 - `bc.size` — total count.
+- `bc[Symbol.iterator]()` — iterates `BlockDefinition` values.
+
+**Element information:**
+- `definition.toElementInfo(config?)` — returns one domain-grouped `BlockElementInfo`.
+- `bc.getElementInfoById(id)` — element information by numeric block ID.
+- `bc.getElementInfoByName(name)` — element information by display name.
+- `bc.getElementInfoByTypeName(typeName)` — element information by BlockTypes key.
+- `bc.resolveReference(typeNameOrId)` — stable block reference with unresolved fallback.
+- `bc.resolveIngredient(ingredient)` — recipe ingredient plus resolved block reference.
+
+`BlockElementInfo` groups data into `identity`, `render`, `logic`, `recipe`,
+`factory`, `collision`, `chamber`, and `classification` sections. This mirrors
+the shape of StarMade-Open `ElementInformation` while keeping the raw
+`BlockDefinition` available as `info.block`.
 
 **Mutate (return new `BlockConfig`):**
 - `bc.set(definition)` — adds or replaces a block definition.
@@ -813,8 +830,16 @@ Loads and edits `BlockConfig.xml`. Provides typed access to all block definition
 | `hasOrientation` | `boolean` | Supports rotation |
 | `canActivate` | `boolean` | Can be toggled |
 | `isDeprecated` | `boolean` | Should not be used |
+| `textureIds` | `readonly number[]` | Texture IDs in StarMade face order |
+| `animated` | `boolean` | Raw XML animation flag |
+| `blockStyle` | `number` | StarMade block style ID |
+| `metadata` | `BlockDefinitionMetadata` | Less common parsed BlockConfig tags |
 
 - `definition.with(overrides)` — returns an immutable copy with modified fields.
+- `definition.style` — resolved `BlockStyleDescriptor`.
+- `definition.resourceInjectionInfo` — resolved `ResourceInjectionDescriptor`.
+- `definition.defaultOrientation` — StarMade-Open default orientation rule.
+- `definition.render`, `definition.collision`, `definition.factory` — focused views without reference resolution.
 
 ### `BlockRegistry`
 

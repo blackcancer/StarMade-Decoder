@@ -29,10 +29,25 @@ import { Tag } from '../../core/Tag.js';
 import { Tags } from '../../core/TagBuilder.js';
 import { TagType } from '../../core/TagType.js';
 
+/**
+ * Represents the DockingState model used by high-level entity component modelling.
+ */
 export class DockingState {
   /** "NONE" = undocked entity */
   static readonly NONE = 'NONE';
 
+  /**
+   * Creates a DockingState instance.
+   *
+   * @param dockedTo - Input value for the constructor operation.
+   * @param dockPosX - Input value for the constructor operation.
+   * @param dockPosY - Input value for the constructor operation.
+   * @param dockPosZ - Input value for the constructor operation.
+   * @param sizeX - Input value for the constructor operation.
+   * @param sizeY - Input value for the constructor operation.
+   * @param sizeZ - Input value for the constructor operation.
+   * @param localOrientation - Input value for the constructor operation.
+   */
   constructor(
     /** host entity UID ("NONE" when free) */
     readonly dockedTo: string,
@@ -50,8 +65,19 @@ export class DockingState {
 
   static UNDOCKED = new DockingState(DockingState.NONE, 0, 0, 0, 0, 0, 0, 0);
 
+  /**
+   * Reports whether isDocked is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get isDocked(): boolean { return this.dockedTo !== DockingState.NONE && this.dockedTo !== ''; }
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): DockingState {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     const dockedTo    = s[0]?.type === TagType.STRING   ? s[0].getString()   : DockingState.NONE;
@@ -68,6 +94,11 @@ export class DockingState {
     );
   }
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     const children: Tag[] = [
       Tags.string(null, this.dockedTo),
@@ -80,14 +111,34 @@ export class DockingState {
     return Tags.struct(null, children);
   }
 
+  /**
+   * Handles the undock operation used by high-level entity component modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   undock(): DockingState {
     return new DockingState(DockingState.NONE, 0, 0, 0, this.sizeX, this.sizeY, this.sizeZ, 0);
   }
 
+  /**
+   * Handles the dockTo operation used by high-level entity component modelling.
+   *
+   * @param entityUID - Input value for the dockTo operation.
+   * @param posX - Input value for the dockTo operation.
+   * @param posY - Input value for the dockTo operation.
+   * @param posZ - Input value for the dockTo operation.
+   * @param orient - Input value for the dockTo operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   dockTo(entityUID: string, posX: number, posY: number, posZ: number, orient = 0): DockingState {
     return new DockingState(entityUID, posX, posY, posZ, this.sizeX, this.sizeY, this.sizeZ, orient);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     if (!this.isDocked) return 'DockingState(UNDOCKED)';
     return `DockingState(dockedTo="${this.dockedTo}", pos=(${this.dockPosX},${this.dockPosY},${this.dockPosZ}))`;

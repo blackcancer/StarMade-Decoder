@@ -64,6 +64,9 @@ import {
 
 // ── PullPermission ────────────────────────────────────────────────────────────
 
+/**
+ * Enumerates PullPermission values used by high-level entity component modelling.
+ */
 export enum PullPermission {
   ALL  = 0,
   SELF = 1,
@@ -72,7 +75,21 @@ export enum PullPermission {
 
 // ── ManagerContainer ──────────────────────────────────────────────────────────
 
+/**
+ * Represents the ManagerContainer model used by high-level entity component modelling.
+ */
 export class ManagerContainer {
+  /**
+   * Creates a ManagerContainer instance.
+   *
+   * @param inventories - Input value for the constructor operation.
+   * @param initialShields - Input value for the constructor operation.
+   * @param powerState - Input value for the constructor operation.
+   * @param texts - Input value for the constructor operation.
+   * @param slotAssignment - Input value for the constructor operation.
+   * @param pullPermission - Input value for the constructor operation.
+   * @param _children - Input value for the constructor operation.
+   */
   constructor(
     /** Inventories by type (0=main, 1=capsule, 2=micro, 3=macro). */
     readonly inventories: ReadonlyMap<number, Inventory>,
@@ -97,6 +114,12 @@ export class ManagerContainer {
     PullPermission.ALL, []
   );
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param tag - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(tag: Tag): ManagerContainer {
     if (tag.type !== TagType.STRUCT) return ManagerContainer.EMPTY;
     const parts = tag.getStruct().filter(t => t.type !== TagType.FINISH);
@@ -152,13 +175,39 @@ export class ManagerContainer {
 
   // ── Accessors ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Returns Inventory.
+   *
+   * @param type - Input value for the getInventory operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getInventory(type = 0): Inventory {
     return this.inventories.get(type) ?? Inventory.EMPTY;
   }
 
+  /**
+   * Handles the mainInventory operation used by high-level entity component modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get mainInventory():     Inventory { return this.getInventory(0); }
+  /**
+   * Handles the capsuleInventory operation used by high-level entity component modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get capsuleInventory():  Inventory { return this.getInventory(1); }
+  /**
+   * Handles the microInventory operation used by high-level entity component modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get microInventory():    Inventory { return this.getInventory(2); }
+  /**
+   * Handles the macroInventory operation used by high-level entity component modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get macroInventory():    Inventory { return this.getInventory(3); }
 
   /** StarMade-Open ManagerContainer slot view, without raw Tag exposure. */
@@ -179,16 +228,57 @@ export class ManagerContainer {
     });
   }
 
+  /**
+   * Returns Field.
+   *
+   * @param key - Input value for the getField operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getField(key: string): EntityField<ManagerContainer> | null {
     return this.fields.find(field => field.key === key) ?? null;
   }
 
+  /**
+   * Handles the warpGateInfo operation used by high-level entity component modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get warpGateInfo(): WarpGateInfo { return new WarpGateInfo(this._children[8]); }
+  /**
+   * Handles the modules operation used by high-level entity component modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get modules(): ManagerModulesState { return new ManagerModulesState(this._children[9]); }
+  /**
+   * Handles the aiConfiguration operation used by high-level entity component modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get aiConfiguration(): AiConfigurationState { return new AiConfigurationState(this._children[10]); }
+  /**
+   * Handles the raceGateInfo operation used by high-level entity component modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get raceGateInfo(): RaceGateInfo { return new RaceGateInfo(this._children[12]); }
+  /**
+   * Handles the unloadedDummies operation used by high-level entity component modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get unloadedDummies(): UnloadedDummiesState { return new UnloadedDummiesState(this._children[13]); }
+  /**
+   * Handles the moduleExplosions operation used by high-level entity component modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get moduleExplosions(): ModuleExplosionsState { return new ModuleExplosionsState(this._children[14]); }
+  /**
+   * Handles the modData operation used by high-level entity component modelling.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get modData(): ModDataState { return new ModDataState(this._children[17]); }
 
   /**
@@ -214,6 +304,13 @@ export class ManagerContainer {
 
   // ── Immutable updates ──────────────────────────────────────────────
 
+  /**
+   * Returns a copy updated with Inventory.
+   *
+   * @param type - Input value for the withInventory operation.
+   * @param inventory - Input value for the withInventory operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withInventory(type: number, inventory: Inventory): ManagerContainer {
     const m = new Map(this.inventories);
     m.set(type, inventory);
@@ -221,61 +318,138 @@ export class ManagerContainer {
       this.texts, this.slotAssignment, this.pullPermission, this._children);
   }
 
+  /**
+   * Returns a copy updated with Power.
+   *
+   * @param power - Input value for the withPower operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withPower(power: PowerState): ManagerContainer {
     return new ManagerContainer(this.inventories, this.initialShields, power,
       this.texts, this.slotAssignment, this.pullPermission, this._children);
   }
 
+  /**
+   * Returns a copy updated with InitialShields.
+   *
+   * @param initialShields - Input value for the withInitialShields operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withInitialShields(initialShields: number): ManagerContainer {
     return new ManagerContainer(this.inventories, initialShields, this.powerState,
       this.texts, this.slotAssignment, this.pullPermission, this._children);
   }
 
+  /**
+   * Returns a copy updated with Texts.
+   *
+   * @param texts - Input value for the withTexts operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withTexts(texts: TextBlocks): ManagerContainer {
     return new ManagerContainer(this.inventories, this.initialShields, this.powerState,
       texts, this.slotAssignment, this.pullPermission, this._children);
   }
 
+  /**
+   * Returns a copy updated with SlotAssignment.
+   *
+   * @param sa - Input value for the withSlotAssignment operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withSlotAssignment(sa: SlotAssignment): ManagerContainer {
     return new ManagerContainer(this.inventories, this.initialShields, this.powerState,
       this.texts, sa, this.pullPermission, this._children);
   }
 
+  /**
+   * Returns a copy updated with PullPermission.
+   *
+   * @param perm - Input value for the withPullPermission operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withPullPermission(perm: PullPermission): ManagerContainer {
     return new ManagerContainer(this.inventories, this.initialShields, this.powerState,
       this.texts, this.slotAssignment, perm, this._children);
   }
 
+  /**
+   * Returns a copy updated with WarpGateInfo.
+   *
+   * @param warpGateInfo - Input value for the withWarpGateInfo operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withWarpGateInfo(warpGateInfo: WarpGateInfo): ManagerContainer {
     return this._withChild(8, warpGateInfo.toTag());
   }
 
+  /**
+   * Returns a copy updated with Modules.
+   *
+   * @param modules - Input value for the withModules operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withModules(modules: ManagerModulesState): ManagerContainer {
     return this._withChild(9, modules.toTag());
   }
 
+  /**
+   * Returns a copy updated with AiConfiguration.
+   *
+   * @param aiConfiguration - Input value for the withAiConfiguration operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withAiConfiguration(aiConfiguration: AiConfigurationState): ManagerContainer {
     return this._withChild(10, aiConfiguration.toTag());
   }
 
+  /**
+   * Returns a copy updated with RaceGateInfo.
+   *
+   * @param raceGateInfo - Input value for the withRaceGateInfo operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withRaceGateInfo(raceGateInfo: RaceGateInfo): ManagerContainer {
     return this._withChild(12, raceGateInfo.toTag());
   }
 
+  /**
+   * Returns a copy updated with UnloadedDummies.
+   *
+   * @param unloadedDummies - Input value for the withUnloadedDummies operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withUnloadedDummies(unloadedDummies: UnloadedDummiesState): ManagerContainer {
     return this._withChild(13, unloadedDummies.toTag());
   }
 
+  /**
+   * Returns a copy updated with ModuleExplosions.
+   *
+   * @param moduleExplosions - Input value for the withModuleExplosions operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withModuleExplosions(moduleExplosions: ModuleExplosionsState): ManagerContainer {
     return this._withChild(14, moduleExplosions.toTag());
   }
 
+  /**
+   * Returns a copy updated with ModData.
+   *
+   * @param modData - Input value for the withModData operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withModData(modData: ModDataState): ManagerContainer {
     return this._withChild(17, modData.toTag());
   }
 
   // ── Serialization ─────────────────────────────────────────────────────────
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag {
     // Rebuild from raw children while replacing the known fields
     const children = [...this._children];
@@ -300,10 +474,22 @@ export class ManagerContainer {
     return new Tag(TagType.STRUCT, 'container', [...children, FINISH_TAG]);
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `ManagerContainer(inventories=${this.inventories.size}, shields=${this.initialShields}, power=${this.powerState})`;
   }
 
+  /**
+   * Returns a copy updated with Child.
+   *
+   * @param index - Input value for the _withChild operation.
+   * @param tag - Input value for the _withChild operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   private _withChild(index: number, tag: Tag): ManagerContainer {
     const children = [...this._children];
     while (children.length <= index) children.push(Tags.nothing(null));
@@ -316,11 +502,25 @@ export class ManagerContainer {
   }
 }
 
+/**
+ * Handles the requireInstance operation used by high-level entity component modelling.
+ *
+ * @param value - Input value for the requireInstance operation.
+ * @param ctor - Input value for the requireInstance operation.
+ * @param key - Input value for the requireInstance operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function requireInstance<T>(value: unknown, ctor: new (...args: any[]) => T, key: string): T {
   if (value instanceof ctor) return value;
   throw new TypeError(`Entity field "${key}" expects a ${ctor.name} object`);
 }
 
+/**
+ * Handles the requireTextBlocks operation used by high-level entity component modelling.
+ *
+ * @param value - Input value for the requireTextBlocks operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function requireTextBlocks(value: unknown): TextBlocks {
   if (value instanceof TextBlocks) return value;
   throw new TypeError('Entity field "texts" expects a TextBlocks object');

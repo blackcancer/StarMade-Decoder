@@ -22,6 +22,9 @@ import path from 'path';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import type { SMToolConfig } from './SMToolConfig.js';
 
+/**
+ * Defines PARSER for StarMade configuration loading, editing, and metadata enrichment.
+ */
 const PARSER = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
@@ -29,6 +32,9 @@ const PARSER = new XMLParser({
   trimValues: true,
 });
 
+/**
+ * Defines BUILDER for StarMade configuration loading, editing, and metadata enrichment.
+ */
 const BUILDER = new XMLBuilder({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
@@ -38,14 +44,26 @@ const BUILDER = new XMLBuilder({
 
 // ── Behavior entry value ──────────────────────────────────────
 
+/**
+ * Defines the BehaviorValue type used by StarMade configuration loading, editing, and metadata enrichment.
+ */
 export type BehaviorValue = string | number | boolean;
 
 // ── BlockBehaviorConfig ───────────────────────────────────────────────────────
 
+/**
+ * Represents the BlockBehaviorConfig model used by StarMade configuration loading, editing, and metadata enrichment.
+ */
 export class BlockBehaviorConfig {
   private readonly _values: Map<string, BehaviorValue>;
   private readonly _rawXml: any; // raw XML tree for round-tripping
 
+  /**
+   * Creates a BlockBehaviorConfig instance.
+   *
+   * @param values - Input value for the constructor operation.
+   * @param raw - Input value for the constructor operation.
+   */
   private constructor(values: Map<string, BehaviorValue>, raw: any) {
     this._values = values;
     this._rawXml = raw;
@@ -53,6 +71,12 @@ export class BlockBehaviorConfig {
 
   // ── Loading ────────────────────────────────────────────────────────────
 
+  /**
+   * Loads data from StarMade project files.
+   *
+   * @param config - Input value for the load operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static load(config: SMToolConfig): BlockBehaviorConfig {
     const vanillaPath = path.join(config.paths.dataConfig, 'blockBehaviorConfig.xml');
     if (!fs.existsSync(vanillaPath)) {
@@ -77,6 +101,12 @@ export class BlockBehaviorConfig {
     return new BlockBehaviorConfig(values, raw);
   }
 
+  /**
+   * Creates a value from Xml.
+   *
+   * @param xml - Input value for the fromXml operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromXml(xml: string): BlockBehaviorConfig {
     const raw = PARSER.parse(xml);
     return new BlockBehaviorConfig(BlockBehaviorConfig._flatten(raw), raw);
@@ -84,12 +114,39 @@ export class BlockBehaviorConfig {
 
   // ── Accessors ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Returns the requested value.
+   *
+   * @param key - Input value for the get operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   get(key: string): BehaviorValue | undefined { return this._values.get(key); }
+  /**
+   * Returns Number.
+   *
+   * @param key - Input value for the getNumber operation.
+   * @param def - Input value for the getNumber operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getNumber(key: string, def = 0): number     { return Number(this._values.get(key) ?? def); }
+  /**
+   * Returns Boolean.
+   *
+   * @param key - Input value for the getBoolean operation.
+   * @param def - Input value for the getBoolean operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getBoolean(key: string, def = false): boolean {
     const v = this._values.get(key);
     return v === undefined ? def : (v === true || String(v).toLowerCase() === 'true');
   }
+  /**
+   * Returns String.
+   *
+   * @param key - Input value for the getString operation.
+   * @param def - Input value for the getString operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getString(key: string, def = ''): string    { return String(this._values.get(key) ?? def); }
 
   /** All flattened entries (key = XML path using '.') */
@@ -97,6 +154,13 @@ export class BlockBehaviorConfig {
 
   // ── Immutable updates ──────────────────────────────────────────────
 
+  /**
+   * Stores the requested value.
+   *
+   * @param key - Input value for the set operation.
+   * @param value - Input value for the set operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   set(key: string, value: BehaviorValue): BlockBehaviorConfig {
     const newValues = new Map(this._values);
     newValues.set(key, value);
@@ -162,5 +226,10 @@ export class BlockBehaviorConfig {
     return result;
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string { return `BlockBehaviorConfig(${this._values.size} values)`; }
 }

@@ -19,6 +19,12 @@ import { BufferWriter } from '../core/BufferWriter.js';
 import { BlueprintTemplate, normalizeBlueprintTemplate } from './SmtplParser.js';
 import type { SmtplFileInput, TemplateInventoryFilter } from './SmtplParser.js';
 
+/**
+ * Writes Smtpl to the StarMade binary representation.
+ *
+ * @param fileInput - Input value for the writeSmtpl operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function writeSmtpl(fileInput: BlueprintTemplate | SmtplFileInput): Buffer {
   const file = normalizeBlueprintTemplate(fileInput);
   const w = new BufferWriter();
@@ -78,6 +84,12 @@ export function writeSmtpl(fileInput: BlueprintTemplate | SmtplFileInput): Buffe
   return w.toBuffer();
 }
 
+/**
+ * Writes Filters to the StarMade binary representation.
+ *
+ * @param w - Input value for the writeFilters operation.
+ * @param filters - Input value for the writeFilters operation.
+ */
 function writeFilters(w: BufferWriter, filters: TemplateInventoryFilter[]): void {
   w.writeInt32BE(filters.length);
   for (const filter of filters) {

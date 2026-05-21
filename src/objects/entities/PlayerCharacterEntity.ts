@@ -39,9 +39,28 @@ import {
   type EntityField,
 } from '../EntityFieldView.js';
 
+/**
+ * Represents the PlayerCharacterEntity model used by high-level StarMade entity modelling.
+ */
 export class PlayerCharacterEntity extends GameEntity {
   readonly entityType = 'PLAYER_CHARACTER';
 
+  /**
+   * Creates a PlayerCharacterEntity instance.
+   *
+   * @param mass - Input value for the constructor operation.
+   * @param transform - Input value for the constructor operation.
+   * @param sectorPosition - Input value for the constructor operation.
+   * @param factionId - Input value for the constructor operation.
+   * @param owner - Input value for the constructor operation.
+   * @param spawnController - Input value for the constructor operation.
+   * @param transformableChildren - Input value for the constructor operation.
+   * @param id - Input value for the constructor operation.
+   * @param speed - Input value for the constructor operation.
+   * @param stepHeight - Input value for the constructor operation.
+   * @param noAI - Input value for the constructor operation.
+   * @param _rootTag - Input value for the constructor operation.
+   */
   constructor(
     // GameEntity
     mass: number, transform: EntityTransform,
@@ -71,12 +90,24 @@ export class PlayerCharacterEntity extends GameEntity {
     });
   }
 
+  /**
+   * Returns Field.
+   *
+   * @param key - Input value for the getField operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getField(key: string): EntityField<PlayerCharacterEntity> | null {
     return this.fields.find(field => field.key === key) ?? null;
   }
 
   // ── Updates ──────────────────────────────────────────────────────────
 
+  /**
+   * Returns a cloned copy of this value.
+   *
+   * @param overrides - Input value for the _clone operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   protected _clone(overrides: Partial<{
     mass: number; transform: EntityTransform; sectorPosition: SectorPosition;
     factionId: number; owner: string; spawnController: SpawnController;
@@ -101,6 +132,12 @@ export class PlayerCharacterEntity extends GameEntity {
     ) as unknown as this;
   }
 
+  /**
+   * Returns a copy updated with Id.
+   *
+   * @param id - Input value for the withId operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withId(id: number): PlayerCharacterEntity {
     return new PlayerCharacterEntity(
       this.mass, this.transform, this.sectorPosition, this.factionId, this.owner,
@@ -109,6 +146,12 @@ export class PlayerCharacterEntity extends GameEntity {
     );
   }
 
+  /**
+   * Returns a copy updated with Speed.
+   *
+   * @param speed - Input value for the withSpeed operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withSpeed(speed: number): PlayerCharacterEntity {
     return new PlayerCharacterEntity(
       this.mass, this.transform, this.sectorPosition, this.factionId, this.owner,
@@ -117,6 +160,12 @@ export class PlayerCharacterEntity extends GameEntity {
     );
   }
 
+  /**
+   * Returns a copy updated with StepHeight.
+   *
+   * @param stepHeight - Input value for the withStepHeight operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withStepHeight(stepHeight: number): PlayerCharacterEntity {
     return new PlayerCharacterEntity(
       this.mass, this.transform, this.sectorPosition, this.factionId, this.owner,
@@ -127,9 +176,25 @@ export class PlayerCharacterEntity extends GameEntity {
 
   // ── Serialization ─────────────────────────────────────────────────────────
 
+  /**
+   * Converts this value to Tag.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toTag(): Tag { return this._rootTag; }
+  /**
+   * Converts this value to Buffer.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toBuffer(): Buffer { return writeTo(this._rootTag); }
 
+  /**
+   * Handles the rebuildRootTag operation used by high-level StarMade entity modelling.
+   *
+   * @param overrides - Input value for the _rebuildRootTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   private _rebuildRootTag(overrides: Partial<{
     id: number; speed: number; stepHeight: number; mass: number; transform: EntityTransform;
     factionId: number; owner: string; sector: SectorPosition; spawnController: SpawnController;
@@ -159,6 +224,12 @@ export class PlayerCharacterEntity extends GameEntity {
 
   // ── Parse ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Creates a value from Tag.
+   *
+   * @param root - Input value for the fromTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromTag(root: Tag): PlayerCharacterEntity {
     const s = root.type === TagType.STRUCT
       ? root.getStruct().filter(t => t.type !== TagType.FINISH)
@@ -190,10 +261,21 @@ export class PlayerCharacterEntity extends GameEntity {
     );
   }
 
+  /**
+   * Creates a value from Buffer.
+   *
+   * @param data - Input value for the fromBuffer operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   static fromBuffer(data: Buffer | Uint8Array): PlayerCharacterEntity {
     return PlayerCharacterEntity.fromTag(readFrom(data));
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `PlayerCharacter(id=${this.id}, speed=${this.speed}, sector=${this.sectorPosition}, faction=${this.factionId}, owner="${this.owner}")`;
   }

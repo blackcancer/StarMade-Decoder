@@ -26,8 +26,14 @@ import type { SMToolConfig } from './SMToolConfig.js';
 
 // ── Metadata by key (type + default) — port ServerConfig.java ────────────
 
+/**
+ * Defines the ConfigValueType type used by StarMade configuration loading, editing, and metadata enrichment.
+ */
 export type ConfigValueType = 'string' | 'boolean' | 'number' | 'float';
 
+/**
+ * Describes the ConfigEntryMeta data shape used by StarMade configuration loading, editing, and metadata enrichment.
+ */
 export interface ConfigEntryMeta {
   type: ConfigValueType;
   default: string | boolean | number;
@@ -235,6 +241,9 @@ export const SERVER_CONFIG_SCHEMA: Readonly<Record<string, ConfigEntryMeta>> = {
 
 // ── Entry value ───────────────────────────────────────────────────────
 
+/**
+ * Defines the ConfigValue type used by StarMade configuration loading, editing, and metadata enrichment.
+ */
 export type ConfigValue = string | boolean | number;
 
 // ── ServerConfig class ───────────────────────────────────────────────────────
@@ -251,6 +260,12 @@ export class ServerConfig {
   /** Raw lines with comments — used for faithful rewriting */
   private readonly _lines: string[];
 
+  /**
+   * Creates a ServerConfig instance.
+   *
+   * @param values - Input value for the constructor operation.
+   * @param lines - Input value for the constructor operation.
+   */
   private constructor(values: Map<string, ConfigValue>, lines: string[]) {
     this._values = values;
     this._lines  = lines;
@@ -290,9 +305,33 @@ export class ServerConfig {
     return meta ? meta.default : '';
   }
 
+  /**
+   * Returns String.
+   *
+   * @param key - Input value for the getString operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getString(key: string): string   { return String(this.get(key)); }
+  /**
+   * Returns Number.
+   *
+   * @param key - Input value for the getNumber operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getNumber(key: string): number   { return Number(this.get(key)); }
+  /**
+   * Returns Boolean.
+   *
+   * @param key - Input value for the getBoolean operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getBoolean(key: string): boolean { return this.get(key) === true || String(this.get(key)).toLowerCase() === 'true'; }
+  /**
+   * Returns Float.
+   *
+   * @param key - Input value for the getFloat operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getFloat(key: string):   number  { return parseFloat(String(this.get(key))); }
 
   /** All values (key → value). */
@@ -344,6 +383,12 @@ export class ServerConfig {
 
   // ── Parsing interne ───────────────────────────────────────────────────────
 
+  /**
+   * Parses input data for StarMade configuration loading, editing, and metadata enrichment.
+   *
+   * @param lines - Input value for the _parse operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   private static _parse(lines: string[]): ServerConfig {
     const values = new Map<string, ConfigValue>();
 
@@ -366,6 +411,13 @@ export class ServerConfig {
     return new ServerConfig(values, [...lines]);
   }
 
+  /**
+   * Handles the castValue operation used by StarMade configuration loading, editing, and metadata enrichment.
+   *
+   * @param key - Input value for the _castValue operation.
+   * @param raw - Input value for the _castValue operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   private static _castValue(key: string, raw: string): ConfigValue {
     const meta = SERVER_CONFIG_SCHEMA[key];
     if (!meta) return raw; // unknown key → raw string
@@ -378,6 +430,14 @@ export class ServerConfig {
     }
   }
 
+  /**
+   * Handles the updateLine operation used by StarMade configuration loading, editing, and metadata enrichment.
+   *
+   * @param lines - Input value for the _updateLine operation.
+   * @param key - Input value for the _updateLine operation.
+   * @param value - Input value for the _updateLine operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   private static _updateLine(lines: string[], key: string, value: ConfigValue): string[] {
     const newLines = [...lines];
     for (let i = 0; i < newLines.length; i++) {

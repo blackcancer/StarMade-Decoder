@@ -46,6 +46,9 @@ import type { RawElement } from '../serializable/Factories.js';
 
 // ── Type de l'objet produit ───────────────────────────────────────────────────
 
+/**
+ * Defines the TagObject type used by core binary tag parsing and serialization.
+ */
 export type TagObject =
   | StructObject
   | ListObject
@@ -53,12 +56,18 @@ export type TagObject =
   | SerializableObject
   | ByteArrayObject;
 
+/**
+ * Describes the StructObject data shape used by core binary tag parsing and serialization.
+ */
 export interface StructObject {
   type: 'STRUCT';
   name?: string;
   children: TagObject[];
 }
 
+/**
+ * Describes the ListObject data shape used by core binary tag parsing and serialization.
+ */
 export interface ListObject {
   type: 'LIST';
   name?: string;
@@ -66,12 +75,18 @@ export interface ListObject {
   items: TagObject[];
 }
 
+/**
+ * Describes the PrimitiveObject data shape used by core binary tag parsing and serialization.
+ */
 export interface PrimitiveObject {
   type: string;
   name?: string;
   value: string | number | boolean | VecObject | MatObject;
 }
 
+/**
+ * Describes the SerializableObject data shape used by core binary tag parsing and serialization.
+ */
 export interface SerializableObject {
   type: 'SERIALIZABLE';
   name?: string;
@@ -81,6 +96,9 @@ export interface SerializableObject {
   hex: string;
 }
 
+/**
+ * Describes the ByteArrayObject data shape used by core binary tag parsing and serialization.
+ */
 export interface ByteArrayObject {
   type: 'BYTE_ARRAY';
   name?: string;
@@ -88,11 +106,20 @@ export interface ByteArrayObject {
   hex: string;
 }
 
+/**
+ * Describes the VecObject data shape used by core binary tag parsing and serialization.
+ */
 export interface VecObject { x: number; y: number; z: number; w?: number; }
+/**
+ * Describes the MatObject data shape used by core binary tag parsing and serialization.
+ */
 export interface MatObject { rows: number[][]; }
 
 // ── SERIALIZABLE factory names ──────────────────────────────────────────
 
+/**
+ * Defines FACTORY_NAMES for core binary tag parsing and serialization.
+ */
 const FACTORY_NAMES: Record<number, string> = {
   0: 'ControlElementMapper',
   1: 'ElementCountMap',

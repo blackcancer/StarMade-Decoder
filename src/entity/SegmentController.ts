@@ -37,6 +37,9 @@ import { TagType } from '../core/TagType.js';
 import type { Vector3i } from '../types/Vectors.js';
 import type { Matrix4f } from '../types/Matrices.js';
 
+/**
+ * Describes the SegmentControllerData data shape used by legacy typed entity parsing.
+ */
 export interface SegmentControllerData {
   uniqueId: string;
   realName: string;
@@ -131,18 +134,47 @@ export function parseSegmentController(root: Tag): SegmentControllerData {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * Handles the str operation used by legacy typed entity parsing.
+ *
+ * @param tags - Input value for the _str operation.
+ * @param name - Input value for the _str operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _str(tags: Tag[], name: string): string | undefined {
   return tags.find(t => t.name === name && t.type === TagType.STRING)?.getString();
 }
 
+/**
+ * Handles the vec3i operation used by legacy typed entity parsing.
+ *
+ * @param tags - Input value for the _vec3i operation.
+ * @param name - Input value for the _vec3i operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _vec3i(tags: Tag[], name: string): Vector3i | undefined {
   return tags.find(t => t.name === name && t.type === TagType.VECTOR3i)?.getVector3i();
 }
 
+/**
+ * Finds Struct in legacy typed entity parsing.
+ *
+ * @param tags - Input value for the _findStruct operation.
+ * @param name - Input value for the _findStruct operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _findStruct(tags: Tag[], name: string): Tag | undefined {
   return tags.find(t => t.name === name && t.type === TagType.STRUCT);
 }
 
+/**
+ * Handles the idx operation used by legacy typed entity parsing.
+ *
+ * @param tags - Input value for the _idx operation.
+ * @param idx - Input value for the _idx operation.
+ * @param type - Input value for the _idx operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _idx(tags: Tag[], idx: number, type: TagType): string | undefined {
   if (tags[idx]?.type === type) return (tags[idx].value as string);
   return undefined;

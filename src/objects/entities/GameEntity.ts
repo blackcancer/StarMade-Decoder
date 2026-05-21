@@ -41,7 +41,21 @@ import {
   type EntityField,
 } from '../EntityFieldView.js';
 
+/**
+ * Represents the GameEntity model used by high-level StarMade entity modelling.
+ */
 export abstract class GameEntity extends StarMadeEntity {
+  /**
+   * Creates a GameEntity instance.
+   *
+   * @param mass - Input value for the constructor operation.
+   * @param transform - Input value for the constructor operation.
+   * @param sectorPosition - Input value for the constructor operation.
+   * @param factionId - Input value for the constructor operation.
+   * @param owner - Input value for the constructor operation.
+   * @param spawnController - Input value for the constructor operation.
+   * @param _transformableChildren - Input value for the constructor operation.
+   */
   constructor(
     readonly mass: number,
     readonly transform: EntityTransform,
@@ -58,6 +72,11 @@ export abstract class GameEntity extends StarMadeEntity {
 
   // ── Accessors ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Reports whether isNPC is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get isNPC(): boolean { return this.factionId < 0; }
 
   /** StarMade-Open SimpleTransformableSendableObject slot view, without raw Tag exposure. */
@@ -80,12 +99,24 @@ export abstract class GameEntity extends StarMadeEntity {
     return this.transformableFields[2] ?? null;
   }
 
+  /**
+   * Returns TransformableField.
+   *
+   * @param key - Input value for the getTransformableField operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getTransformableField(key: string): EntityField<this> | null {
     return this.transformableFields.find(field => field.key === key) ?? null;
   }
 
   // ── Updates ──────────────────────────────────────────────────────────
 
+  /**
+   * Returns a cloned copy of this value.
+   *
+   * @param overrides - Input value for the _clone operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   protected abstract _clone(overrides: Partial<{
     mass: number;
     transform: EntityTransform;
@@ -95,24 +126,54 @@ export abstract class GameEntity extends StarMadeEntity {
     spawnController: SpawnController;
   }>): this;
 
+  /**
+   * Returns a copy updated with FactionId.
+   *
+   * @param fid - Input value for the withFactionId operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withFactionId(fid: number): this {
     return this._clone({ factionId: fid });
   }
 
+  /**
+   * Returns a copy updated with Owner.
+   *
+   * @param owner - Input value for the withOwner operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withOwner(owner: string): this {
     return this._clone({ owner });
   }
 
+  /**
+   * Returns a copy updated with Sector.
+   *
+   * @param sector - Input value for the withSector operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withSector(sector: SectorPosition): this {
     return this._clone({ sectorPosition: sector });
   }
 
+  /**
+   * Returns a copy updated with Mass.
+   *
+   * @param mass - Input value for the withMass operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withMass(mass: number): this {
     return this._clone({ mass });
   }
 
   // ── Serialization of "transformable" ─────────────────────────────────────
 
+  /**
+   * Builds TransformableTag for high-level StarMade entity modelling.
+   *
+   * @param overrides - Input value for the _buildTransformableTag operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   protected _buildTransformableTag(overrides: Partial<{
     mass: number;
     transform: EntityTransform;
@@ -196,11 +257,23 @@ export abstract class GameEntity extends StarMadeEntity {
     return { mass, transform, sectorPosition, factionId, owner, spawnController, children };
   }
 
+  /**
+   * Builds the diagnostic string representation for this value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   toString(): string {
     return `${this.entityType}(sector=${this.sectorPosition}, faction=${this.factionId}, owner="${this.owner}")`;
   }
 }
 
+/**
+ * Handles the sectorPositionFromFieldValue operation used by high-level StarMade entity modelling.
+ *
+ * @param value - Input value for the sectorPositionFromFieldValue operation.
+ * @param key - Input value for the sectorPositionFromFieldValue operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function sectorPositionFromFieldValue(value: unknown, key: string): SectorPosition {
   if (value instanceof SectorPosition) return value;
   if (value !== null && typeof value === 'object') {
@@ -214,6 +287,12 @@ function sectorPositionFromFieldValue(value: unknown, key: string): SectorPositi
   throw new TypeError(`Entity field "${key}" expects a SectorPosition or {x,y,z}`);
 }
 
+/**
+ * Handles the entityTransformFromFieldValue operation used by high-level StarMade entity modelling.
+ *
+ * @param value - Input value for the entityTransformFromFieldValue operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function entityTransformFromFieldValue(value: unknown): EntityTransform {
   if (value instanceof EntityTransform) return value;
   if (Array.isArray(value) && value.length >= 16) {

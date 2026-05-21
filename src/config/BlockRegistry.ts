@@ -22,6 +22,9 @@
 
 import type { BlockConfig, BlockDefinition } from './BlockConfig.js';
 
+/**
+ * Represents the BlockRegistry model used by StarMade configuration loading, editing, and metadata enrichment.
+ */
 export class BlockRegistry {
   private static _config: BlockConfig | null = null;
 

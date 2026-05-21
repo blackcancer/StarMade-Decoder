@@ -55,6 +55,9 @@ export const BLUEPRINT_TYPE = [
   'ASTEROID',         // 4
   'PLANET',           // 5
 ] as const;
+/**
+ * Defines the BlueprintType type used by StarMade blueprint and segment file parsing.
+ */
 export type BlueprintType = typeof BLUEPRINT_TYPE[number];
 
 /**
@@ -87,18 +90,30 @@ export const BLUEPRINT_CLASSIFICATION = [
   'NONE_ICO',
   'ALL_SHIPS',
 ] as const;
+/**
+ * Defines the BlueprintClassification type used by StarMade blueprint and segment file parsing.
+ */
 export type BlueprintClassification = typeof BLUEPRINT_CLASSIFICATION[number];
 
+/**
+ * Describes the BoundingBox data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface BoundingBox {
   minX: number; minY: number; minZ: number;
   maxX: number; maxY: number; maxZ: number;
 }
 
+/**
+ * Describes the BlueprintBlockCount data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface BlueprintBlockCount {
   type: number;
   count: number;
 }
 
+/**
+ * Defines the BlueprintScoreField type used by StarMade blueprint and segment file parsing.
+ */
 export type BlueprintScoreField =
   | 'offensiveIndex'
   | 'defensiveIndex'
@@ -109,6 +124,9 @@ export type BlueprintScoreField =
   | 'supportIndex'
   | 'miningIndex';
 
+/**
+ * Defines BLUEPRINT_SCORE_FIELDS for StarMade blueprint and segment file parsing.
+ */
 const BLUEPRINT_SCORE_FIELDS: BlueprintScoreField[] = [
   'offensiveIndex',
   'defensiveIndex',
@@ -120,6 +138,9 @@ const BLUEPRINT_SCORE_FIELDS: BlueprintScoreField[] = [
   'miningIndex',
 ];
 
+/**
+ * Describes the BlueprintIndexScoreInput data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface BlueprintIndexScoreInput {
   version?: number;
   legacyOffensiveIndex?: number;
@@ -133,6 +154,9 @@ export interface BlueprintIndexScoreInput {
   miningIndex?: number;
 }
 
+/**
+ * Represents the BlueprintIndexScore model used by StarMade blueprint and segment file parsing.
+ */
 export class BlueprintIndexScore {
   version: number;
   legacyOffensiveIndex: number;
@@ -145,6 +169,11 @@ export class BlueprintIndexScore {
   supportIndex: number;
   miningIndex: number;
 
+  /**
+   * Creates a BlueprintIndexScore instance.
+   *
+   * @param input - Input value for the constructor operation.
+   */
   constructor(input: BlueprintIndexScoreInput = {}) {
     this.version = input.version === 0 ? 0 : 1;
     this.offensiveIndex = input.offensiveIndex ?? 0;
@@ -158,35 +187,78 @@ export class BlueprintIndexScore {
     this.miningIndex = input.miningIndex ?? 0;
   }
 
+  /**
+   * Reports whether hasMiningIndex is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get hasMiningIndex(): boolean {
     return this.version >= 1;
   }
 
+  /**
+   * Converts this value to talIndex.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get totalIndex(): number {
     return BLUEPRINT_SCORE_FIELDS.reduce((sum, field) => sum + this[field], 0);
   }
 
+  /**
+   * Handles the strongestField operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get strongestField(): BlueprintScoreField {
     return BLUEPRINT_SCORE_FIELDS.reduce((best, field) => this[field] > this[best] ? field : best);
   }
 
+  /**
+   * Returns Value.
+   *
+   * @param field - Input value for the getValue operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   getValue(field: BlueprintScoreField): number {
     return this[field];
   }
 
+  /**
+   * Returns a copy updated with Version.
+   *
+   * @param version - Input value for the withVersion operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withVersion(version: number): BlueprintIndexScore {
     return new BlueprintIndexScore({ ...this, version });
   }
 
+  /**
+   * Returns a copy updated with Value.
+   *
+   * @param field - Input value for the withValue operation.
+   * @param value - Input value for the withValue operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withValue(field: BlueprintScoreField, value: number): BlueprintIndexScore {
     return new BlueprintIndexScore({ ...this, [field]: value });
   }
 
+  /**
+   * Returns a copy updated with Values.
+   *
+   * @param values - Input value for the withValues operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withValues(values: Partial<BlueprintIndexScoreInput>): BlueprintIndexScore {
     return new BlueprintIndexScore({ ...this, ...values });
   }
 }
 
+/**
+ * Describes the BlueprintHeaderInput data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface BlueprintHeaderInput {
   headerVersion: number;
   gameVersion?: string;
@@ -198,6 +270,9 @@ export interface BlueprintHeaderInput {
   score?: BlueprintIndexScore | BlueprintIndexScoreInput | null;
 }
 
+/**
+ * Represents the BlueprintHeader model used by StarMade blueprint and segment file parsing.
+ */
 export class BlueprintHeader {
   headerVersion: number;
   gameVersion?: string;
@@ -208,6 +283,11 @@ export class BlueprintHeader {
   totalBlockCount: number;
   score: BlueprintIndexScore | null;
 
+  /**
+   * Creates a BlueprintHeader instance.
+   *
+   * @param input - Input value for the constructor operation.
+   */
   constructor(input: BlueprintHeaderInput) {
     this.headerVersion = input.headerVersion;
     this.gameVersion = input.gameVersion;
@@ -219,30 +299,65 @@ export class BlueprintHeader {
     this.score = normalizeBlueprintScore(input.score);
   }
 
+  /**
+   * Handles the entityTypeOrdinal operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get entityTypeOrdinal(): number {
     return blueprintTypeOrdinal(this.entityType);
   }
 
+  /**
+   * Handles the classificationOrdinal operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get classificationOrdinal(): number {
     return this.classification ?? defaultBlueprintClassification(this.entityType);
   }
 
+  /**
+   * Handles the classificationName operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get classificationName(): string {
     return blueprintClassificationName(this.classificationOrdinal);
   }
 
+  /**
+   * Reports whether hasScore is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get hasScore(): boolean {
     return this.score !== null;
   }
 
+  /**
+   * Handles the blockTypeCount operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get blockTypeCount(): number {
     return this.blockCountByType.length;
   }
 
+  /**
+   * Reports whether isEmpty is true for the current value.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get isEmpty(): boolean {
     return this.totalBlockCount <= 0;
   }
 
+  /**
+   * Handles the boundsSize operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get boundsSize(): { x: number; y: number; z: number } {
     const box = this.boundingBox;
     return {
@@ -252,6 +367,11 @@ export class BlueprintHeader {
     };
   }
 
+  /**
+   * Handles the boundsCenter operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get boundsCenter(): { x: number; y: number; z: number } {
     const box = this.boundingBox;
     return {
@@ -261,65 +381,153 @@ export class BlueprintHeader {
     };
   }
 
+  /**
+   * Handles the boundsVolume operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get boundsVolume(): number {
     const size = this.boundsSize;
     return size.x * size.y * size.z;
   }
 
+  /**
+   * Handles the blockCountOf operation used by StarMade blueprint and segment file parsing.
+   *
+   * @param type - Input value for the blockCountOf operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   blockCountOf(type: number): number {
     return this.blockCountByType.find(entry => entry.type === type)?.count ?? 0;
   }
 
+  /**
+   * Reports whether hasBlockType is true for the current value.
+   *
+   * @param type - Input value for the hasBlockType operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   hasBlockType(type: number): boolean {
     return this.blockCountOf(type) > 0;
   }
 
+  /**
+   * Handles the blockShare operation used by StarMade blueprint and segment file parsing.
+   *
+   * @param type - Input value for the blockShare operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   blockShare(type: number): number {
     return this.totalBlockCount > 0 ? this.blockCountOf(type) / this.totalBlockCount : 0;
   }
 
+  /**
+   * Converts this value to pBlockTypes.
+   *
+   * @param limit - Input value for the topBlockTypes operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   topBlockTypes(limit = 10): BlueprintBlockCount[] {
     return [...this.blockCountByType].sort((a, b) => b.count - a.count).slice(0, limit);
   }
 
+  /**
+   * Returns a copy updated with HeaderVersion.
+   *
+   * @param headerVersion - Input value for the withHeaderVersion operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withHeaderVersion(headerVersion: number): BlueprintHeader {
     return new BlueprintHeader({ ...this, headerVersion });
   }
 
+  /**
+   * Returns a copy updated with GameVersion.
+   *
+   * @param gameVersion - Input value for the withGameVersion operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withGameVersion(gameVersion: string | undefined): BlueprintHeader {
     return new BlueprintHeader({ ...this, gameVersion });
   }
 
+  /**
+   * Returns a copy updated with EntityType.
+   *
+   * @param entityType - Input value for the withEntityType operation.
+   * @param classification - Input value for the withEntityType operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withEntityType(entityType: string, classification = defaultBlueprintClassification(entityType)): BlueprintHeader {
     return new BlueprintHeader({ ...this, entityType, classification });
   }
 
+  /**
+   * Returns a copy updated with Classification.
+   *
+   * @param classification - Input value for the withClassification operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withClassification(classification: number | undefined): BlueprintHeader {
     return new BlueprintHeader({ ...this, classification });
   }
 
+  /**
+   * Returns a copy updated with BoundingBox.
+   *
+   * @param boundingBox - Input value for the withBoundingBox operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withBoundingBox(boundingBox: BoundingBox): BlueprintHeader {
     return new BlueprintHeader({ ...this, boundingBox });
   }
 
+  /**
+   * Returns a copy updated with BlockCounts.
+   *
+   * @param blockCountByType - Input value for the withBlockCounts operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withBlockCounts(blockCountByType: BlueprintBlockCount[]): BlueprintHeader {
     return new BlueprintHeader({ ...this, blockCountByType, totalBlockCount: undefined });
   }
 
+  /**
+   * Returns a copy updated with BlockCount.
+   *
+   * @param type - Input value for the withBlockCount operation.
+   * @param count - Input value for the withBlockCount operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withBlockCount(type: number, count: number): BlueprintHeader {
     const withoutType = this.blockCountByType.filter(entry => entry.type !== type);
     return this.withBlockCounts(count > 0 ? [...withoutType, { type, count }] : withoutType);
   }
 
+  /**
+   * Returns a copy updated with outBlockType.
+   *
+   * @param type - Input value for the withoutBlockType operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withoutBlockType(type: number): BlueprintHeader {
     return this.withBlockCount(type, 0);
   }
 
+  /**
+   * Returns a copy updated with Score.
+   *
+   * @param score - Input value for the withScore operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withScore(score: BlueprintIndexScore | BlueprintIndexScoreInput | null): BlueprintHeader {
     return new BlueprintHeader({ ...this, score });
   }
 }
 
+/**
+ * Describes the SmentEntity data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface SmentEntity {
   /** Folder name inside the zip (for example "Sobek Dreadnought 2025-jun-02" or "ATTACHED_5") */
   name: string;
@@ -338,6 +546,9 @@ export interface SmentEntity {
   children: SmentEntity[];
 }
 
+/**
+ * Describes the SmentFile data shape used by StarMade blueprint and segment file parsing.
+ */
 export interface SmentFile {
   /** Root entity, usually the main ship or station. */
   root: SmentEntity;
@@ -347,6 +558,9 @@ export interface SmentFile {
   totalSegments: number;
 }
 
+/**
+ * Represents the BlueprintEntity model used by StarMade blueprint and segment file parsing.
+ */
 export class BlueprintEntity implements SmentEntity {
   name: string;
   header: BlueprintHeader;
@@ -357,6 +571,11 @@ export class BlueprintEntity implements SmentEntity {
   segments: Smd3File[];
   children: SmentEntity[];
 
+  /**
+   * Creates a BlueprintEntity instance.
+   *
+   * @param input - Input value for the constructor operation.
+   */
   constructor(input: SmentEntity) {
     this.name = input.name;
     this.header = input.header instanceof BlueprintHeader
@@ -370,10 +589,20 @@ export class BlueprintEntity implements SmentEntity {
     this.children = [...input.children];
   }
 
+  /**
+   * Handles the entityType operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get entityType(): string {
     return this.header.entityType;
   }
 
+  /**
+   * Handles the directBlockCount operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get directBlockCount(): number {
     return this.segments.reduce(
       (sum, smd3) => sum + smd3.segments.reduce((inner, segment) => inner + segment.blockCount, 0),
@@ -381,23 +610,49 @@ export class BlueprintEntity implements SmentEntity {
     );
   }
 
+  /**
+   * Handles the declaredBlockCount operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get declaredBlockCount(): number {
     return this.header.totalBlockCount;
   }
 
+  /**
+   * Handles the segmentFileCount operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get segmentFileCount(): number {
     return this.segments.length;
   }
 
+  /**
+   * Handles the attachmentCount operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get attachmentCount(): number {
     return this.children.length;
   }
 
+  /**
+   * Handles the child operation used by StarMade blueprint and segment file parsing.
+   *
+   * @param name - Input value for the child operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   child(name: string): SmentEntity | null {
     const wanted = basenameBlueprintEntityName(name);
     return this.children.find(child => child.name === name || basenameBlueprintEntityName(child.name) === wanted) ?? null;
   }
 
+  /**
+   * Handles the allEntities operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   allEntities(): SmentEntity[] {
     const result: SmentEntity[] = [this];
     for (const child of this.children) {
@@ -410,6 +665,12 @@ export class BlueprintEntity implements SmentEntity {
     return result;
   }
 
+  /**
+   * Finds Entity in StarMade blueprint and segment file parsing.
+   *
+   * @param name - Input value for the findEntity operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   findEntity(name: string): SmentEntity | null {
     const wanted = basenameBlueprintEntityName(name);
     return this.allEntities().find(entity =>
@@ -417,40 +678,82 @@ export class BlueprintEntity implements SmentEntity {
     ) ?? null;
   }
 
+  /**
+   * Returns a copy updated with Meta.
+   *
+   * @param meta - Input value for the withMeta operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withMeta(meta: BlueprintMeta | null): BlueprintEntity {
     return new BlueprintEntity({ ...this, meta });
   }
 
+  /**
+   * Returns a copy updated with Logic.
+   *
+   * @param logic - Input value for the withLogic operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withLogic(logic: BlueprintLogic | null): BlueprintEntity {
     return new BlueprintEntity({ ...this, logic });
   }
 
+  /**
+   * Returns a copy updated with Header.
+   *
+   * @param header - Input value for the withHeader operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withHeader(header: BlueprintHeader | BlueprintHeaderInput): BlueprintEntity {
     return new BlueprintEntity({ ...this, header: normalizeBlueprintHeader(header) });
   }
 
+  /**
+   * Returns a copy updated with Children.
+   *
+   * @param children - Input value for the withChildren operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   withChildren(children: SmentEntity[]): BlueprintEntity {
     return new BlueprintEntity({ ...this, children });
   }
 }
 
+/**
+ * Represents the BlueprintArchive model used by StarMade blueprint and segment file parsing.
+ */
 export class BlueprintArchive implements SmentFile {
   root: BlueprintEntity;
   totalEntities: number;
   totalSegments: number;
 
+  /**
+   * Creates a BlueprintArchive instance.
+   *
+   * @param root - Input value for the constructor operation.
+   */
   constructor(root: SmentEntity) {
     this.root = root instanceof BlueprintEntity ? root : new BlueprintEntity(root);
     this.totalEntities = countEntities(root);
     this.totalSegments = countSegmentFiles(root);
   }
 
+  /**
+   * Handles the entities operation used by StarMade blueprint and segment file parsing.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get entities(): SmentEntity[] {
     return this.root instanceof BlueprintEntity
       ? this.root.allEntities()
       : collectEntities(this.root);
   }
 
+  /**
+   * Converts this value to talBlockCount.
+   *
+   * @returns The computed StarMade-Decoder value.
+   */
   get totalBlockCount(): number {
     return this.entities.reduce((sum, entity) =>
       sum + entity.segments.reduce((smd3Sum, smd3) =>
@@ -461,6 +764,12 @@ export class BlueprintArchive implements SmentFile {
     );
   }
 
+  /**
+   * Finds Entity in StarMade blueprint and segment file parsing.
+   *
+   * @param name - Input value for the findEntity operation.
+   * @returns The computed StarMade-Decoder value.
+   */
   findEntity(name: string): SmentEntity | null {
     return this.root instanceof BlueprintEntity
       ? this.root.findEntity(name)
@@ -489,6 +798,17 @@ export function parseSment(data: Buffer | Uint8Array): BlueprintArchive {
 
 // ── Recursive Entity Parser ───────────────────────────────────────────────────
 
+/**
+ * Parses Entity for StarMade blueprint and segment file parsing.
+ *
+ * @param zip - Input value for the _parseEntity operation.
+ * @param allEntries - Input value for the _parseEntity operation.
+ * @param entityPath - Input value for the _parseEntity operation.
+ * @param depth - Input value for the _parseEntity operation.
+ * @param offset - Input value for the _parseEntity operation.
+ * @param worldOffset - Input value for the _parseEntity operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _parseEntity(
   zip: AdmZip,
   allEntries: AdmZip.IZipEntry[],
@@ -546,6 +866,12 @@ export function _parseHeaderBuffer(buf: Buffer): BlueprintHeader {
   return parseSmbph(buf);
 }
 
+/**
+ * Parses Smbph for StarMade blueprint and segment file parsing.
+ *
+ * @param data - Input value for the parseSmbph operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function parseSmbph(data: Buffer | Uint8Array): BlueprintHeader {
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const r = BufferReader.from(buf);
@@ -606,6 +932,11 @@ export function parseSmbph(data: Buffer | Uint8Array): BlueprintHeader {
   });
 }
 
+/**
+ * Handles the emptyHeader operation used by StarMade blueprint and segment file parsing.
+ *
+ * @returns The computed StarMade-Decoder value.
+ */
 function _emptyHeader(): BlueprintHeader {
   return new BlueprintHeader({
     headerVersion: -1,
@@ -616,20 +947,44 @@ function _emptyHeader(): BlueprintHeader {
   });
 }
 
+/**
+ * Normalizes BlueprintHeader for StarMade blueprint and segment file parsing.
+ *
+ * @param header - Input value for the normalizeBlueprintHeader operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function normalizeBlueprintHeader(header: BlueprintHeader | BlueprintHeaderInput): BlueprintHeader {
   return header instanceof BlueprintHeader ? header : new BlueprintHeader(header);
 }
 
+/**
+ * Handles the blueprintTypeOrdinal operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param entityType - Input value for the blueprintTypeOrdinal operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function blueprintTypeOrdinal(entityType: string): number {
   return BLUEPRINT_TYPE.indexOf(entityType as BlueprintType);
 }
 
+/**
+ * Handles the blueprintClassificationName operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param classification - Input value for the blueprintClassificationName operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function blueprintClassificationName(classification: number | undefined): string {
   return classification !== undefined && BLUEPRINT_CLASSIFICATION[classification]
     ? BLUEPRINT_CLASSIFICATION[classification]
     : `UNKNOWN(${classification ?? -1})`;
 }
 
+/**
+ * Handles the defaultBlueprintClassification operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param entityType - Input value for the defaultBlueprintClassification operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 export function defaultBlueprintClassification(entityType: string): number {
   switch (entityType) {
     case 'SHOP': return 21; // NONE_SHOP
@@ -643,16 +998,34 @@ export function defaultBlueprintClassification(entityType: string): number {
   }
 }
 
+/**
+ * Normalizes BlockCounts for StarMade blueprint and segment file parsing.
+ *
+ * @param entries - Input value for the normalizeBlockCounts operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function normalizeBlockCounts(entries: BlueprintBlockCount[]): BlueprintBlockCount[] {
   return entries
     .filter(entry => entry.count > 0)
     .map(entry => ({ type: entry.type, count: entry.count }));
 }
 
+/**
+ * Handles the sumBlockCounts operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param entries - Input value for the sumBlockCounts operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function sumBlockCounts(entries: BlueprintBlockCount[]): number {
   return entries.reduce((sum, entry) => sum + entry.count, 0);
 }
 
+/**
+ * Normalizes BlueprintScore for StarMade blueprint and segment file parsing.
+ *
+ * @param score - Input value for the normalizeBlueprintScore operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function normalizeBlueprintScore(
   score: BlueprintIndexScore | BlueprintIndexScoreInput | null | undefined
 ): BlueprintIndexScore | null {
@@ -662,6 +1035,12 @@ function normalizeBlueprintScore(
   return score instanceof BlueprintIndexScore ? score : new BlueprintIndexScore(score);
 }
 
+/**
+ * Reads BlueprintIndexScore from the StarMade binary representation.
+ *
+ * @param r - Input value for the readBlueprintIndexScore operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function readBlueprintIndexScore(r: BufferReader): BlueprintIndexScore {
   const version = r.readInt16BE();
   const legacyOffensiveIndex = r.readFloat64BE();
@@ -690,6 +1069,12 @@ function readBlueprintIndexScore(r: BufferReader): BlueprintIndexScore {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * Finds RootName in StarMade blueprint and segment file parsing.
+ *
+ * @param entries - Input value for the _findRootName operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _findRootName(entries: AdmZip.IZipEntry[]): string | null {
   for (const e of entries) {
     const parts = e.entryName.split('/');
@@ -700,6 +1085,13 @@ function _findRootName(entries: AdmZip.IZipEntry[]): string | null {
   return null;
 }
 
+/**
+ * Reads Entry from the StarMade binary representation.
+ *
+ * @param zip - Input value for the _readEntry operation.
+ * @param path - Input value for the _readEntry operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _readEntry(zip: AdmZip, path: string): Buffer | null {
   try {
     const entry = zip.getEntry(path);
@@ -709,8 +1101,17 @@ function _readEntry(zip: AdmZip, path: string): Buffer | null {
   }
 }
 
+/**
+ * Defines ZERO_OFFSET for StarMade blueprint and segment file parsing.
+ */
 const ZERO_OFFSET: BlueprintChildOffset = Object.freeze({ x: 0, y: 0, z: 0 });
 
+/**
+ * Parses MetaBuffer for StarMade blueprint and segment file parsing.
+ *
+ * @param metaBuffer - Input value for the _parseMetaBuffer operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _parseMetaBuffer(metaBuffer: Buffer | null): BlueprintMeta | null {
   if (!metaBuffer) {
     return null;
@@ -723,6 +1124,12 @@ function _parseMetaBuffer(metaBuffer: Buffer | null): BlueprintMeta | null {
   }
 }
 
+/**
+ * Parses LogicBuffer for StarMade blueprint and segment file parsing.
+ *
+ * @param logicBuffer - Input value for the _parseLogicBuffer operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _parseLogicBuffer(logicBuffer: Buffer | null): BlueprintLogic | null {
   if (!logicBuffer) {
     return null;
@@ -735,6 +1142,12 @@ function _parseLogicBuffer(logicBuffer: Buffer | null): BlueprintLogic | null {
   }
 }
 
+/**
+ * Reads ChildOffsets from the StarMade binary representation.
+ *
+ * @param meta - Input value for the _readChildOffsets operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _readChildOffsets(meta: BlueprintMeta | null): Map<string, BlueprintChildOffset> {
   const offsets = new Map<string, BlueprintChildOffset>();
 
@@ -749,10 +1162,23 @@ function _readChildOffsets(meta: BlueprintMeta | null): Map<string, BlueprintChi
   return offsets;
 }
 
+/**
+ * Handles the basenameBlueprintEntityName operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param name - Input value for the basenameBlueprintEntityName operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function basenameBlueprintEntityName(name: string): string {
   return name.split('/').filter(Boolean).slice(-1)[0] ?? name;
 }
 
+/**
+ * Handles the addOffset operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param left - Input value for the _addOffset operation.
+ * @param right - Input value for the _addOffset operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function _addOffset(left: BlueprintChildOffset, right: BlueprintChildOffset): BlueprintChildOffset {
   return {
     x: left.x + right.x,
@@ -761,14 +1187,32 @@ function _addOffset(left: BlueprintChildOffset, right: BlueprintChildOffset): Bl
   };
 }
 
+/**
+ * Handles the countEntities operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param entity - Input value for the countEntities operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function countEntities(entity: SmentEntity): number {
   return 1 + entity.children.reduce((sum, child) => sum + countEntities(child), 0);
 }
 
+/**
+ * Handles the countSegmentFiles operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param entity - Input value for the countSegmentFiles operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function countSegmentFiles(entity: SmentEntity): number {
   return entity.segments.length + entity.children.reduce((sum, child) => sum + countSegmentFiles(child), 0);
 }
 
+/**
+ * Handles the collectEntities operation used by StarMade blueprint and segment file parsing.
+ *
+ * @param entity - Input value for the collectEntities operation.
+ * @returns The computed StarMade-Decoder value.
+ */
 function collectEntities(entity: SmentEntity): SmentEntity[] {
   return [entity, ...entity.children.flatMap(collectEntities)];
 }
