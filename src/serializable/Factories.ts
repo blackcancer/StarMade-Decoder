@@ -26,6 +26,7 @@
  * Java source: org.schema.schine.resource.tag.*Factory
  */
 
+import { DecodeError } from '../core/DecodeError.js';
 import type { BufferReader } from '../core/BufferReader.js';
 import type { BufferWriter } from '../core/BufferWriter.js';
 import type { SerializableTagFactory } from './SerializableTagFactory.js';
@@ -105,7 +106,7 @@ class ElementCountMapParser {
    * @param r - Input value for the parse operation.
    */
   parse(r: BufferReader) {
-    const size = r.readInt32BE();
+    const size = r.readCount();
     for (let i = 0; i < size; i++) {
       r.readInt16BE(); // type
       r.readInt32BE(); // count
@@ -174,7 +175,7 @@ class LongSetParser {
    * @param r - Input value for the parse operation.
    */
   parse(r: BufferReader) {
-    const size = r.readInt32BE();
+    const size = r.readCount();
     for (let i = 0; i < size; i++) r.readInt64BE();
   }
 }
@@ -201,20 +202,21 @@ class ControlElementMapperParser {
    * @param r - Input value for the parse operation.
    */
   parse(r: BufferReader) {
-    const header = r.readInt32BE(); // negative
-    if (header >= 0) {
-      // Legacy/network format cannot be parsed safely without surrounding context
-      throw new Error(`ControlElementMapper: unexpected positive header ${header}`);
+    const header = r.readInt32BE();
+    // Java's unversioned format stores the controller count in the first int.
+    // This snapshot reader preserves raw coordinates; domain readers migrate them.
+    const isDisk = header >= 0 || -header > 1024;
+    const keySize = header >= 0 ? header : r.readCount(10);
+    if (keySize > 1_000_000) throw new DecodeError('E_LIMIT', 'Too many legacy controllers');
+    if (keySize * 10 > r.remaining()) {
+      throw new DecodeError('E_TRUNCATED', 'Truncated legacy controller records', { offset: r.offset });
     }
-    const version = -header;
-    const isDisk = version > 1024;
-    const keySize = r.readInt32BE();
     for (let i = 0; i < keySize; i++) {
       r.readInt16BE(); r.readInt16BE(); r.readInt16BE(); // 3×short key position
-      const valueSize = r.readInt32BE();
+      const valueSize = r.readCount();
       for (let v = 0; v < valueSize; v++) {
         r.readInt16BE(); // short type
-        const elemSize = r.readInt32BE();
+        const elemSize = r.readCount();
         if (isDisk) {
           // serializeForDisk: 3×short per element (writeIndexAsShortPos)
           for (let e = 0; e < elemSize; e++) {
@@ -241,7 +243,7 @@ class ControlElementMapperParser {
 // int size + int controllerSize + int conSize
 // Then for each element:
 //   3×short position + int data + boolean meta
-//   si meta : long controller + int mSize + mSize×long connectedFromThis
+//   if meta: long controller + int mSize + mSize×long connectedFromThis
 
 /**
  * Represents the BlockBufferParser model used by StarMade SERIALIZABLE payload handling.
@@ -253,9 +255,9 @@ class BlockBufferParser {
    * @param r - Input value for the parse operation.
    */
   parse(r: BufferReader) {
-    const size = r.readInt32BE();
-    const controllerSize = r.readInt32BE();
-    const conSize = r.readInt32BE();
+    const size = r.readCount();
+    const controllerSize = r.readCount();
+    const conSize = r.readCount();
     let c = 0, conC = 0;
     for (let i = 0; i < size; i++) {
       r.readInt16BE(); r.readInt16BE(); r.readInt16BE(); // 3×short position
@@ -263,7 +265,7 @@ class BlockBufferParser {
       const meta = r.readInt8() !== 0; // boolean
       if (meta) {
         r.readInt64BE(); // long controller
-        const mSize = r.readInt32BE();
+        const mSize = r.readCount();
         for (let j = 0; j < mSize; j++) {
           r.readInt64BE(); // long connectedFromThis
         }
@@ -286,7 +288,7 @@ class Long2Vector3fMapParser {
    * @param r - Input value for the parse operation.
    */
   parse(r: BufferReader) {
-    const size = r.readInt32BE();
+    const size = r.readCount();
     for (let i = 0; i < size; i++) {
       r.readInt64BE();      // key
       r.readFloat32BE(); r.readFloat32BE(); r.readFloat32BE(); // x, y, z
@@ -308,7 +310,7 @@ class Long2TransformMapParser {
    * @param r - Input value for the parse operation.
    */
   parse(r: BufferReader) {
-    const size = r.readInt32BE();
+    const size = r.readCount();
     for (let i = 0; i < size; i++) {
       r.readInt64BE(); // key
       // Matrix3f : 9 floats

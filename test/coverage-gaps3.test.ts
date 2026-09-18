@@ -60,7 +60,7 @@ import { parseBlueprintFolder }     from '../src/smd3/BlueprintFolderParser.js';
 registerAllFactories();
 
 const S = path.resolve('samples');
-const SM_DIR = '/srv/StarMade';
+const SM_DIR = process.env.STARMADE_TEST_DIR ?? '/srv/StarMade';
 const hasSamples = fs.existsSync(S);
 const hasStarMade = fs.existsSync(SM_DIR);
 const load = (f: string) => readFrom(fs.readFileSync(path.join(S, f)));
@@ -452,9 +452,9 @@ describe('Smd3Parser — DATA_SINGLE / DATA_SINGLE_SIDE_EDGE / DATA_BITMAP', () 
 
     const header = Buffer.alloc(HEADER_SIZE, 0);
     header.writeUInt8(6, 0); // version
-    // Slot 0: offset=1, size=1 (present)
+    // Slot 0: offset=1, size equals the complete serialized record.
     header.writeInt16BE(1, 4); // offset (1-based)
-    header.writeInt16BE(1, 6); // size
+    header.writeUInt16BE(22 + extraBytes.length, 6); // bounded record size
 
     const segment = Buffer.alloc(SEGMENT_SECTOR, 0);
     let off = 0;
@@ -484,12 +484,11 @@ describe('Smd3Parser — DATA_SINGLE / DATA_SINGLE_SIDE_EDGE / DATA_BITMAP', () 
     }
   });
 
-  it('DATA_SINGLE_SIDE_EDGE parses correctly', () => {
+  it('DATA_SINGLE_SIDE_EDGE requires game geometry context', () => {
     const extra = Buffer.alloc(4);
     extra.writeInt32BE((2 & 0x1FFF)); // type=2
     const buf = buildSmd3WithDataByte(DATA_SINGLE_SIDE_EDGE, extra);
-    const file = parseSmd3(buf);
-    assert.isDefined(file);
+    assert.throws(() => parseSmd3(buf), /requires sideNormals/);
   });
 });
 

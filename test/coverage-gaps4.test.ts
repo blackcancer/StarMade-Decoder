@@ -354,12 +354,11 @@ describe('SmbpmParser — binary format edge cases', () => {
     assert.isDefined(file);
   });
 
-  it('parses unknown dataType returns early', () => {
+  it('rejects unknown metadata section types', () => {
     const w = new BufferWriter();
     w.writeInt32BE(5);     // metaVersion
     w.writeInt8(99);       // unknown type
-    const file = parseSmbpm(w.toBuffer());
-    assert.isDefined(file);
+    assert.throws(() => parseSmbpm(w.toBuffer()), /Unknown blueprint metadata type/);
   });
 });
 
@@ -436,7 +435,7 @@ describe('SmbplParser — compressed link targets (network format)', () => {
     assert.equal(file.links[0].targets[0].z, 33);
   });
 
-  it('parses compressed targets with bigX=false, bigY=false, bigZ=false (network format)', () => {
+  it('migrates version-1 network coordinates by the Java +8 origin shift', () => {
     const w = new BufferWriter();
     w.writeInt32BE(0);    // structureVersion
     w.writeInt32BE(-1);   // header: version=1, isDisk = 1 <= 1024 → network format
@@ -455,9 +454,12 @@ describe('SmbplParser — compressed link targets (network format)', () => {
     const file = parseSmbpl(w.toBuffer());
     assert.equal(file.links.length, 1);
     assert.equal(file.links[0].targets.length, 1);
-    assert.equal(file.links[0].targets[0].x, 11); // 10+1
-    assert.equal(file.links[0].targets[0].y, 22); // 20+2
-    assert.equal(file.links[0].targets[0].z, 33); // 30+3
+    assert.equal(file.links[0].fromX, 8);
+    assert.equal(file.links[0].fromY, 8);
+    assert.equal(file.links[0].fromZ, 8);
+    assert.equal(file.links[0].targets[0].x, 19); // 10 + 1 + 8
+    assert.equal(file.links[0].targets[0].y, 30); // 20 + 2 + 8
+    assert.equal(file.links[0].targets[0].z, 41); // 30 + 3 + 8
   });
 });
 

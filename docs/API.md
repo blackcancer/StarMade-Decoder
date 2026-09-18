@@ -1,5 +1,7 @@
 # StarMade-Decoder API Reference
 
+> **1.5.0 integrity update:** [Read the migration contract](INTEGRITY_AND_MIGRATION.md) for strict parsing, v7 LZ4, TagDocument, geometry context and changed error handling. Older examples using `writeTo` serialize only the root Tag, not its complete file envelope.
+
 StarMade-Decoder is an ESM TypeScript SDK. After build, public symbols are exported from `starmade-decoder`. During development and tests, import directly from `./src/index.js` via `tsx`.
 
 ```ts

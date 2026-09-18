@@ -143,6 +143,25 @@ export class BufferReader {
   }
 
   /**
+   * Reads a non-negative int32 collection count with allocation and byte bounds.
+   * @param minimumItemBytes - Smallest serialized item size, or zero for variable-size items.
+   * @param maximum - Maximum permitted item count; defaults to one million.
+   * @returns The validated count.
+   * @throws {RangeError} If the count exceeds either bound or is negative.
+   */
+  readCount(minimumItemBytes = 0, maximum = 1_000_000): number {
+    if (!Number.isSafeInteger(minimumItemBytes) || minimumItemBytes < 0 ||
+        !Number.isSafeInteger(maximum) || maximum < 0) throw new RangeError('Invalid collection bounds');
+    this._check(4);
+    const count = this.buf.readInt32BE(this._offset);
+    if (count < 0 || count > maximum || count * minimumItemBytes > this.remaining() - 4) {
+      throw new RangeError(`Invalid collection count ${count} at offset ${this.offset}`);
+    }
+    this._offset += 4;
+    return count;
+  }
+
+  /**
    * @param n Requested byte count.
    * @throws {RangeError} For invalid lengths or insufficient remaining bytes.
    */

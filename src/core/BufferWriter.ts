@@ -14,8 +14,6 @@
  * writeJavaUTF() matches DataOutputStream.writeUTF().
  */
 
-import { constants as bufferConstants } from 'node:buffer';
-
 const INITIAL_CAPACITY = 4096;
 /**
  * Defines GROWTH_FACTOR for core binary tag parsing and serialization.
@@ -34,11 +32,12 @@ export class BufferWriter {
    *
    * @param initialCapacity - Input value for the constructor operation.
    */
-  constructor(initialCapacity = INITIAL_CAPACITY) {
-    if (!Number.isSafeInteger(initialCapacity) || initialCapacity < 0 || initialCapacity > bufferConstants.MAX_LENGTH) {
-      throw new RangeError(`Invalid initial capacity: ${initialCapacity}`);
+  constructor(initialCapacity = INITIAL_CAPACITY, private readonly maxCapacity = 256 * 1024 * 1024) {
+    if (!Number.isSafeInteger(initialCapacity) || initialCapacity < 0 ||
+        !Number.isSafeInteger(maxCapacity) || maxCapacity < 1 || initialCapacity > maxCapacity) {
+      throw new RangeError('Invalid BufferWriter capacity');
     }
-    this.buf = Buffer.allocUnsafe(Math.max(1, initialCapacity));
+    this.buf = Buffer.allocUnsafe(initialCapacity);
   }
 
   /**
@@ -56,6 +55,7 @@ export class BufferWriter {
    * @param v - Input value for the writeInt8 operation.
    */
   writeInt8(v: number): void {
+    if (!Number.isInteger(v) || v < -128 || v > 127) throw new RangeError('writeInt8 requires an integer in [-128, 127]');
     this._ensure(1);
     this.buf.writeInt8(v, this._pos);
     this._pos++;
@@ -67,6 +67,7 @@ export class BufferWriter {
    * @param v - Input value for the writeUInt8 operation.
    */
   writeUInt8(v: number): void {
+    if (!Number.isInteger(v) || v < 0 || v > 255) throw new RangeError('writeUInt8 requires an integer in [0, 255]');
     this._ensure(1);
     this.buf.writeUInt8(v, this._pos);
     this._pos++;
@@ -78,6 +79,7 @@ export class BufferWriter {
    * @param v - Input value for the writeInt16BE operation.
    */
   writeInt16BE(v: number): void {
+    if (!Number.isInteger(v) || v < -32768 || v > 32767) throw new RangeError('writeInt16BE requires an integer in [-32768, 32767]');
     this._ensure(2);
     this.buf.writeInt16BE(v, this._pos);
     this._pos += 2;
@@ -89,6 +91,7 @@ export class BufferWriter {
    * @param v - Input value for the writeUInt16BE operation.
    */
   writeUInt16BE(v: number): void {
+    if (!Number.isInteger(v) || v < 0 || v > 65535) throw new RangeError('writeUInt16BE requires an integer in [0, 65535]');
     this._ensure(2);
     this.buf.writeUInt16BE(v, this._pos);
     this._pos += 2;
@@ -100,6 +103,7 @@ export class BufferWriter {
    * @param v - Input value for the writeInt32BE operation.
    */
   writeInt32BE(v: number): void {
+    if (!Number.isInteger(v) || v < -2147483648 || v > 2147483647) throw new RangeError('writeInt32BE requires an integer in [-2147483648, 2147483647]');
     this._ensure(4);
     this.buf.writeInt32BE(v, this._pos);
     this._pos += 4;
@@ -111,6 +115,7 @@ export class BufferWriter {
    * @param v - Input value for the writeUInt32BE operation.
    */
   writeUInt32BE(v: number): void {
+    if (!Number.isInteger(v) || v < 0 || v > 4294967295) throw new RangeError('writeUInt32BE requires an integer in [0, 4294967295]');
     this._ensure(4);
     this.buf.writeUInt32BE(v, this._pos);
     this._pos += 4;
@@ -156,14 +161,14 @@ export class BufferWriter {
    */
   writeBytes(data: Uint8Array | Buffer): void {
     this._ensure(data.length);
-    Buffer.from(data).copy(this.buf, this._pos);
+    this.buf.set(data, this._pos);
     this._pos += data.length;
   }
 
   /**
-   * Writes Java Modified UTF-8 for both save files and network payloads.
-   * @param s Java string, represented as UTF-16 code units.
-   * @throws {RangeError} If the encoded string exceeds 65535 bytes.
+   * Writes Java Modified UTF-8 for save files and network messages.
+   * @param s - UTF-16 string to encode, including unpaired surrogates.
+   * @throws {RangeError} If the encoded string exceeds 65,535 bytes.
    */
   writeJavaUTF(s: string): void {
     this.writeJavaModifiedUTF(s);
@@ -171,7 +176,7 @@ export class BufferWriter {
 
   /**
    * DataOutputStream.writeUTF() — Java Modified UTF-8 variant used by the
-   * StarMade network protocol.
+   * StarMade save files and network protocol.
    *
    * Differences from standard UTF-8:
    *   • NUL (U+0000) → 2 bytes: C0 80.
@@ -184,29 +189,28 @@ export class BufferWriter {
    * Wire shape: uint16 encoded-byte-count, then that many bytes.
    */
   writeJavaModifiedUTF(s: string): void {
-    const bytes: number[] = [];
+    if (typeof s !== 'string') throw new TypeError('Expected a string');
+    let length = 0;
     for (let i = 0; i < s.length; i++) {
       const c = s.charCodeAt(i);
-      if (c >= 0x0001 && c <= 0x007f) {
-        // 1-byte ASCII
-        bytes.push(c);
-      } else if (c === 0x0000 || (c >= 0x0080 && c <= 0x07ff)) {
-        // 2-byte: NUL and U+0080..U+07FF
-        bytes.push(0xc0 | ((c >> 6) & 0x1f), 0x80 | (c & 0x3f));
+      length += c >= 1 && c <= 0x7f ? 1 : c <= 0x7ff ? 2 : 3;
+      if (length > 0xffff) throw new RangeError(`String too long for Java Modified UTF-8: ${length} bytes`);
+    }
+    this._ensure(length + 2);
+    this.writeUInt16BE(length);
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c >= 1 && c <= 0x7f) {
+        this.buf[this._pos++] = c;
+      } else if (c <= 0x7ff) {
+        this.buf[this._pos++] = 0xc0 | (c >> 6);
+        this.buf[this._pos++] = 0x80 | (c & 0x3f);
       } else {
-        // 3-byte: U+0800..U+FFFF, including surrogates
-        bytes.push(
-          0xe0 | ((c >> 12) & 0x0f),
-          0x80 | ((c >> 6)  & 0x3f),
-          0x80 | (c         & 0x3f),
-        );
+        this.buf[this._pos++] = 0xe0 | (c >> 12);
+        this.buf[this._pos++] = 0x80 | ((c >> 6) & 0x3f);
+        this.buf[this._pos++] = 0x80 | (c & 0x3f);
       }
     }
-    if (bytes.length > 0xffff) {
-      throw new RangeError(`String too long for writeJavaModifiedUTF: ${bytes.length} encoded bytes`);
-    }
-    this.writeUInt16BE(bytes.length);
-    this.writeBytes(Buffer.from(bytes));
   }
 
   /** Returns the written buffer as a trimmed copy. */
@@ -222,13 +226,12 @@ export class BufferWriter {
    * @param n - Input value for the _ensure operation.
    */
   private _ensure(n: number): void {
-    if (!Number.isSafeInteger(n) || n < 0 || n > bufferConstants.MAX_LENGTH - this._pos) {
-      throw new RangeError(`Invalid write size: ${n} at ${this._pos}`);
-    }
+    if (!Number.isSafeInteger(n) || n < 0) throw new RangeError(`Invalid byte length: ${n}`);
     const needed = this._pos + n;
+    if (needed > this.maxCapacity) throw new RangeError(`BufferWriter limit exceeded: ${needed} bytes`);
     if (needed <= this.buf.length) return;
     let newCap = Math.max(1, this.buf.length);
-    while (newCap < needed) newCap = Math.min(bufferConstants.MAX_LENGTH, Math.ceil(newCap * GROWTH_FACTOR));
+    while (newCap < needed) newCap = Math.min(this.maxCapacity, Math.ceil(newCap * GROWTH_FACTOR));
     const newBuf = Buffer.allocUnsafe(newCap);
     this.buf.copy(newBuf, 0, 0, this._pos);
     this.buf = newBuf;

@@ -33,12 +33,21 @@ import { parseSmd3, BLOCK_COUNT } from '../src/smd3/Smd3Parser.js';
 
 registerAllFactories();
 
-const STARMADE_DIR = '/srv/StarMade';
+const STARMADE_DIR = process.env.STARMADE_TEST_DIR;
 const S = path.resolve('samples');
 
 function initBlockRegistry(): void {
-  const cfg = SMToolConfig.fromData({ starmadeDir: STARMADE_DIR, worldDir: 'world0' });
-  BlockRegistry.init(BlockConfig.load(cfg));
+  if (STARMADE_DIR) {
+    const cfg = SMToolConfig.fromData({ starmadeDir: STARMADE_DIR, worldDir: 'world0' });
+    BlockRegistry.init(BlockConfig.load(cfg));
+    return;
+  }
+  // Enrichment unit tests need a deterministic registry, not a private game installation.
+  const ids = Array.from({ length: 2047 }, (_, i) => i + 1);
+  const xml = '<Config><Element><General>' + ids.map(id =>
+    `<Block type="TEST_${id}" name="Test block ${id}" icon="1"><Hitpoints>10</Hitpoints><Mass>2</Mass><Volume>3</Volume><Price>4</Price></Block>`
+  ).join('') + '</General></Element></Config>';
+  BlockRegistry.init(BlockConfig.fromXml(xml, new Map(ids.map(id => [`TEST_${id}`, id]))));
 }
 
 function minimalBlockConfigXml(name = 'Test Block'): string {
@@ -61,7 +70,7 @@ describe('Phase 4 — BlockConfig-enriched views', function () {
     BlockRegistry.reset();
   });
 
-  it('BlockRegistry resolves a known vanilla block', () => {
+  it('BlockRegistry resolves a configured block', () => {
     const def = BlockRegistry.get(1);
     assert.isDefined(def);
     assert.equal(BlockRegistry.getName(1), def!.name);
