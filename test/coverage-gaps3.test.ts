@@ -31,7 +31,7 @@ import { FactionManager, Faction, FactionRelation, RELATION_ALLY } from '../src/
 import { FloatingItemsArchive, FloatingItem } from '../src/objects/FloatingItems.js';
 import { PlayerCharacter }          from '../src/objects/PlayerCharacter.js';
 import { SegmentControllerObject }  from '../src/objects/SegmentController.js';
-import { Serializables, ControlElementMapper, ElementCountMap, Long2Vector3fMap, Long2TransformMap } from '../src/objects/Serializables.js';
+import { ControlElementMapper, ElementCountMap, Long2Vector3fMap, Long2TransformMap } from '../src/objects/Serializables.js';
 import { Simulation, SimulationGroup, NPCFactionManager, SimulationState } from '../src/objects/Simulation.js';
 import { TradingManager, TradeRoute } from '../src/objects/Trading.js';
 
@@ -452,9 +452,9 @@ describe('Smd3Parser — DATA_SINGLE / DATA_SINGLE_SIDE_EDGE / DATA_BITMAP', () 
 
     const header = Buffer.alloc(HEADER_SIZE, 0);
     header.writeUInt8(6, 0); // version
-    // Slot 0: offset=1, size=1 (present)
+    // Slot 0: offset=1 and actual serialized size (not a presence flag).
     header.writeInt16BE(1, 4); // offset (1-based)
-    header.writeInt16BE(1, 6); // size
+    header.writeInt16BE(22 + extraBytes.length, 6); // size
 
     const segment = Buffer.alloc(SEGMENT_SECTOR, 0);
     let off = 0;
@@ -488,8 +488,11 @@ describe('Smd3Parser — DATA_SINGLE / DATA_SINGLE_SIDE_EDGE / DATA_BITMAP', () 
     const extra = Buffer.alloc(4);
     extra.writeInt32BE((2 & 0x1FFF)); // type=2
     const buf = buildSmd3WithDataByte(DATA_SINGLE_SIDE_EDGE, extra);
-    const file = parseSmd3(buf);
-    assert.isDefined(file);
+    assert.throws(() => parseSmd3(buf), /icoSideNormals/);
+    const file = parseSmd3(buf, { icoSideNormals: [
+      { x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 },
+    ] });
+    assert.equal(file.segments[0].blockCount, 15 ** 3);
   });
 });
 

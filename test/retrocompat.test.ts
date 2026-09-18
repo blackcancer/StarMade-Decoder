@@ -60,10 +60,16 @@ describe('Retrocompat — StarMadeDock samples', function () {
       const data = fs.readFileSync(file);
 
       if (sample.filename.endsWith('.sment')) {
-        const blueprint = parseSment(data);
+
         const entries = new AdmZip(data).getEntries().map(e => e.entryName);
         const smd2Count = entries.filter(e => e.endsWith('.smd2')).length;
         const smd3Count = entries.filter(e => e.endsWith('.smd3')).length;
+        const blueprint = parseSment(data, smd2Count > 0 ? { mode: 'recover' } : {});
+        if (smd2Count > 0) {
+          assert.throws(() => parseSment(data), /legacy|Unsupported/);
+          assert.isFalse(blueprint.complete);
+          assert.isAbove(blueprint.diagnostics.length, 0);
+        }
 
         assert.isAbove(blueprint.totalEntities, 0);
         assert.isString(blueprint.root.header.entityType);

@@ -354,12 +354,11 @@ describe('SmbpmParser — binary format edge cases', () => {
     assert.isDefined(file);
   });
 
-  it('parses unknown dataType returns early', () => {
+  it('rejects an unknown dataType instead of silently returning early', () => {
     const w = new BufferWriter();
     w.writeInt32BE(5);     // metaVersion
     w.writeInt8(99);       // unknown type
-    const file = parseSmbpm(w.toBuffer());
-    assert.isDefined(file);
+    assert.throws(() => parseSmbpm(w.toBuffer()), /Unsupported blueprint metadata/);
   });
 });
 

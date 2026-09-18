@@ -32,6 +32,8 @@
  */
 
 import AdmZip from 'adm-zip';
+import { BlueprintReadContext } from './BlueprintReadContext.js';
+import type { BlueprintDiagnostic, BlueprintParseOptions } from './BlueprintReadContext.js';
 import { parseSmd3 } from './Smd3Parser.js';
 import type { Smd3File } from './Smd3Parser.js';
 import { parseSmbpm } from './SmbpmParser.js';
@@ -726,6 +728,10 @@ export class BlueprintArchive implements SmentFile {
   root: BlueprintEntity;
   totalEntities: number;
   totalSegments: number;
+  /** Every omitted or incompletely parsed resource, empty for a complete archive. */
+  diagnostics: BlueprintDiagnostic[] = [];
+  /** False whenever recovery omitted data. */
+  complete = true;
 
   /**
    * Creates a BlueprintArchive instance.
@@ -782,80 +788,89 @@ export class BlueprintArchive implements SmentFile {
 /**
  * Parses a StarMade .sment blueprint archive.
  * @param data Buffer containing the .sment file bytes.
+ * @param options Strict/recovery policy and global resource budgets.
+ * @throws {Error} On invalid or over-budget input (recovery records parse errors).
  */
-export function parseSment(data: Buffer | Uint8Array): BlueprintArchive {
+export function parseSment(data: Buffer | Uint8Array, options: BlueprintParseOptions = {}): BlueprintArchive {
+  const context = new BlueprintReadContext(options);
+  if (data.length > context.options.maxArchiveBytes) throw new RangeError('Blueprint archive byte budget exceeded');
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const zip = new AdmZip(buf);
   const entries = zip.getEntries();
-
-  // Find the root name (first folder)
-  const rootName = _findRootName(entries);
-  if (!rootName) throw new Error('Unable to find the root folder in the .sment file');
-
-  const root = _parseEntity(zip, entries, rootName, 0, ZERO_OFFSET, ZERO_OFFSET);
-  return new BlueprintArchive(root);
+  const paths = new Set<string>();
+  for (const entry of entries) {
+    const name = entry.entryName;
+    const parts = name.replace(/\/$/, '').split('/');
+    if (!name || name.includes('\\') || name.includes('\0') || name.startsWith('/') ||
+        /^[A-Za-z]:/.test(name) || parts.some(part => part === '..' || part === '.' || !part)) {
+      throw new Error(`Invalid blueprint ZIP path: ${name}`);
+    }
+    if (paths.has(name)) throw new Error(`Duplicate blueprint ZIP path: ${name}`);
+    paths.add(name);
+    context.entry(entry.header.size);
+  }
+  const roots = new Set(entries.filter(entry => /^[^/]+\/header\.smbph$/.test(entry.entryName))
+    .map(entry => entry.entryName.split('/')[0]));
+  if (roots.size !== 1) throw new Error('Unable to find a unique root folder in the .sment file');
+  const rootName = [...roots][0];
+  const root = _parseEntity(zip, entries, rootName, 0, ZERO_OFFSET, ZERO_OFFSET, context);
+  const archive = new BlueprintArchive(root);
+  archive.diagnostics = context.diagnostics;
+  archive.complete = context.diagnostics.length === 0;
+  return archive;
 }
 
-// ── Recursive Entity Parser ───────────────────────────────────────────────────
-
 /**
- * Parses Entity for StarMade blueprint and segment file parsing.
- *
- * @param zip - Input value for the _parseEntity operation.
- * @param allEntries - Input value for the _parseEntity operation.
- * @param entityPath - Input value for the _parseEntity operation.
- * @param depth - Input value for the _parseEntity operation.
- * @param offset - Input value for the _parseEntity operation.
- * @param worldOffset - Input value for the _parseEntity operation.
- * @returns The computed StarMade-Decoder value.
+ * Parses an entity using exact path ancestry rather than matching path lengths.
+ * @param zip ZIP container. @param allEntries Entries scoped to this subtree.
+ * @param entityPath Entity path. @param depth Attachment depth.
+ * @param offset Relative position. @param worldOffset Accumulated translation.
+ * @param context Shared parse policy and budgets.
+ * @returns One entity with its real direct children.
  */
 function _parseEntity(
-  zip: AdmZip,
-  allEntries: AdmZip.IZipEntry[],
-  entityPath: string,
-  depth: number,
-  offset: BlueprintChildOffset,
-  worldOffset: BlueprintChildOffset
+  zip: AdmZip, allEntries: AdmZip.IZipEntry[], entityPath: string, depth: number,
+  offset: BlueprintChildOffset, worldOffset: BlueprintChildOffset, context: BlueprintReadContext
 ): BlueprintEntity {
+  context.entity(depth);
   const name = entityPath.split('/').filter(Boolean).slice(-1)[0] ?? entityPath;
-
-  // Header
-  const headerBuf = _readEntry(zip, `${entityPath}/header.smbph`);
-  const header = headerBuf ? parseSmbph(headerBuf) : _emptyHeader();
-  const meta = _parseMetaBuffer(_readEntry(zip, `${entityPath}/meta.smbpm`));
-  const logic = _parseLogicBuffer(_readEntry(zip, `${entityPath}/logic.smbpl`));
-
-  // Segments .smd3
+  const prefix = `${entityPath}/`;
+  const subtree = allEntries.filter(entry => entry.entryName.startsWith(prefix));
+  const header = context.read(`${prefix}header.smbph`, () => {
+    const entry = zip.getEntry(`${prefix}header.smbph`);
+    if (!entry) throw new Error('Missing entity header');
+    return parseSmbph(entry.getData());
+  }, _emptyHeader());
+  const meta = context.read<BlueprintMeta | null>(`${prefix}meta.smbpm`, () => {
+    const entry = zip.getEntry(`${prefix}meta.smbpm`);
+    return entry ? parseSmbpm(entry.getData()) : null;
+  }, null);
+  const logic = context.read<BlueprintLogic | null>(`${prefix}logic.smbpl`, () => {
+    const entry = zip.getEntry(`${prefix}logic.smbpl`);
+    return entry ? parseSmbpl(entry.getData()) : null;
+  }, null);
   const segments: Smd3File[] = [];
-  const dataPrefix = `${entityPath}/DATA/`;
-  for (const entry of allEntries) {
-    if (entry.entryName.startsWith(dataPrefix) && entry.entryName.endsWith('.smd3')) {
-      try {
-        const smd3buf = entry.getData();
-        segments.push(parseSmd3(smd3buf));
-      } catch { /* skip corrupt segment */ }
+  const childPaths = new Set<string>();
+  for (const entry of subtree) {
+    const parts = entry.entryName.slice(prefix.length).split('/');
+    if (!entry.isDirectory && parts.length === 2 && parts[0] === 'DATA' && /\.smd[012]$/.test(parts[1])) {
+      context.read(entry.entryName, () => { throw new Error('Unsupported legacy segment resource; explicit migration is required'); }, null);
     }
+    if (!entry.isDirectory && parts.length === 2 && parts[0] === 'DATA' && parts[1].endsWith('.smd3')) {
+      const segment = context.read<Smd3File | null>(entry.entryName,
+        () => context.smd3(entry.entryName, entry.getData()), null);
+      if (segment) segments.push(segment);
+    }
+    if (/^ATTACHED_\d+$/.test(parts[0]) && parts.length > 1) childPaths.add(`${prefix}${parts[0]}`);
   }
-
-  // ATTACHED_N children (depth is capped at 5 to avoid loops)
+  const childOffsets = _readChildOffsets(meta);
   const children: SmentEntity[] = [];
-  if (depth < 5) {
-    const childOffsets = _readChildOffsets(meta);
-    const childPaths = new Set<string>();
-    for (const entry of allEntries) {
-      const rel = entry.entryName.slice(entityPath.length + 1);
-      const parts = rel.split('/');
-      if (parts[0]?.startsWith('ATTACHED_') && parts.length > 1) {
-        childPaths.add(`${entityPath}/${parts[0]}`);
-      }
-    }
-    for (const childPath of [...childPaths].sort()) {
-      const childName = childPath.split('/').filter(Boolean).slice(-1)[0] ?? childPath;
-      const childOffset = childOffsets.get(childName) ?? ZERO_OFFSET;
-      children.push(_parseEntity(zip, allEntries, childPath, depth + 1, childOffset, _addOffset(worldOffset, childOffset)));
-    }
+  for (const childPath of [...childPaths].sort()) {
+    const childName = childPath.slice(prefix.length);
+    const childOffset = childOffsets.get(childName) ?? ZERO_OFFSET;
+    children.push(_parseEntity(zip, subtree, childPath, depth + 1, childOffset,
+      _addOffset(worldOffset, childOffset), context));
   }
-
   return new BlueprintEntity({ name, header, offset, worldOffset, meta, logic, segments, children });
 }
 
@@ -898,26 +913,22 @@ export function parseSmbph(data: Buffer | Uint8Array): BlueprintHeader {
   // ElementCountMap: int size + (short type + int count)×
   const blockCountByType: BlueprintBlockCount[] = [];
   let totalBlockCount = 0;
-  if (!r.isEOF()) {
-    try {
-      const size = r.readInt32BE();
-      for (let i = 0; i < size && !r.isEOF(); i++) {
-        const type  = r.readInt16BE();
-        const count = r.readInt32BE();
-        if (count > 0) {
-          blockCountByType.push({ type, count });
-          totalBlockCount += count;
-        }
-      }
-    } catch { /* truncated header */ }
+  const size = r.readInt32BE();
+  if (size < 0 || size > Math.floor(r.remaining() / 6)) throw new RangeError('Invalid blueprint block-count map size');
+  for (let i = 0; i < size; i++) {
+    const type = r.readInt16BE();
+    const count = r.readInt32BE();
+    if (count < 0) throw new RangeError('Negative blueprint block count');
+    if (count > 0) {
+      blockCountByType.push({ type, count });
+      totalBlockCount += count;
+    }
   }
-
   let score: BlueprintIndexScore | null = null;
-  if (headerVersion >= 1 && !r.isEOF()) {
-    try {
-      const hasScore = r.readUInt8() !== 0;
-      score = hasScore ? readBlueprintIndexScore(r) : null;
-    } catch { /* truncated score */ }
+  if (headerVersion >= 1) {
+    const hasScore = r.readUInt8();
+    if (hasScore > 1) throw new Error('Invalid blueprint score presence flag');
+    score = hasScore ? readBlueprintIndexScore(r) : null;
   }
 
   return new BlueprintHeader({
@@ -1051,7 +1062,7 @@ function readBlueprintIndexScore(r: BufferReader): BlueprintIndexScore {
   const survivabilityIndex = r.readFloat64BE();
   const offensiveIndex = r.readFloat64BE();
   const supportIndex = r.readFloat64BE();
-  const miningIndex = version >= 1 && !r.isEOF() ? r.readFloat64BE() : 0;
+  const miningIndex = version >= 1 ? r.readFloat64BE() : 0;
 
   return new BlueprintIndexScore({
     version,
@@ -1070,77 +1081,9 @@ function readBlueprintIndexScore(r: BufferReader): BlueprintIndexScore {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * Finds RootName in StarMade blueprint and segment file parsing.
- *
- * @param entries - Input value for the _findRootName operation.
- * @returns The computed StarMade-Decoder value.
- */
-function _findRootName(entries: AdmZip.IZipEntry[]): string | null {
-  for (const e of entries) {
-    const parts = e.entryName.split('/');
-    if (parts.length >= 2 && parts[1] === 'header.smbph') {
-      return parts[0];
-    }
-  }
-  return null;
-}
-
-/**
- * Reads Entry from the StarMade binary representation.
- *
- * @param zip - Input value for the _readEntry operation.
- * @param path - Input value for the _readEntry operation.
- * @returns The computed StarMade-Decoder value.
- */
-function _readEntry(zip: AdmZip, path: string): Buffer | null {
-  try {
-    const entry = zip.getEntry(path);
-    return entry ? entry.getData() : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Defines ZERO_OFFSET for StarMade blueprint and segment file parsing.
  */
 const ZERO_OFFSET: BlueprintChildOffset = Object.freeze({ x: 0, y: 0, z: 0 });
-
-/**
- * Parses MetaBuffer for StarMade blueprint and segment file parsing.
- *
- * @param metaBuffer - Input value for the _parseMetaBuffer operation.
- * @returns The computed StarMade-Decoder value.
- */
-function _parseMetaBuffer(metaBuffer: Buffer | null): BlueprintMeta | null {
-  if (!metaBuffer) {
-    return null;
-  }
-
-  try {
-    return parseSmbpm(metaBuffer);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Parses LogicBuffer for StarMade blueprint and segment file parsing.
- *
- * @param logicBuffer - Input value for the _parseLogicBuffer operation.
- * @returns The computed StarMade-Decoder value.
- */
-function _parseLogicBuffer(logicBuffer: Buffer | null): BlueprintLogic | null {
-  if (!logicBuffer) {
-    return null;
-  }
-
-  try {
-    return parseSmbpl(logicBuffer);
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Reads ChildOffsets from the StarMade binary representation.

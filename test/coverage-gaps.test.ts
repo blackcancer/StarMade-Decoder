@@ -1043,8 +1043,8 @@ describe('Smd3Writer — emptySmd3File / explicit segVersion', function() {
   });
 
   it('emptySegment explicit coords', () => {
-    const seg = emptySegment(1, 2, 3);
-    assert.equal(seg.x, 1); assert.equal(seg.y, 2); assert.equal(seg.z, 3);
+    const seg = emptySegment(32, 64, 96);
+    assert.equal(seg.x, 32); assert.equal(seg.y, 64); assert.equal(seg.z, 96);
   });
 
   it('writeSmd3 with explicit segVersion', function() {

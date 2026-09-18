@@ -1,3 +1,23 @@
+# 1.5.0 — Data-integrity correction checkpoint
+
+- Correct Java Modified UTF-8 in save-file primitives; reject malformed sequences
+  transactionally, invalid buffer ranges and zero-capacity writer loops.
+- Implement bounded version-7 raw LZ4, version-6 zlib and correct LE block data;
+  retain reserved bits, reject oversized sectors and colliding region slots.
+- Keep blocks compact until accessed, isolate mutable blocks, validate actual
+  occupancy and provide `setBlock` for controlled edits.
+- Require real clipping normals for SINGLE_SIDE_EDGE instead of fabricating a
+  full cube. Reject unsupported historical versions rather than misdecode them.
+- Fix attachment ancestry and enforce explicit strict/recovery diagnostics,
+  recursive/global budgets and complete header/logic/metadata reads.
+- Add Tag allocation/depth limits and writer tree-invariant checks.
+- Ship runtime dependencies and a committed lock; test a production-only packed
+  consumer, an independent JDK oracle and audit regressions.
+- Make unavailable installation tests explicitly pending, repair invalid synthetic
+  fixtures and exercise all 43 committed metadata files rather than zero.
+
+See `docs/CORRECTIONS-1.5.0.md` for compatibility changes and qualification limits.
+
 # Changelog
 
 ## Unreleased

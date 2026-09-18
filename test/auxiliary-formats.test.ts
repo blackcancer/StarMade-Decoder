@@ -17,10 +17,13 @@ import {
   writeSbvSubtitles,
 } from '../src/config/SbvSubtitles.js';
 
-const STARMADE_DIR = '/srv/StarMade';
+// Tests requiring proprietary installed-game assets are explicit integration tests.
+const itLive = fs.existsSync(process.env.STARMADE_DIR ?? '/srv/StarMade') ? it : it.skip;
+
+const STARMADE_DIR = process.env.STARMADE_DIR ?? '/srv/StarMade';
 
 describe('WorldSeed — .seed', function () {
-  it('parses and writes the world seed file', () => {
+  itLive('parses and writes the world seed file', () => {
     const seedPath = path.join(STARMADE_DIR, 'server-database/world0/.seed');
     const parsed = parseWorldSeed(fs.readFileSync(seedPath));
     assert.isTrue(typeof parsed.seed === 'bigint');
@@ -33,7 +36,7 @@ describe('WorldSeed — .seed', function () {
 });
 
 describe('PersistentObjects — .smdat', function () {
-  it('parses and writes the live empty StarLoader persistent file', () => {
+  itLive('parses and writes the live empty StarLoader persistent file', () => {
     const file = path.join(STARMADE_DIR, 'moddata/StarLoader/persistent/world0.smdat');
     const parsed = parsePersistentObjects(fs.readFileSync(file));
     assert.deepEqual(parsed.entries, []);
@@ -83,7 +86,7 @@ describe('SbvSubtitles — .sbv', function () {
     ].join('\n'));
   });
 
-  it('parses every live StarMade .sbv language file', () => {
+  itLive('parses every live StarMade .sbv language file', () => {
     const languageDir = path.join(STARMADE_DIR, 'language');
     const files = fs.readdirSync(languageDir, { recursive: true })
       .filter((name): name is string => typeof name === 'string' && name.endsWith('.sbv'));

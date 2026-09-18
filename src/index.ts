@@ -18,6 +18,7 @@ export type { TagValue } from './core/Tag.js';
 export { BufferReader } from './core/BufferReader.js';
 export { BufferWriter } from './core/BufferWriter.js';
 export { readFrom, writeTo } from './core/TagParser.js';
+export type { TagReadOptions } from './core/TagParser.js';
 export { Tags, StructBuilder, ListBuilder } from './core/TagBuilder.js';
 export { toObject, toJSON } from './core/TagSerializer.js';
 export type { TagObject } from './core/TagSerializer.js';

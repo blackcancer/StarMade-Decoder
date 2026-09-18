@@ -7,6 +7,7 @@
  * @author InitSysRev
  * @version 1.5.0
  */
+/** Transactional, bounds-checked reader over one binary document. */
 export class BufferReader {
   private _offset = 0;
 

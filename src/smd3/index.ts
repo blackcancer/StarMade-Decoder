@@ -117,3 +117,9 @@ export { writeSmbph } from './SmbphWriter.js';
 export { writeSmbpm } from './SmbpmWriter.js';
 export { writeSmbmm, emptyModMappings } from './SmbmmWriter.js';
 export { writeSim } from './SimWriter.js';
+
+// Explicit integrity policies, diagnostics and editing helpers.
+export { readIcoSideNormals } from './Smd3Parser.js';
+export { setBlock } from './Smd3Writer.js';
+export type { Smd3ParseOptions, Smd3Diagnostic, IcoNormal, IcoSideNormals } from './Smd3Parser.js';
+export type { BlueprintParseOptions, BlueprintDiagnostic } from './BlueprintReadContext.js';

@@ -634,8 +634,8 @@ describe('SmbplParser — complex connection format', function() {
   it('parseSmbpl with minimal header (connectionCount=0)', () => {
     const w = new BufferWriter();
     w.writeInt32BE(0);   // structureVersion
+    w.writeInt32BE(-1026); // versioned on-disk control map
     w.writeInt32BE(0);   // controllerCount
-    w.writeInt32BE(0);   // connectionCount (negative for non-compressed)
     const file = parseSmbpl(w.toBuffer());
     assert.equal(file.links.length, 0);
   });

@@ -33,7 +33,7 @@ import { parseSmd3, BLOCK_COUNT } from '../src/smd3/Smd3Parser.js';
 
 registerAllFactories();
 
-const STARMADE_DIR = '/srv/StarMade';
+const STARMADE_DIR = process.env.STARMADE_DIR ?? '/srv/StarMade';
 const S = path.resolve('samples');
 
 function initBlockRegistry(): void {
@@ -53,7 +53,8 @@ function minimalBlockConfigXml(name = 'Test Block'): string {
 describe('Phase 4 — BlockConfig-enriched views', function () {
   this.timeout(30_000);
 
-  before(() => {
+  before(function () {
+    if (!fs.existsSync(path.join(STARMADE_DIR, 'data/config/BlockConfig.xml'))) this.skip();
     initBlockRegistry();
   });
 
