@@ -14,6 +14,8 @@
  * writeJavaUTF() matches DataOutputStream.writeUTF().
  */
 
+import { constants as bufferConstants } from 'node:buffer';
+
 const INITIAL_CAPACITY = 4096;
 /**
  * Defines GROWTH_FACTOR for core binary tag parsing and serialization.
@@ -33,7 +35,10 @@ export class BufferWriter {
    * @param initialCapacity - Input value for the constructor operation.
    */
   constructor(initialCapacity = INITIAL_CAPACITY) {
-    this.buf = Buffer.allocUnsafe(initialCapacity);
+    if (!Number.isSafeInteger(initialCapacity) || initialCapacity < 0 || initialCapacity > bufferConstants.MAX_LENGTH) {
+      throw new RangeError(`Invalid initial capacity: ${initialCapacity}`);
+    }
+    this.buf = Buffer.allocUnsafe(Math.max(1, initialCapacity));
   }
 
   /**
@@ -52,7 +57,8 @@ export class BufferWriter {
    */
   writeInt8(v: number): void {
     this._ensure(1);
-    this.buf.writeInt8(v, this._pos++);
+    this.buf.writeInt8(v, this._pos);
+    this._pos++;
   }
 
   /**
@@ -62,7 +68,8 @@ export class BufferWriter {
    */
   writeUInt8(v: number): void {
     this._ensure(1);
-    this.buf.writeUInt8(v, this._pos++);
+    this.buf.writeUInt8(v, this._pos);
+    this._pos++;
   }
 
   /**
@@ -154,16 +161,12 @@ export class BufferWriter {
   }
 
   /**
-   * DataOutputStream.writeUTF() — uint16 byte-length + standard UTF-8 bytes.
-   * Used by StarMade save-file Tag serialization.
+   * Writes Java Modified UTF-8 for both save files and network payloads.
+   * @param s Java string, represented as UTF-16 code units.
+   * @throws {RangeError} If the encoded string exceeds 65535 bytes.
    */
   writeJavaUTF(s: string): void {
-    const encoded = Buffer.from(s, 'utf8');
-    if (encoded.length > 65535) {
-      throw new RangeError(`String too long for writeJavaUTF: ${encoded.length} bytes`);
-    }
-    this.writeUInt16BE(encoded.length);
-    this.writeBytes(encoded);
+    this.writeJavaModifiedUTF(s);
   }
 
   /**
@@ -208,7 +211,7 @@ export class BufferWriter {
 
   /** Returns the written buffer as a trimmed copy. */
   toBuffer(): Buffer {
-    return this.buf.slice(0, this._pos);
+    return Buffer.from(this.buf.subarray(0, this._pos));
   }
 
   // ── Internal ──────────────────────────────────────────────────────────────
@@ -219,10 +222,13 @@ export class BufferWriter {
    * @param n - Input value for the _ensure operation.
    */
   private _ensure(n: number): void {
+    if (!Number.isSafeInteger(n) || n < 0 || n > bufferConstants.MAX_LENGTH - this._pos) {
+      throw new RangeError(`Invalid write size: ${n} at ${this._pos}`);
+    }
     const needed = this._pos + n;
     if (needed <= this.buf.length) return;
-    let newCap = this.buf.length;
-    while (newCap < needed) newCap = Math.ceil(newCap * GROWTH_FACTOR);
+    let newCap = Math.max(1, this.buf.length);
+    while (newCap < needed) newCap = Math.min(bufferConstants.MAX_LENGTH, Math.ceil(newCap * GROWTH_FACTOR));
     const newBuf = Buffer.allocUnsafe(newCap);
     this.buf.copy(newBuf, 0, 0, this._pos);
     this.buf = newBuf;
