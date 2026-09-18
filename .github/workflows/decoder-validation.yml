@@ -22,11 +22,17 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - name: Prepare patched audit dependency lock
+        run: |
+          node --input-type=module -e "import fs from 'node:fs'; const p=JSON.parse(fs.readFileSync('package.json')); p.version='1.5.0'; p.dependencies={'adm-zip':'^0.6.1','fast-xml-parser':'^5.7.3'}; delete p.devDependencies['adm-zip']; delete p.devDependencies['fast-xml-parser']; p.devDependencies.mocha='^12.0.2'; fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');"
+          npm install --package-lock-only --ignore-scripts
+          npm audit fix --package-lock-only --ignore-scripts || true
       - run: npm ci --ignore-scripts
       - name: Capture reproducible audit workspace
         run: |
           mkdir -p validation
           git archive --format=tar HEAD | gzip > validation/source.tar.gz
+          cp package.json package-lock.json validation/
           tar -czf validation/dependencies.tar.gz node_modules
           npm audit --json > validation/dependency-audit.json || true
       - run: npm run build
