@@ -1,0 +1,8 @@
+{
+  "all": true,
+  "src": ["src"],
+  "include": ["src/**/*.ts"],
+  "exclude": [],
+  "reporter": ["text", "html", "json", "json-summary", "lcov"],
+  "exclude-after-remap": true
+}
