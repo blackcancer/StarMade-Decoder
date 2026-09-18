@@ -16,24 +16,28 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-      - name: Capture reproducible source snapshot
+      - run: npm ci --ignore-scripts
+      - name: Capture reproducible audit workspace
         run: |
           mkdir -p validation
           git archive --format=tar HEAD | gzip > validation/source.tar.gz
-      - run: npm ci --ignore-scripts
+          tar -czf validation/dependencies.tar.gz node_modules
+          npm audit --json > validation/dependency-audit.json || true
       - run: npm run build
       - run: npm run docs:check
       - run: npm test
       - run: npm run coverage:check
-      - name: Preserve validation source snapshot
+      - name: Preserve validation workspace
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: decoder-validation-source
-          path: validation/source.tar.gz
+          name: decoder-validation-workspace
+          path: validation/
           retention-days: 7
           if-no-files-found: error
