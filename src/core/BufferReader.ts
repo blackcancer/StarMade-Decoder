@@ -7,6 +7,7 @@
  * @author InitSysRev
  * @version 1.5.0
  */
+/** Transactional big-endian primitive and Java-string reader with bounded collections. */
 export class BufferReader {
   private _offset = 0;
 
