@@ -23,6 +23,8 @@
  */
 
 import fs from 'fs';
+import { BlueprintReadContext } from './BlueprintReadContext.js';
+import type { BlueprintParseOptions } from './BlueprintReadContext.js';
 import path from 'path';
 import { parseSmd3 } from './Smd3Parser.js';
 import { BlueprintArchive, BlueprintEntity, BlueprintHeader, _parseHeaderBuffer } from './SmentParser.js';
@@ -34,12 +36,18 @@ import type { SmentEntity } from './SmentParser.js';
 
 /**
  * Parses a StarMade blueprint from a filesystem folder.
- * @param folderPath Absolute path of the blueprint root folder
+ * @param folderPath Absolute path of the blueprint root folder.
+ * @param options Strict/recovery policy and shared resource limits.
+ * @throws {Error} On malformed files, symbolic links or exhausted budgets.
  */
-export function parseBlueprintFolder(folderPath: string): BlueprintArchive {
+export function parseBlueprintFolder(folderPath: string, options: BlueprintParseOptions = {}): BlueprintArchive {
+  const context = new BlueprintReadContext(options);
   const rootName = path.basename(folderPath);
-  const root = _parseEntityFolder(folderPath, rootName, 0, ZERO_OFFSET, ZERO_OFFSET);
-  return new BlueprintArchive(root);
+  const root = _parseEntityFolder(folderPath, rootName, 0, ZERO_OFFSET, ZERO_OFFSET, context);
+  const archive = new BlueprintArchive(root);
+  archive.diagnostics = context.diagnostics;
+  archive.complete = context.diagnostics.length === 0;
+  return archive;
 }
 
 /**
@@ -57,38 +65,50 @@ function _parseEntityFolder(
   name: string,
   depth: number,
   offset: BlueprintChildOffset,
-  worldOffset: BlueprintChildOffset
+  worldOffset: BlueprintChildOffset,
+  context: BlueprintReadContext
 ): BlueprintEntity {
-  // Header
-  const headerPath = path.join(folderPath, 'header.smbph');
-  let header: BlueprintHeader;
-  try {
-    const hbuf = fs.readFileSync(headerPath);
-    header = _parseHeaderBuffer(hbuf);
-  } catch {
-    header = _emptyHeader();
+  context.entity(depth);
+  if (fs.lstatSync(folderPath).isSymbolicLink()) throw new Error(`Blueprint symbolic link is not allowed: ${folderPath}`);
+  // Inspect all directory entries and reject symbolic links before reading.
+  const entries = fs.readdirSync(folderPath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) throw new Error(`Blueprint symbolic link is not allowed: ${entry.name}`);
+    if (entry.isFile()) context.entry(fs.statSync(path.join(folderPath, entry.name)).size);
+    else context.entry(0);
   }
-  const meta = _readMeta(path.join(folderPath, 'meta.smbpm'));
-  const logic = _readLogic(path.join(folderPath, 'logic.smbpl'));
-
-  // Segments DATA/*.smd3
+  const headerPath = path.join(folderPath, 'header.smbph');
+  const header = context.read(headerPath, () => _parseHeaderBuffer(fs.readFileSync(headerPath)), _emptyHeader());
+  const metaPath = path.join(folderPath, 'meta.smbpm');
+  const logicPath = path.join(folderPath, 'logic.smbpl');
+  const meta = context.read<BlueprintMeta | null>(metaPath,
+    () => fs.existsSync(metaPath) ? parseSmbpm(fs.readFileSync(metaPath)) : null, null);
+  const logic = context.read<BlueprintLogic | null>(logicPath,
+    () => fs.existsSync(logicPath) ? parseSmbpl(fs.readFileSync(logicPath)) : null, null);
   const segments: ReturnType<typeof parseSmd3>[] = [];
   const dataDir = path.join(folderPath, 'DATA');
   if (fs.existsSync(dataDir)) {
-    for (const f of fs.readdirSync(dataDir).filter(n => n.endsWith('.smd3'))) {
-      try {
-        const smd3buf = fs.readFileSync(path.join(dataDir, f));
-        segments.push(parseSmd3(smd3buf));
-      } catch { /* skip */ }
+    for (const entry of fs.readdirSync(dataDir, { withFileTypes: true })) {
+      const file = path.join(dataDir, entry.name);
+      if (entry.isSymbolicLink()) throw new Error(`Blueprint symbolic link is not allowed: ${file}`);
+      context.entry(entry.isFile() ? fs.statSync(file).size : 0);
+      if (entry.isFile() && /\.smd[012]$/.test(entry.name)) {
+        context.read(file, () => { throw new Error('Unsupported legacy segment resource; explicit migration is required'); }, null);
+      }
+      if (entry.isFile() && entry.name.endsWith('.smd3')) {
+        const result = context.read<ReturnType<typeof parseSmd3> | null>(file,
+          () => context.smd3(file, fs.readFileSync(file)), null);
+        if (result) segments.push(result);
+      }
     }
   }
 
   // ATTACHED_N children
   const children: SmentEntity[] = [];
-  if (depth < 5) {
+  {
     const childOffsets = _readChildOffsets(meta);
     const childNames = fs.readdirSync(folderPath)
-      .filter(n => n.startsWith('ATTACHED_') && fs.statSync(path.join(folderPath, n)).isDirectory())
+      .filter(n => /^ATTACHED_\d+$/.test(n) && fs.statSync(path.join(folderPath, n)).isDirectory())
       .sort((a, b) => {
         const na = parseInt(a.replace('ATTACHED_', ''));
         const nb = parseInt(b.replace('ATTACHED_', ''));
@@ -101,7 +121,8 @@ function _parseEntityFolder(
         childName,
         depth + 1,
         childOffset,
-        _addOffset(worldOffset, childOffset)
+        _addOffset(worldOffset, childOffset),
+        context
       ));
     }
   }
@@ -128,42 +149,6 @@ function _emptyHeader(): BlueprintHeader {
  * Defines ZERO_OFFSET for StarMade blueprint and segment file parsing.
  */
 const ZERO_OFFSET: BlueprintChildOffset = Object.freeze({ x: 0, y: 0, z: 0 });
-
-/**
- * Reads Meta from the StarMade binary representation.
- *
- * @param metaPath - Input value for the _readMeta operation.
- * @returns The computed StarMade-Decoder value.
- */
-function _readMeta(metaPath: string): BlueprintMeta | null {
-  if (!fs.existsSync(metaPath)) {
-    return null;
-  }
-
-  try {
-    return parseSmbpm(fs.readFileSync(metaPath));
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Reads Logic from the StarMade binary representation.
- *
- * @param logicPath - Input value for the _readLogic operation.
- * @returns The computed StarMade-Decoder value.
- */
-function _readLogic(logicPath: string): BlueprintLogic | null {
-  if (!fs.existsSync(logicPath)) {
-    return null;
-  }
-
-  try {
-    return parseSmbpl(fs.readFileSync(logicPath));
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Reads ChildOffsets from the StarMade binary representation.

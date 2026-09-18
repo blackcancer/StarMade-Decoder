@@ -2,12 +2,12 @@
 
 TypeScript SDK for reading, inspecting, and rewriting **StarMade** save files and blueprint formats.
 
-It is a faithful port of the Java `org.schema.schine.resource.tag.Tag` binary tag format, with higher-level helpers for entities, blueprints, configuration files, and round-trip-safe edits.
+It is a faithful port of the Java `org.schema.schine.resource.tag.Tag` binary tag format, with higher-level helpers for entities, blueprints, configuration files, and validated edits (see the compatibility contract below).
 
 ## Features
 
 - Read and write StarMade Tag files (`.ent`, `.fac`, `.cat`, `.tag`, `.sim`)
-- Preserve binary round-trips for supported save files
+- Preserve supported semantic data with explicit strict/recovery behavior
 - Parse StarMade blueprint formats (`.sment`, `.smd3`, `.smtpl`, `.smbpl`, `.smbpm`, `.smbmm`)
 - Use typed domain objects for ships, stations, players, factions, catalogs, trading, inventories, and serializable payloads
 - Load StarMade configuration files, inspect BlockConfig element information, and save custom overrides safely
@@ -73,7 +73,7 @@ StarMade files use an NBT-style tag system:
 | FLOAT | 5 | float32 BE |
 | DOUBLE | 6 | float64 BE |
 | BYTE_ARRAY | 7 | int32 length + bytes |
-| STRING | 8 | Java UTF (uint16 length + UTF-8) |
+| STRING | 8 | Java Modified UTF-8 (uint16 encoded byte count) |
 | VECTOR3f | 9 | 3× float32 |
 | VECTOR3i | 10 | 3× int32 |
 | VECTOR3b | 11 | 3× int8 |
@@ -88,9 +88,9 @@ StarMade files use an NBT-style tag system:
 Non-GZIP files start with:
 
 ```text
-short version (= 1)
+short version (Java default = 0)
 byte prType  (> 0 = named, < 0 = anonymous, 0 = FINISH)
-[if named] uint16 length + UTF-8 (Java readUTF)
+[if named] uint16 length + Modified UTF-8 (Java readUTF)
 payload by type
 ```
 
@@ -111,22 +111,30 @@ test/            round-trip, parser, writer, config, and retrocompat tests
 scripts/         sample fetch helpers
 ```
 
-## Validation
+## Validation and compatibility
+
+Requires Node.js 20.19+; the CI validation runtime is Node.js 22. The SDK emits
+ES2023 JavaScript and TypeScript declarations. Runtime ZIP/XML dependencies are
+included in the published package manifest.
 
 ```bash
+npm ci --ignore-scripts
 npm run build
 npm run docs:check
-npm test          # 681 tests
-npm run coverage  # 99% statements, 82% branches
+npm test
+npm run test:java       # Independent JDK oracle; requires JDK 17+
+npm run test:package    # Clean production consumer; requires registry access
 npm run coverage:check
 ```
 
-## Test coverage (as of v1.0.0)
+The audit correction checkpoint passed 662 tests locally, with 59 explicit
+pending cases requiring unavailable installation fixtures. Measured coverage was
+88.82% statements/lines, 78.71% branches and 76.88% functions. Coverage is not a
+claim that every game-format combination has been validated.
 
-| Metric | Value |
-|---|---|
-| Statements | 99% |
-| Lines | 99% |
-| Functions | 93% |
-| Branches | 82% |
-| Tests | 681 passing |
+**Read [the 1.5.0 compatibility and safety contract](docs/CORRECTIONS-1.5.0.md)
+before rewriting files.** SMD3 supports versions 6 and 7 with different codecs;
+unknown/legacy variants are rejected. `SINGLE_SIDE_EDGE` requires game-provided
+clipping normals. Recovery is opt-in and reports incomplete data. Compressed
+sector overflow is an error rather than silent truncation. Byte-identical
+SMD3 output and successful in-game import are not guaranteed by internal tests.

@@ -13,10 +13,10 @@
  * Exact port of Java Tag.readFrom() / Tag.writeTo().
  *
  * Format (non-GZIP) :
- *   short version (2 BE bytes, value 1)
+ *   short version (2 BE bytes, Java default 0)
  *   root tag body:
  *     signed prType byte  (positive = named, negative = anonymous, 0 = FINISH)
- *     [if named && != FINISH]: readUTF() (uint16 len + UTF-8)
+ *     [if named && != FINISH]: readUTF() (uint16 len + Modified UTF-8)
  *     [if != FINISH]: payload by type
  *
  * GZIP detection: magic 0x1F 0x8B → decompress and read without a version prefix.
@@ -39,29 +39,48 @@ import type { SerializableTagElement } from '../serializable/SerializableTagElem
 
 /**
  * Reads a tag from a binary buffer with automatic GZIP detection.
+ * @param data Input bytes.
+ * @param options Explicit allocation, decompression and recursion budgets.
+ * @returns The decoded root Tag.
+ * @throws {Error} On invalid input or exhausted budgets.
  */
-export function readFrom(data: Buffer | Uint8Array): Tag {
-  let buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-
-  // GZIP detection (magic bytes 0x1F 0x8B)
-  const isGzip = buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b;
-  if (isGzip) {
-    buf = gunzipSync(buf);
-    // GZIP : no leading short version; read the root tag directly
-    const reader = BufferReader.from(buf);
-    return _readTag(reader);
+export function readFrom(data: Buffer | Uint8Array, options: TagReadOptions = {}): Tag {
+  const limits = { maxInputBytes: 64 * 1024 ** 2, maxInflatedBytes: 128 * 1024 ** 2,
+    maxDepth: 128, maxTags: 1_000_000, maxByteArrayBytes: 64 * 1024 ** 2, ...options };
+  for (const key of ['maxInputBytes', 'maxInflatedBytes', 'maxDepth', 'maxTags', 'maxByteArrayBytes'] as const) {
+    if (!Number.isSafeInteger(limits[key]) || limits[key] < 1) throw new RangeError(`Invalid ${key}`);
   }
-
-  // Non-GZIP: read and ignore the short version
+  if (limits.maxDepth > 256) throw new RangeError('Tag maxDepth cannot exceed 256');
+  if (data.length > limits.maxInputBytes) throw new RangeError('Tag input byte budget exceeded');
+  let buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const isGzip = buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b;
+  if (isGzip) buf = gunzipSync(buf, { maxOutputLength: limits.maxInflatedBytes });
   const reader = BufferReader.from(buf);
-  reader.readInt16BE(); // version (ignored, typical value = 1)
-  return _readTag(reader);
+  if (!isGzip) reader.readInt16BE();
+  const context: TagReadContext = { remaining: limits.maxTags, maxDepth: limits.maxDepth, maxByteArrayBytes: limits.maxByteArrayBytes };
+  const tag = _readTag(reader, context, 0);
+  if (options.rejectTrailingBytes && !reader.isEOF()) throw new Error(`Trailing Tag bytes at ${reader.offset}`);
+  return tag;
 }
+
+/** Limits apply to each root Tag document, including nested lists/structures. */
+export interface TagReadOptions {
+  maxInputBytes?: number;
+  maxInflatedBytes?: number;
+  maxDepth?: number;
+  maxTags?: number;
+  maxByteArrayBytes?: number;
+  /** Java permits trailing envelope bytes; enable this for standalone documents. */
+  rejectTrailingBytes?: boolean;
+}
+/** Per-document mutable recursion/allocation budget. */
+interface TagReadContext { remaining: number; maxDepth: number; maxByteArrayBytes: number; }
 
 /**
  * Reads a tag from a BufferReader for internal recursive use.
  */
-function _readTag(reader: BufferReader): Tag {
+function _readTag(reader: BufferReader, context: TagReadContext, depth: number): Tag {
+  if (--context.remaining < 0) throw new RangeError('Tag node budget exceeded');
   const prType = reader.readInt8();
   const typeOrd = Math.abs(prType);
   const hasName = prType > 0;
@@ -81,7 +100,7 @@ function _readTag(reader: BufferReader): Tag {
     name = reader.readJavaUTF();
   }
 
-  const { value, listType } = _readPayload(reader, type);
+  const { value, listType } = _readPayload(reader, type, context, depth);
 
   return new Tag(type, name, value, listType);
 }
@@ -92,9 +111,12 @@ function _readTag(reader: BufferReader): Tag {
  */
 function _readPayload(
   reader: BufferReader,
-  type: TagType
+  type: TagType,
+  context: TagReadContext,
+  depth: number
 ): { value: Tag['value']; listType?: TagType } {
 
+  if (depth > context.maxDepth) throw new RangeError('Tag depth budget exceeded');
   switch (type) {
     case TagType.FINISH:
       return { value: null };
@@ -119,6 +141,7 @@ function _readPayload(
 
     case TagType.BYTE_ARRAY: {
       const len = reader.readInt32BE();
+      if (len < 0 || len > context.maxByteArrayBytes) throw new RangeError('Invalid Tag byte array length');
       return { value: reader.readBytes(len) };
     }
 
@@ -137,9 +160,11 @@ function _readPayload(
     case TagType.LIST: {
       const listTypeOrd = reader.readUInt8() as TagType;
       const count = reader.readInt32BE();
+      if (listTypeOrd >= TAG_TYPE_COUNT || count < 0 || count > context.remaining) throw new RangeError('Invalid Tag list type/count or node budget');
       const items: Tag[] = [];
       for (let i = 0; i < count; i++) {
-        const { value: itemVal, listType: itemListType } = _readPayload(reader, listTypeOrd);
+        context.remaining--;
+        const { value: itemVal, listType: itemListType } = _readPayload(reader, listTypeOrd, context, depth + 1);
         items.push(new Tag(listTypeOrd, null, itemVal, itemListType));
       }
       return { value: items, listType: listTypeOrd };
@@ -149,7 +174,7 @@ function _readPayload(
       const children: Tag[] = [];
       // Read until FINISH
       while (true) {
-        const child = _readTag(reader);
+        const child = _readTag(reader, context, depth + 1);
         children.push(child);
         if (child.type === TagType.FINISH) break;
       }
@@ -203,13 +228,45 @@ function _readPayload(
 
 /**
  * Serializes a root tag to a binary buffer.
- * Port of Tag.writeTo() — writes short version=1 followed by the tag.
+ * Port of Tag.writeTo() — writes short version=0 followed by the tag.
  */
 export function writeTo(tag: Tag): Buffer {
+  validateTagTree(tag);
   const writer = new BufferWriter();
   writer.writeInt16BE(0); // version (Java default = 0)
   _writeTag(writer, tag);
   return writer.toBuffer();
+}
+
+/**
+ * Validates writable tree invariants before allocating output.
+ * @param root Tag document.
+ * @throws {Error} For cycles, excessive depth, heterogeneous lists or unterminated structures.
+ */
+function validateTagTree(root: Tag): void {
+  const ancestors = new Set<Tag>();
+  let nodes = 0;
+  const visit = (tag: Tag, depth: number): void => {
+    if (++nodes > 1_000_000 || depth > 128) throw new RangeError('Tag write depth/node budget exceeded');
+    if (ancestors.has(tag)) throw new Error('Cyclic Tag tree');
+    if (!tag || !Number.isInteger(tag.type) || tag.type < 0 || tag.type >= TAG_TYPE_COUNT) throw new TypeError('Invalid Tag type');
+    if (tag.type !== TagType.STRUCT && tag.type !== TagType.LIST) return;
+    if (!Array.isArray(tag.value)) throw new TypeError('Tag container requires a Tag array');
+    const items = tag.value;
+    if (tag.type === TagType.STRUCT) {
+      if (items.length === 0 || items.at(-1)?.type !== TagType.FINISH ||
+          items.slice(0, -1).some(item => item.type === TagType.FINISH)) throw new Error('STRUCT requires exactly one final FINISH Tag');
+    } else {
+      const type = tag.listType ?? TagType.NOTHING;
+      if (!Number.isInteger(type) || type < 0 || type >= TAG_TYPE_COUNT || items.some(item => item.type !== type)) {
+        throw new Error('LIST requires a valid homogeneous element type');
+      }
+    }
+    ancestors.add(tag);
+    for (const item of items) visit(item, depth + 1);
+    ancestors.delete(tag);
+  };
+  visit(root, 0);
 }
 
 /**

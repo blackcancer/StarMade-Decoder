@@ -776,15 +776,19 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
         // Complete binary Tag — use the remaining slice
         const tagBuf = buf.slice(r.offset);
         internals.managerRaw = new Uint8Array(tagBuf);
-        try {
-          internals.managerTag = readFrom(tagBuf);
+        internals.managerTag = readFrom(tagBuf);
+        // A blueprint manager container is not an entity/SegmentController.
+        // Preserve the validated Tag verbatim; only construct the legacy entity
+        // view when an entity discriminator is actually present.
+        if (internals.managerTag.findByName('uniqueId')) {
           result.manager = SegmentControllerObject.fromTag(internals.managerTag);
-        } catch { /* tag invalid, on continue */ }
+        }
         return finalizeSmbpm(result, internals); // SEG_MANAGER_BYTE ends reading
       }
 
       case DOCKING_BYTE: {
         const size = r.readInt32BE();
+        if (size < 0 || size > r.remaining()) throw new RangeError('Invalid metadata collection count');
         for (let i = 0; i < size; i++) {
           const name = r.readJavaUTF();
           const posX = r.readInt32BE(), posY = r.readInt32BE(), posZ = r.readInt32BE();
@@ -813,6 +817,7 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
         if (metaVersion >= 2) {
           result.railUID = r.readJavaUTF();
           const wirelessSize = r.readInt32BE();
+          if (wirelessSize < 0 || wirelessSize > Math.floor(r.remaining() / 18)) throw new RangeError('Invalid wireless marker count');
           for (let i = 0; i < wirelessSize; i++) {
             const marking        = r.readJavaUTF();
             const markerLocation = r.readInt64BE();
@@ -822,15 +827,17 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
         }
 
         const size = r.readInt32BE();
+        if (size < 0 || size > r.remaining()) throw new RangeError('Invalid metadata collection count');
         for (let i = 0; i < size; i++) {
           const name = r.readJavaUTF();
           const tagSize = r.readInt32BE();
+          if (tagSize < 0 || tagSize > r.remaining()) throw new RangeError('Invalid metadata tag length');
           let childTag: Tag | null = null;
           let tagRaw: Uint8Array | null = null;
-          if (tagSize > 0 && tagSize < 100_000_000) {
+          if (tagSize > 0) {
             const tagBytes = r.readBytes(tagSize);
             tagRaw = new Uint8Array(tagBytes);
-            try { childTag = readFrom(tagBytes); } catch { /* skip */ }
+            childTag = readFrom(tagBytes);
           }
           const request = parseRailChildRequestFromTag(childTag);
           const offset = getRailChildOffsetFromRequest(request);
@@ -846,13 +853,12 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
 
       case AI_CONFIG_BYTE: {
         const tagSize = r.readInt32BE();
-        if (tagSize > 0 && tagSize < 100_000_000) {
+          if (tagSize < 0 || tagSize > r.remaining()) throw new RangeError('Invalid metadata tag length');
+        if (tagSize > 0) {
           const tagBytes = r.readBytes(tagSize);
           internals.aiRaw = new Uint8Array(tagBytes);
-          try {
-            internals.aiTag = readFrom(tagBytes);
-            result.aiConfig = parseAiConfigTag(internals.aiTag);
-          } catch { /* skip */ }
+          internals.aiTag = readFrom(tagBytes);
+          result.aiConfig = parseAiConfigTag(internals.aiTag);
         }
         break;
       }
@@ -861,6 +867,7 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
         const exists = r.readInt8() > 0;
         if (exists) {
           const size = r.readInt32BE();
+        if (size < 0 || size > r.remaining()) throw new RangeError('Invalid metadata collection count');
           for (let i = 0; i < size; i++) {
             const posX = r.readInt32BE(), posY = r.readInt32BE(), posZ = r.readInt32BE();
             const type = r.readInt16BE();
@@ -879,6 +886,7 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
         const target = dataType === CARGO_BYTE ? result.cargoPoints : result.lockBoxPoints;
         if (exists) {
           const size = r.readInt32BE();
+        if (size < 0 || size > r.remaining()) throw new RangeError('Invalid metadata collection count');
           for (let i = 0; i < size; i++) {
             const posIndex = r.readInt64BE();
             const capacity = r.readFloat64BE();
@@ -891,16 +899,13 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
       case THRUST_CONFIG_BYTE: {
         const tagBuf = buf.slice(r.offset);
         internals.thrustRaw = new Uint8Array(tagBuf);
-        try {
-          internals.thrustTag = readFrom(tagBuf);
-          result.thrustConfig = ThrustConfig.fromTag(internals.thrustTag);
-        } catch { /* skip */ }
+        internals.thrustTag = readFrom(tagBuf);
+        result.thrustConfig = ThrustConfig.fromTag(internals.thrustTag);
         return finalizeSmbpm(result, internals); // tag consumes the rest of the stream
       }
 
       default:
-        // Unknown type — cannot continue without knowing the size
-        return finalizeSmbpm(result, internals);
+        throw new Error(`Unsupported blueprint metadata type ${dataType} at ${r.offset - 1}`);
     }
   }
 

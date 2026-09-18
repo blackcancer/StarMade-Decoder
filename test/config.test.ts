@@ -20,13 +20,16 @@ import { BlockBehaviorConfig } from '../src/config/BlockBehaviorConfig.js';
 import { FactionConfig } from '../src/config/FactionConfig.js';
 import { parseSystemNames, writeSystemNames } from '../src/config/SystemNames.js';
 
-const STARMADE_DIR = '/srv/StarMade';
+// Tests requiring proprietary installed-game assets are explicit integration tests.
+const itLive = fs.existsSync(process.env.STARMADE_DIR ?? '/srv/StarMade') ? it : it.skip;
+
+const STARMADE_DIR = process.env.STARMADE_DIR ?? '/srv/StarMade';
 
 // ── SMToolConfig ──────────────────────────────────────────────────────────────
 
 describe('SMToolConfig', function () {
 
-  it('fromData builds the correct paths', () => {
+  itLive('fromData builds the correct paths', () => {
     const cfg = SMToolConfig.fromData({ starmadeDir: STARMADE_DIR, worldDir: 'world0' });
     assert.equal(cfg.starmadeDir, STARMADE_DIR);
     assert.equal(cfg.worldDir, 'world0');
@@ -40,14 +43,14 @@ describe('SMToolConfig', function () {
     console.log('    paths.serverCfg:', cfg.paths.serverCfg);
   });
 
-  it('validate() passes for a valid StarMade installation', () => {
+  itLive('validate() passes for a valid StarMade installation', () => {
     const cfg = SMToolConfig.fromData({ starmadeDir: STARMADE_DIR, worldDir: 'world0' });
     assert.doesNotThrow(() => cfg.validate());
     assert.isTrue(cfg.isValid());
     console.log('    isValid: true');
   });
 
-  it('withWorldDir returns a new instance', () => {
+  itLive('withWorldDir returns a new instance', () => {
     const cfg  = SMToolConfig.fromData({ starmadeDir: STARMADE_DIR, worldDir: 'world0' });
     const cfg2 = cfg.withWorldDir('world1');
     assert.equal(cfg.worldDir, 'world0');
@@ -72,7 +75,7 @@ describe('ServerConfig', function () {
   let cfg: SMToolConfig;
   before(() => { cfg = SMToolConfig.fromData({ starmadeDir: STARMADE_DIR, worldDir: 'world0' }); });
 
-  it('loads server.cfg', () => {
+  itLive('loads server.cfg', () => {
     const sc = ServerConfig.load(cfg);
     assert.instanceOf(sc, ServerConfig);
     console.log('    WORLD:', sc.getString('WORLD'));
@@ -81,7 +84,7 @@ describe('ServerConfig', function () {
     console.log('    THRUST_SPEED_LIMIT:', sc.getNumber('THRUST_SPEED_LIMIT'));
   });
 
-  it('get() returns typed values', () => {
+  itLive('get() returns typed values', () => {
     const sc = ServerConfig.load(cfg);
     assert.isString(sc.getString('WORLD'));
     assert.isNumber(sc.getNumber('MAX_CLIENTS'));
@@ -101,7 +104,7 @@ describe('ServerConfig', function () {
     assert.isDefined(SERVER_CONFIG_SCHEMA['NPC_FACTION_SPAWN_LIMIT']);
   });
 
-  it('set() updates immutably', () => {
+  itLive('set() updates immutably', () => {
     const sc1 = ServerConfig.load(cfg);
     const sc2 = sc1.set('MAX_CLIENTS', 99);
     assert.equal(sc2.getNumber('MAX_CLIENTS'), 99);
@@ -109,12 +112,12 @@ describe('ServerConfig', function () {
     assert.notEqual(sc1.getNumber('MAX_CLIENTS'), 99);
   });
 
-  it('set() throws TypeError for an unknown key', () => {
+  itLive('set() throws TypeError for an unknown key', () => {
     const sc = ServerConfig.load(cfg);
     assert.throws(() => sc.set('UNKNOWN_KEY_XYZ', 42), TypeError);
   });
 
-  it('toString() preserves comments', () => {
+  itLive('toString() preserves comments', () => {
     const sc = ServerConfig.load(cfg);
     const str = sc.toString();
     assert.include(str, '=');
@@ -124,7 +127,7 @@ describe('ServerConfig', function () {
     }
   });
 
-  it('setMany + round-trip parse', () => {
+  itLive('setMany + round-trip parse', () => {
     const sc = ServerConfig.load(cfg);
     const modified = sc.setMany({ MAX_CLIENTS: 50, ENEMY_SPAWNING: false, THRUST_SPEED_LIMIT: 100 });
     // Reparse from string
@@ -144,14 +147,14 @@ describe('BlockConfig', function () {
   let cfg: SMToolConfig;
   before(() => { cfg = SMToolConfig.fromData({ starmadeDir: STARMADE_DIR, worldDir: 'world0' }); });
 
-  it('loads BlockConfig.xml', () => {
+  itLive('loads BlockConfig.xml', () => {
     const bc = BlockConfig.load(cfg);
     assert.instanceOf(bc, BlockConfig);
     assert.isAbove(bc.size, 100, 'must have 100+ blocks');
     console.log('    Total blocks:', bc.size);
   });
 
-  it('getById() returns a BlockDefinition', () => {
+  itLive('getById() returns a BlockDefinition', () => {
     const bc = BlockConfig.load(cfg);
     // Block 1 exists in every vanilla installation
     const b = bc.getById(1);
@@ -169,7 +172,7 @@ describe('BlockConfig', function () {
     }
   });
 
-  it('loads render fields needed by StarMade-3D', () => {
+  itLive('loads render fields needed by StarMade-3D', () => {
     const bc = BlockConfig.load(cfg);
     const b = bc.getByName('Grey Basic Armor') ?? bc.all[0];
     assert.isDefined(b);
@@ -197,7 +200,7 @@ describe('BlockConfig', function () {
     console.log('    render fields:', b!.name, b!.textureIds.join(','));
   });
 
-  it('loads XML render metadata required by StarMade-3D', () => {
+  itLive('loads XML render metadata required by StarMade-3D', () => {
     const bc = BlockConfig.load(cfg);
     const resourceBlocks = bc.all.filter((block) => block.resourceInjection > 0);
     const extendedBlocks = bc.all.filter((block) => block.extendedTexture);
@@ -218,7 +221,7 @@ describe('BlockConfig', function () {
     );
   });
 
-  it('loads extended BlockConfig metadata for future render and gameplay use', () => {
+  itLive('loads extended BlockConfig metadata for future render and gameplay use', () => {
     const bc = BlockConfig.load(cfg);
     const railBasic = bc.getByName('Rail Basic');
     const greyHull = bc.getByName('Grey Basic Armor');
@@ -247,7 +250,7 @@ describe('BlockConfig', function () {
     assert.isAbove(whiteLight!.metadata.wildcardIds.length, 0);
   });
 
-  it('provides StarMade-Open style BlockConfig element information', () => {
+  itLive('provides StarMade-Open style BlockConfig element information', () => {
     const bc = BlockConfig.load(cfg);
     const greyHull = bc.getElementInfoByName('Grey Basic Armor');
     const wedge = bc.getElementInfoByName('Grey Basic Armor Wedge');
@@ -290,7 +293,7 @@ describe('BlockConfig', function () {
     assert.equal(bc.getByName('Grey Basic Armor')!.toElementInfo(bc).identity.typeName, 'GREY_HULL');
   });
 
-  it('getByName() finds a block by name', () => {
+  itLive('getByName() finds a block by name', () => {
     const bc = BlockConfig.load(cfg);
     // Find a known block
     const first = bc.all[0];
@@ -302,7 +305,7 @@ describe('BlockConfig', function () {
     }
   });
 
-  it('BlockDefinition.with() creates an immutable variant', () => {
+  itLive('BlockDefinition.with() creates an immutable variant', () => {
     const bc = BlockConfig.load(cfg);
     const first = bc.all[0];
     if (!first) { console.log('    (skip — no blocks)'); return; }
@@ -315,7 +318,7 @@ describe('BlockConfig', function () {
     console.log('    BlockDefinition.with(): ok (id=' + first.id + ', hp: ' + first.hp + '→9999)');
   });
 
-  it('set() adds/replaces a block', () => {
+  itLive('set() adds/replaces a block', () => {
     const bc   = BlockConfig.load(cfg);
     const first = bc.all[0];
     if (!first) return;
@@ -326,7 +329,7 @@ describe('BlockConfig', function () {
     console.log('    BlockConfig.set(): ok');
   });
 
-  it('prints the first five blocks', () => {
+  itLive('prints the first five blocks', () => {
     const bc = BlockConfig.load(cfg);
     bc.all.slice(0, 5).forEach(b =>
       console.log('   ', b.toString())
@@ -342,21 +345,21 @@ describe('BlockBehaviorConfig', function () {
   let cfg: SMToolConfig;
   before(() => { cfg = SMToolConfig.fromData({ starmadeDir: STARMADE_DIR, worldDir: 'world0' }); });
 
-  it('loads blockBehaviorConfig.xml', () => {
+  itLive('loads blockBehaviorConfig.xml', () => {
     const bbc = BlockBehaviorConfig.load(cfg);
     assert.instanceOf(bbc, BlockBehaviorConfig);
     assert.isAbove(bbc.entries().size, 10);
     console.log('    Total values:', bbc.entries().size);
   });
 
-  it('getNumber() returns correct values', () => {
+  itLive('getNumber() returns correct values', () => {
     const bbc = BlockBehaviorConfig.load(cfg);
     // ShieldCapacityInitial and other standard values
     const keys = [...bbc.entries().keys()].slice(0, 5);
     keys.forEach(k => console.log('   ', k, '=', bbc.get(k)));
   });
 
-  it('set() updates immutably', () => {
+  itLive('set() updates immutably', () => {
     const bbc  = BlockBehaviorConfig.load(cfg);
     const first = [...bbc.entries().keys()][0];
     if (!first) return;
@@ -395,7 +398,7 @@ describe('FactionConfig', function () {
 // ── systemNames.syl ──────────────────────────────────────────────────────────
 
 describe('SystemNames', function () {
-  it('parses and writes systemNames.syl', () => {
+  itLive('parses and writes systemNames.syl', () => {
     const file = path.join(STARMADE_DIR, 'data/config/systemNames.syl');
     const parsed = parseSystemNames(fs.readFileSync(file));
     assert.isAbove(parsed.syllables.length, 10);

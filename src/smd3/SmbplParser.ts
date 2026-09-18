@@ -363,24 +363,25 @@ export function parseSmbpl(data: Buffer | Uint8Array): BlueprintLogic {
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const result: SmbplFile = { structureVersion: 0, controllers: [], links: [], controllerCount: 0 };
 
-  if (buf.length < 4) return new BlueprintLogic(result);
+  if (buf.length < 4) throw new RangeError('Truncated blueprint logic header');
 
   const r = BufferReader.from(buf);
   result.structureVersion = r.readInt32BE();
 
-  if (r.isEOF()) return new BlueprintLogic(result);
+  if (r.isEOF()) throw new RangeError('Missing blueprint control map');
 
   // ControlElementMap.deserialize — port of factory id=0 parser
-  try {
+  {
     const header = r.readInt32BE(); // negative
     if (header >= 0) {
       // Very old format without versioning (shift=8), cannot be parsed without context
-      return new BlueprintLogic(result);
+      throw new Error('Unsupported legacy blueprint control map');
     }
 
     const version = -header;
     const isDisk = version > 1024;
     const keySize = r.readInt32BE();
+      if (keySize < 0 || keySize > Math.floor(r.remaining() / 10)) throw new RangeError('Invalid blueprint logic keySize');
 
     result.controllerCount = keySize;
 
@@ -390,11 +391,13 @@ export function parseSmbpl(data: Buffer | Uint8Array): BlueprintLogic {
       const fromZ = r.readInt16BE();
 
       const valueSize = r.readInt32BE();
+      if (valueSize < 0 || valueSize > Math.floor(r.remaining() / 6)) throw new RangeError('Invalid blueprint logic valueSize');
       const controller: ControlController = { x: fromX, y: fromY, z: fromZ, groups: [] };
 
       for (let v = 0; v < valueSize; v++) {
         const type = r.readInt16BE();
         const elemSize = r.readInt32BE();
+      if (elemSize < 0 || elemSize > Math.floor(r.remaining() / 1)) throw new RangeError('Invalid blueprint logic elemSize');
 
         const targets: Array<{ x: number; y: number; z: number }> = [];
 
@@ -425,7 +428,7 @@ export function parseSmbpl(data: Buffer | Uint8Array): BlueprintLogic {
       }
       result.controllers.push(controller);
     }
-  } catch { /* unknown or truncated format */ }
+  }
 
   return new BlueprintLogic(result);
 }

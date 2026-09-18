@@ -319,28 +319,15 @@ describe('ThrustConfig — version 0/1 VECTOR4f path', () => {
 
 // ── smd3/SmbplParser — buf.length < 4 early return (line 49) ─────────────────
 
-describe('SmbplParser — early return paths', () => {
-  it('returns empty result when buf.length < 4 (line 49)', () => {
-    const buf = Buffer.from([0x00, 0x01]); // only 2 bytes
-    const file = parseSmbpl(buf);
-    assert.equal(file.links.length, 0);
-    assert.equal(file.controllerCount, 0);
+describe('SmbplParser — invalid input rejection', () => {
+  it('rejects an incomplete header', () => {
+    assert.throws(() => parseSmbpl(Buffer.alloc(3)), /Truncated/);
   });
-
-  it('returns empty result when exactly 4 bytes (isEOF after version, line 54)', () => {
-    const w = new BufferWriter();
-    w.writeInt32BE(0); // structureVersion only
-    const file = parseSmbpl(w.toBuffer());
-    assert.equal(file.structureVersion, 0);
-    assert.equal(file.links.length, 0);
+  it('rejects a missing control map', () => {
+    assert.throws(() => parseSmbpl(Buffer.alloc(4)), /Missing blueprint control map/);
   });
-
-  it('returns early result when header >= 0 (line 60-62 old format)', () => {
-    const w = new BufferWriter();
-    w.writeInt32BE(0); // structureVersion
-    w.writeInt32BE(5); // header = 5 (positive) → old format, return early
-    const file = parseSmbpl(w.toBuffer());
-    assert.equal(file.links.length, 0); // returned early without throwing
+  it('rejects an unsupported unversioned map rather than returning empty data', () => {
+    assert.throws(() => parseSmbpl(Buffer.alloc(12)), /Unsupported legacy/);
   });
 });
 
@@ -507,7 +494,7 @@ describe('BlueprintFolderParser — _emptyHeader fallback (lines 59-60, 92-100)'
       fs.mkdirSync(rootDir);
       // No header.smbph → _emptyHeader() is called (lines 58-60, 92-100)
 
-      const result = parseBlueprintFolder(rootDir);
+      const result = parseBlueprintFolder(rootDir, { mode: 'recover' });
       assert.isDefined(result);
       assert.equal(result.root.header.entityType, 'UNKNOWN'); // _emptyHeader returns UNKNOWN
       assert.equal(result.root.header.totalBlockCount, 0);
@@ -521,7 +508,7 @@ describe('BlueprintFolderParser — _emptyHeader fallback (lines 59-60, 92-100)'
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bptest-'));
     try {
       fs.mkdirSync(path.join(tmp, 'MyBP'));
-      const result = parseBlueprintFolder(path.join(tmp, 'MyBP'));
+      const result = parseBlueprintFolder(path.join(tmp, 'MyBP'), { mode: 'recover' });
       assert.equal(result.root.header.headerVersion, -1);
       assert.deepEqual(result.root.header.boundingBox, { minX:0, minY:0, minZ:0, maxX:0, maxY:0, maxZ:0 });
     } finally {

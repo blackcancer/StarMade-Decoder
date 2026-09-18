@@ -77,7 +77,7 @@ export type IcoSideNormals = readonly [IcoNormal, IcoNormal, IcoNormal];
 /** Explicit parsing limits and optional geometry context. */
 export interface Smd3ParseOptions {
   mode?: 'strict' | 'recover';
-  /** Maximum decoded segments; default 512 (16,777,216 editable blocks). */
+  /** Maximum decoded segments; default 4096; block objects are materialized on first access. */
   maxSegments?: number;
   /** Required only for SINGLE_SIDE_EDGE. No guessed clipping geometry is used. */
   icoSideNormals?: IcoSideNormals;
@@ -115,7 +115,7 @@ function validateNormals(normals: IcoSideNormals): void {
 export function parseSmd3(data: Buffer | Uint8Array, options: Smd3ParseOptions = {}): Smd3File {
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   if (buf.length < HEADER_SIZE) throw new RangeError(`Truncated SMD3 header: ${buf.length} bytes`);
-  const maxSegments = options.maxSegments ?? 512;
+  const maxSegments = options.maxSegments ?? 4096;
   if (!Number.isSafeInteger(maxSegments) || maxSegments < 0 || maxSegments > HEADER_SLOT_COUNT) {
     throw new RangeError('maxSegments must be an integer from 0 to 4096');
   }
@@ -189,9 +189,9 @@ function parseSegment(bytes: Buffer, options: Smd3ParseOptions): SegmentData {
   const lastChanged = r.readInt64BE();
   const x = r.readInt32BE(), y = r.readInt32BE(), z = r.readInt32BE();
   const dataType = r.readUInt8();
-  const blocks: BlockData[] = new Array(BLOCK_COUNT);
+  const words = new Uint32Array(BLOCK_COUNT);
   if (dataType === DATA_EMPTY) {
-    for (let i = 0; i < BLOCK_COUNT; i++) blocks[i] = decodeWord(0);
+    // The compact typed array is already zero-filled.
   } else if (dataType === DATA_SINGLE || dataType === DATA_SINGLE_SIDE_EDGE) {
     const word = r.readUInt32BE();
     if (dataType === DATA_SINGLE_SIDE_EDGE && !options.icoSideNormals) {
@@ -199,7 +199,7 @@ function parseSegment(bytes: Buffer, options: Smd3ParseOptions): SegmentData {
     }
     for (let i = 0; i < BLOCK_COUNT; i++) {
       const present = dataType === DATA_SINGLE || isInSide(i, { x, y, z }, options.icoSideNormals!);
-      blocks[i] = decodeWord(present ? word : 0);
+      words[i] = present ? word : 0;
     }
   } else if (dataType === DATA_BITMAP) {
     const shift = r.readInt32BE();
@@ -215,7 +215,7 @@ function parseSegment(bytes: Buffer, options: Smd3ParseOptions): SegmentData {
     for (let i = 0; i < BLOCK_COUNT; i++) {
       const index = (bitmap[i >>> shift] >>> ((i & ((1 << shift) - 1)) * bits)) & mask;
       if (index >= palette.length) throw new RangeError(`Invalid palette index ${index}`);
-      blocks[i] = decodeWord(palette[index]);
+      words[i] = palette[index];
     }
   } else if (dataType === DATA_AVAILABLE) {
     const declared = r.readInt32BE();
@@ -226,8 +226,8 @@ function parseSegment(bytes: Buffer, options: Smd3ParseOptions): SegmentData {
       if (inflated.length !== BLOCK_COUNT * 3) throw new RangeError('Truncated three-byte SMD3 payload');
       for (let i = 0; i < BLOCK_COUNT; i++) {
         const word = inflated.readUIntLE(i * 3, 3);
-        blocks[i] = { type: word & 2047, hp: (word >>> 11) & 127,
-          active: (word & 0x40000) !== 0, orientation: (word >>> 19) & 31 };
+        words[i] = (word & 2047) | (((word >>> 11) & 127) << 13) |
+          (((word >>> 18) & 1) << 20) | (((word >>> 19) & 31) << 21);
       }
     } else {
       // RemoteSegment.serializeLZ4 in the pinned Java revision writes 22 here
@@ -238,14 +238,23 @@ function parseSegment(bytes: Buffer, options: Smd3ParseOptions): SegmentData {
       const decoded = decodeLz4Block(compressed, BLOCK_COUNT * 4);
       if (declared !== 22 && decoded.bytesRead !== declared) throw new Error('LZ4 compressed size mismatch');
       inflated = decoded.data;
-      for (let i = 0; i < BLOCK_COUNT; i++) blocks[i] = decodeWord(inflated.readUInt32LE(i * 4));
+      for (let i = 0; i < BLOCK_COUNT; i++) words[i] = inflated.readUInt32LE(i * 4);
     }
   } else {
     throw new Error(`Unsupported SMD3 data type ${dataType}`);
   }
   let blockCount = 0;
-  for (const block of blocks) if (block.type !== 0) blockCount++;
-  return { x, y, z, lastChanged, version, blocks, blockCount };
+  for (const word of words) if ((word & 8191) !== 0) blockCount++;
+  let materialized: BlockData[] | undefined;
+  // Preserve the existing mutable-array API without eagerly allocating 32768
+  // objects for every segment of a large blueprint. Once accessed, the array
+  // is stable, so direct edits remain visible to the writer.
+  return { x, y, z, lastChanged, version, blockCount,
+    get blocks(): BlockData[] {
+      return materialized ??= Array.from(words, decodeWord);
+    },
+    set blocks(value: BlockData[]) { materialized = value; },
+  };
 }
 
 /** @param index Local block index. @returns Its x/y/z coordinates. @throws {RangeError} Outside the segment. */

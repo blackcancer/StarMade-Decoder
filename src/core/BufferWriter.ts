@@ -16,6 +16,7 @@
 
 import { constants as bufferConstants } from 'node:buffer';
 
+/** Initial backing allocation in bytes. */
 const INITIAL_CAPACITY = 4096;
 /**
  * Defines GROWTH_FACTOR for core binary tag parsing and serialization.
