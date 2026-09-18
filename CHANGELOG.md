@@ -1,6 +1,26 @@
 # Changelog
 
-## Unreleased
+## 1.5.0 — integrity correction candidate (2026-09-18)
+
+- Move ZIP/XML runtime dependencies into `dependencies` and update the locked toolchain.
+- Fix Java modified UTF-8 in file Tags, reject malformed sequences and invalid lengths.
+- Fix zero-capacity writer growth, detached output snapshots and integer validation.
+- Add bounded Tag traversal and envelope-preserving `TagDocument` editing.
+- Correct SMD3 v7 raw LZ4/little-endian serialization; retain an explicit old-SDK migration mode.
+- Preserve all reserved block bits; remove shared mutable blocks and stale-count data loss.
+- Reject sector overflow, incomplete recovery output, invalid coordinates and duplicate cells.
+- Decode geometric side segments using caller-supplied game normals rather than invented cubes.
+- Fix sibling attachment discovery; add bounded ZIP extraction, diagnostics and strict defaults.
+- Correct blueprint manager typing and preserve present-empty metadata list flags.
+- Parse legacy controller maps with the Java +8 coordinate migration.
+- Add audit regressions, independent JDK/LZ4 tests, a real 43-file metadata round-trip check,
+  package-consumer qualification and CI across Node.js 20/22/24.
+- Remove stale fixed coverage claims; distinguish portable tests from installation-only checks.
+
+See `docs/INTEGRITY_AND_MIGRATION.md` before upgrading. This candidate has not been
+validated by launching the game and is not published to npm by the correction workflow.
+
+## Earlier unreleased development
 
 ### Added
 
