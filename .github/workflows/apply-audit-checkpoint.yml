@@ -32,35 +32,40 @@ jobs:
           assert len(parts) == 4, 'Expected exactly four checkpoint parts'
           data = b''.join(p.read_bytes() for p in parts)
           assert hashlib.sha256(data).hexdigest() == '7ffba677e01fd497ba9a1a5bb655352dc46608be975752a1e15c0928524874d6', 'Checkpoint digest mismatch'
-          entries = json.loads(gzip.decompress(data))
-          assert len(entries) == 33
-          planned = []
-          seen = set()
-          for entry in entries:
-              name = entry['path']
-              relative = PurePosixPath(name)
-              assert not relative.is_absolute() and '..' not in relative.parts
-              assert name not in seen
-              seen.add(name)
-              assert relative.parts[0] in ('src', 'test', 'scripts', 'docs') or name in (
-                  'package.json', 'package-lock.json', 'README.md', 'CHANGELOG.md',
-                  'tsconfig.json', '.github/workflows/decoder-validation.yml')
-              path = Path(name)
-              assert not path.is_symlink()
-              original = path.read_bytes() if path.exists() else b''
-              assert hashlib.sha256(original).hexdigest() == entry['old_sha256'], f'Unexpected base: {name}'
-              lines = original.decode('utf-8').splitlines(keepends=True)
-              for start, end, text in reversed(entry['edits']):
-                  assert 0 <= start <= end <= len(lines)
-                  lines[start:end] = text.splitlines(keepends=True)
-              result = ''.join(lines).encode('utf-8')
-              assert hashlib.sha256(result).hexdigest() == entry['new_sha256'], f'Result mismatch: {name}'
-              planned.append((path, result))
-          for path, result in planned:
-              path.parent.mkdir(parents=True, exist_ok=True)
-              path.write_bytes(result)
-          Path('/tmp/audit-manifest.json').write_text(json.dumps(entries))
-          print(f'Materialized and verified {len(planned)} files.')
+          base = json.loads(gzip.decompress(data))
+          assert len(base) == 33
+          followup = json.loads(Path('.github/audit-checkpoint/followup.json').read_text())
+          assert len(followup) == 3
+          manifest = {}
+          for entries in (base, followup):
+              planned = []
+              seen = set()
+              for entry in entries:
+                  name = entry['path']
+                  relative = PurePosixPath(name)
+                  assert not relative.is_absolute() and '..' not in relative.parts
+                  assert name not in seen
+                  seen.add(name)
+                  assert relative.parts[0] in ('src', 'test', 'scripts', 'docs') or name in (
+                      'package.json', 'package-lock.json', 'README.md', 'CHANGELOG.md',
+                      'tsconfig.json', '.github/workflows/decoder-validation.yml')
+                  path = Path(name)
+                  assert not path.is_symlink()
+                  original = path.read_bytes() if path.exists() else b''
+                  assert hashlib.sha256(original).hexdigest() == entry['old_sha256'], f'Unexpected base: {name}'
+                  lines = original.decode('utf-8').splitlines(keepends=True)
+                  for start, end, text in reversed(entry['edits']):
+                      assert 0 <= start <= end <= len(lines)
+                      lines[start:end] = text.splitlines(keepends=True)
+                  result = ''.join(lines).encode('utf-8')
+                  assert hashlib.sha256(result).hexdigest() == entry['new_sha256'], f'Result mismatch: {name}'
+                  planned.append((path, result))
+                  manifest[name] = entry
+              for path, result in planned:
+                  path.parent.mkdir(parents=True, exist_ok=True)
+                  path.write_bytes(result)
+          Path('/tmp/audit-manifest.json').write_text(json.dumps(list(manifest.values())))
+          print(f'Materialized and verified {len(manifest)} files.')
           PY
       - run: npm ci --ignore-scripts
       - run: npm run build
@@ -69,22 +74,22 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          npm test | tee /tmp/audit-tests.log
+          npm test 2>&1 | tee /tmp/audit-tests.log
       - name: Independent Java UTF oracle
         shell: bash
         run: |
           set -o pipefail
-          npm run test:java | tee /tmp/audit-java.log
+          npm run test:java 2>&1 | tee /tmp/audit-java.log
       - name: Production-only packed consumer
         shell: bash
         run: |
           set -o pipefail
-          npm run test:package | tee /tmp/audit-package.log
+          npm run test:package 2>&1 | tee /tmp/audit-package.log
       - name: Coverage gate
         shell: bash
         run: |
           set -o pipefail
-          npm run coverage:check | tee /tmp/audit-coverage.log
+          npm run coverage:check 2>&1 | tee /tmp/audit-coverage.log
       - name: Push verified source checkpoint without force
         shell: bash
         run: |
