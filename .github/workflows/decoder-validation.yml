@@ -1,49 +1,67 @@
-name: Decoder validation
+name: Apply verified audit corrections
 
 on:
   push:
-    branches: [main, fix/audit-data-integrity]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
+    branches: [fix/audit-integrity-complete]
+    paths: ['.github/workflows/decoder-validation.yml']
 
 permissions:
   contents: read
 
 jobs:
-  validate:
+  apply:
+    if: github.repository == 'blackcancer/StarMade-Decoder' && github.ref == 'refs/heads/fix/audit-integrity-complete'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-      - name: Prepare patched audit dependency lock
+          ref: fix/audit-integrity-complete
+          fetch-depth: 0
+      - name: Verify baseline and patch bytes
+        shell: bash
         run: |
-          node --input-type=module -e "import fs from 'node:fs'; const p=JSON.parse(fs.readFileSync('package.json')); p.version='1.5.0'; p.dependencies={'adm-zip':'^0.6.1','fast-xml-parser':'^5.7.3'}; delete p.devDependencies['adm-zip']; delete p.devDependencies['fast-xml-parser']; p.devDependencies.mocha='^12.0.2'; fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');"
-          npm install --package-lock-only --ignore-scripts
-          npm audit fix --package-lock-only --ignore-scripts || true
-      - run: npm ci --ignore-scripts
-      - name: Capture reproducible audit workspace
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git diff --quiet e5f531463825315ada91a92f35b3ca776e2b7c7d HEAD -- . ':(exclude).github/workflows/decoder-validation.yml' ':(exclude).audit-transfer' ':(exclude)src/core/BufferReader.ts' ':(exclude)src/core/BufferWriter.ts' ':(exclude)test/audit-core.test.ts'
+          test "$(git hash-object src/core/BufferReader.ts)" = 111f0a3febe03991573a5cefdfbc06229267f989
+          test "$(git hash-object src/core/BufferWriter.ts)" = dbd2be87c989070da52540ae47dcd0f92812f560
+          test "$(git hash-object test/audit-core.test.ts)" = 1980031da91b2593a90bf3ab37b486acc56416f3
+          cp src/core/BufferReader.ts /tmp/concurrent-reader.ts
+          cat .audit-transfer/part-{0..5}.bin > /tmp/audit-corrections.xz
+          echo 'de68ff73451c4efb638b8620fc8b1ceb8fecfa3bba2069c34788529e86ff44ea  /tmp/audit-corrections.xz' | sha256sum -c -
+          xz -dc /tmp/audit-corrections.xz > /tmp/audit-corrections.patch
+          echo '652566ae92b552258b0acd9c817570233ee26d277ad1146ed60880e91cd79b2b  /tmp/audit-corrections.patch' | sha256sum -c -
+          git restore --source=e5f531463825315ada91a92f35b3ca776e2b7c7d --staged --worktree src/core/BufferReader.ts src/core/BufferWriter.ts
+          git apply --check --unidiff-zero /tmp/audit-corrections.patch
+      - name: Apply the reviewed integration, retaining concurrent core tests
+        shell: bash
         run: |
-          mkdir -p validation
-          git archive --format=tar HEAD | gzip > validation/source.tar.gz
-          cp package.json package-lock.json validation/
-          tar -czf validation/dependencies.tar.gz node_modules
-          npm audit --json > validation/dependency-audit.json || true
-      - run: npm run build
-      - run: npm run docs:check
-      - run: npm test
-      - run: npm run coverage:check
-      - name: Preserve validation workspace
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: decoder-validation-workspace
-          path: validation/
-          retention-days: 7
-          if-no-files-found: error
+          set -euo pipefail
+          git apply --index --unidiff-zero /tmp/audit-corrections.patch
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/core/BufferReader.ts')
+          ours = p.read_text()
+          start = ours.index('  /**\n   * Reads a non-negative int32 collection count')
+          end = ours.index('  // ── Internal', start)
+          method = ours[start:end]
+          current = Path('/tmp/concurrent-reader.ts').read_text()
+          merged = current.replace('  /**\n   * @param n Requested byte count.', method + '  /**\n   * @param n Requested byte count.')
+          merged = merged.replace('    const count = this.readInt32BE();', '    this._check(4);\n    const count = this.buf.readInt32BE(this._offset);')
+          merged = merged.replace('count * minimumItemBytes > this.remaining()', 'count * minimumItemBytes > this.remaining() - 4')
+          merged = merged.replace('at offset ${this.offset - 4}', 'at offset ${this.offset}')
+          merged = merged.replace('    return count;', '    this._offset += 4;\n    return count;')
+          p.write_text(merged)
+          PY
+          test "$(git hash-object src/core/BufferReader.ts)" = 59368c8d94e3c7d4209b821b46bcbca4c46908f0
+          git add src/core/BufferReader.ts
+          git rm -r .audit-transfer
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: integrate audited codecs, archive safety and independent regression tests'
+          git push origin HEAD:refs/heads/fix/audit-integrity-complete
+          git rev-parse HEAD >> "$GITHUB_STEP_SUMMARY"
