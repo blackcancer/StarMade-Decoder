@@ -1,195 +1,131 @@
 /**
- * @fileoverview SMD3 Writer
- *
- * Parses or writes StarMade blueprint and segment binary formats.
+ * @fileoverview
+ * Validated SMD3 writer with explicit version selection and loss prevention.
+ * Version 7 uses raw LZ4/little-endian block words. Version 6 uses zlib/24-bit
+ * words and rejects fields that cannot be represented. Writers never trust a
+ * cached blockCount, truncate compression, or silently overwrite header slots.
+ * Byte identity, original compression and sector allocation are not preserved.
  *
  * @author InitSysRev
- * @version 1.0.0
+ * @version 1.5.0
  */
-
-/**
- * Smd3Writer — encoder for .smd3 files (StarMade block segments).
- *
- * Exact inverse of Smd3Parser.ts.
- *
- * Written format :
- *   HEADER (16388 bytes) : byte version + 3×padding + 4096×(short offset + short size)
- *   DATA: segments in their slots (each slot = SEGMENT_SECTOR = 48KB)
- *     byte  segVersion + int64 lastChanged + int32 x,y,z + byte dataByte
- *     [if DATA_AVAILABLE] int32 compressedSize + bytes zlib
- *
- * Block encoding 4-byte (version >= 7) :
- *   int32 BE par bloc : bits 0-12=type, 13-19=hp, 20=active, 21-25=orient
- *
- * Block encoding 3-byte (version < 7, read-only — always written as v7)
- *
- * Java source: RemoteSegment.serialize(), SegmentData4Byte.serialize()
- */
-
-import { deflateSync } from 'zlib';
-import {
-  HEADER_SIZE, HEADER_SLOT_COUNT, SEGMENT_SECTOR, OFFSET_SHIFT,
-  DATA_AVAILABLE, DATA_EMPTY, CHUNK_DIM, BLOCK_COUNT, VERSION_4BYTE,
-} from './Smd3Parser.js';
+import { deflateSync } from 'node:zlib';
+import { encodeLz4Block } from './Lz4Block.js';
+import { HEADER_SIZE, HEADER_SLOT_COUNT, SEGMENT_SECTOR, DATA_AVAILABLE,
+  DATA_EMPTY, CHUNK_DIM, BLOCK_COUNT, VERSION_4BYTE, posToIndex } from './Smd3Parser.js';
 import type { Smd3File, SegmentData, BlockData } from './Smd3Parser.js';
 
-// ── Block Encoding ────────────────────────────────────────────────────────────
-
-/**
- * Serializes 4Byte for StarMade blueprint and segment file parsing.
- *
- * @param block - Input value for the _encode4Byte operation.
- * @returns The computed StarMade-Decoder value.
- */
-function _encode4Byte(block: BlockData): number {
-  let v = 0;
-  v |= (block.type & 0x1FFF);
-  v |= ((block.hp & 0x7F) << 13);
-  v |= (block.active ? 1 : 0) << 20;
-  v |= ((block.orientation & 0x1F) << 21);
-  return v;
+/** @param value Integer. @param max Inclusive maximum. @param name Field name. @throws {RangeError} On overflow. */
+function unsigned(value: number, max: number, name: string): void {
+  if (!Number.isInteger(value) || value < 0 || value > max) throw new RangeError(`Invalid ${name}: ${value}`);
 }
-
-// ── Writer de segment ─────────────────────────────────────────────────────────
-
-/**
- * Serializes Segment for StarMade blueprint and segment file parsing.
- *
- * @param seg - Input value for the _encodeSegment operation.
- * @param fileVersion - Input value for the _encodeSegment operation.
- * @returns The computed StarMade-Decoder value.
- */
-function _encodeSegment(seg: SegmentData, fileVersion: number): Buffer {
-  const buf = Buffer.alloc(SEGMENT_SECTOR);
-  let off = 0;
-
-  // Segment header
-  buf.writeUInt8(fileVersion, off++);
-  buf.writeBigInt64BE(seg.lastChanged, off); off += 8;
-  buf.writeInt32BE(seg.x, off); off += 4;
-  buf.writeInt32BE(seg.y, off); off += 4;
-  buf.writeInt32BE(seg.z, off); off += 4;
-
-  if (seg.blockCount === 0) {
-    buf.writeUInt8(DATA_EMPTY, off);
-    return buf;
-  }
-
-  buf.writeUInt8(DATA_AVAILABLE, off++);
-
-  // Encode blocks en 4-byte BE
-  const blockBuf = Buffer.alloc(BLOCK_COUNT * 4);
+/** @param block Editable block. @param version Output version. @returns Packed unsigned word. */
+function encodeBlock(block: BlockData, version: number): number {
+  if (!block) throw new TypeError('Missing block');
+  unsigned(block.type, version === 6 ? 2047 : 8191, 'block type');
+  unsigned(block.hp, 127, 'block hitpoints');
+  unsigned(block.orientation, 31, 'block orientation');
+  unsigned(block.extra ?? 0, version === 6 ? 0 : 63, 'block extra bits');
+  if (typeof block.active !== 'boolean') throw new TypeError('Block active must be boolean');
+  if (version === 6) return block.type | (block.hp << 11) | (+block.active << 18) | (block.orientation << 19);
+  return (block.type | (block.hp << 13) | (+block.active << 20) |
+    (block.orientation << 21) | ((block.extra ?? 0) << 26)) >>> 0;
+}
+/** @param segment Source segment. @param version Output version. @returns Exact serialized bytes, without padding. */
+function encodeSegment(segment: SegmentData, version: number): Buffer {
+  if (segment.blocks.length !== BLOCK_COUNT) throw new RangeError(`Expected ${BLOCK_COUNT} blocks`);
+  const width = version === 6 ? 3 : 4;
+  const raw = Buffer.alloc(BLOCK_COUNT * width);
+  let hasData = false;
   for (let i = 0; i < BLOCK_COUNT; i++) {
-    blockBuf.writeInt32BE(_encode4Byte(seg.blocks[i]), i * 4);
+    const word = encodeBlock(segment.blocks[i], version);
+    hasData ||= word !== 0;
+    raw.writeUIntLE(word, i * width, width);
   }
-
-  // Compress with zlib
-  const compressed = deflateSync(blockBuf);
-  buf.writeInt32BE(compressed.length, off); off += 4;
-  compressed.copy(buf, off);
-
-  return buf;
+  // Preserve nonzero metadata even on air blocks rather than discarding it.
+  const compressed = hasData ? (version === 6 ? deflateSync(raw) : encodeLz4Block(raw)) : null;
+  const length = compressed ? 26 + compressed.length : 22;
+  if (length > SEGMENT_SECTOR) {
+    throw new RangeError(`SMD3 segment (${segment.x},${segment.y},${segment.z}) needs ${length} bytes; sector capacity is ${SEGMENT_SECTOR}`);
+  }
+  const out = Buffer.alloc(length);
+  out.writeUInt8(version, 0);
+  out.writeBigInt64BE(segment.lastChanged, 1);
+  out.writeInt32BE(segment.x, 9); out.writeInt32BE(segment.y, 13); out.writeInt32BE(segment.z, 17);
+  out[21] = compressed ? DATA_AVAILABLE : DATA_EMPTY;
+  if (compressed) {
+    out.writeInt32BE(compressed.length, 22);
+    compressed.copy(out, 26);
+  }
+  return out;
+}
+/** @param segment Segment origin. @returns Region header index. @throws {RangeError} On invalid coordinates. */
+function localIndex(segment: SegmentData): number {
+  for (const value of [segment.x, segment.y, segment.z]) {
+    if (!Number.isInteger(value) || value < -2147483648 || value > 2147483647 || value % CHUNK_DIM !== 0) {
+      throw new RangeError(`Invalid segment origin: ${value}`);
+    }
+  }
+  return (((segment.z >> 5) + 8) & 15) * 256 + (((segment.y >> 5) + 8) & 15) * 16 + (((segment.x >> 5) + 8) & 15);
 }
 
-// ── Writer principal ──────────────────────────────────────────────────────────
-
 /**
- * Encodes an Smd3File to a binary Buffer ready to write to disk.
- *
- * Segments are written in 4-byte format (version 7) regardless of
- * the original format — automatic migration.
- *
- * @param file       Smd3File to encode
- * @param segVersion Version to write in each segment (default: VERSION_4BYTE=7)
+ * Encodes one SMD3 region with validated fields and recomputed occupancy.
+ * @param file Complete decoded region. Recovered/incomplete files are rejected.
+ * @param segVersion Explicit output version: 7 (default) or 6.
+ * @returns A newly allocated region buffer.
+ * @throws {Error} On incomplete inputs, collisions, overflow or unsupported versions.
  */
 export function writeSmd3(file: Smd3File, segVersion = VERSION_4BYTE): Buffer {
-  // Allocate: HEADER + n × SEGMENT_SECTOR
-  const totalSize = HEADER_SIZE + file.segments.length * SEGMENT_SECTOR;
-  const out = Buffer.alloc(totalSize, 0);
-
-  // ── Header ──
-  out.writeUInt8(file.headerVersion >= 0 ? file.headerVersion : segVersion, 0);
-  // bytes 1-3 : padding = 0 (already zero)
-
-  // Write segments into their slots
-  let dataSlotIndex = 0; // data slot number (0-based)
-
-  for (const seg of file.segments) {
-    // Compute the slot in the header table (local index in the grid 16×16×16)
-    // Note : the smd3 stores until 4096 slots, each segment occupies 1 slot
-    // For a simple file, slots are allocated sequentially
-    const localIdx = _getLocalIndex(seg.x, seg.y, seg.z);
-
-    // Offset in the header table
-    const hdrOff = 4 + localIdx * 4;
-
-    // dataOffset (1-based car OFFSET_SHIFT=1)
-    const dataOffset = dataSlotIndex + OFFSET_SHIFT;
-
-    // Write into the header : short offset (signed) + short size
-    const segBuf = _encodeSegment(seg, segVersion);
-    const size = segBuf.length; // always SEGMENT_SECTOR
-
-    out.writeInt16BE(dataOffset, hdrOff);
-    out.writeUInt16BE(size > 0xFFFF ? 0xFFFF : size, hdrOff + 2);
-
-    // Write segment data into the slot
-    const absPos = HEADER_SIZE + dataSlotIndex * SEGMENT_SECTOR;
-    segBuf.copy(out, absPos);
-
-    dataSlotIndex++;
+  if (segVersion !== 6 && segVersion !== 7) throw new RangeError(`Unsupported output version ${segVersion}`);
+  if (file.complete === false || (file.diagnostics?.length ?? 0) !== 0) throw new Error('Cannot write an incomplete recovered SMD3 file');
+  unsigned(file.headerVersion, 255, 'header version');
+  if (file.segments.length > HEADER_SLOT_COUNT) throw new RangeError('Too many SMD3 segments');
+  const used = new Set<number>();
+  const encoded = file.segments.map(segment => {
+    const index = localIndex(segment);
+    if (used.has(index)) throw new Error(`Duplicate SMD3 header slot ${index}`);
+    used.add(index);
+    return { index, bytes: encodeSegment(segment, segVersion) };
+  });
+  const out = Buffer.alloc(HEADER_SIZE + encoded.length * SEGMENT_SECTOR);
+  out[0] = file.headerVersion;
+  for (let i = 0; i < encoded.length; i++) {
+    const { index, bytes } = encoded[i];
+    out.writeInt16BE(i + 1, 4 + index * 4);
+    out.writeUInt16BE(bytes.length, 6 + index * 4);
+    bytes.copy(out, HEADER_SIZE + i * SEGMENT_SECTOR);
   }
-
   return out;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/** Computes the local index (0–4095) in the 16×16×16 header grid. */
-function _getLocalIndex(segX: number, segY: number, segZ: number): number {
-  // Port of SegmentHeader.getSegIndex / getLocalIndex
-  const DIM = 16;
-  const DIMENSION_HALF = 8; // SegmentBufferManager.DIMENSION_HALF
-  const lx = _modU16(_divUSeg(segX) + DIMENSION_HALF) % DIM;
-  const ly = _modU16(_divUSeg(segY) + DIMENSION_HALF) % DIM;
-  const lz = _modU16(_divUSeg(segZ) + DIMENSION_HALF) % DIM;
-  return (lz * DIM * DIM) + (ly * DIM) + lx;
-}
-
 /**
- * Handles the divUSeg operation used by StarMade blueprint and segment file parsing.
- *
- * @param i - Input value for the _divUSeg operation.
- * @returns The computed StarMade-Decoder value.
+ * Creates independent editable air blocks at a segment origin.
+ * @param x Block-space origin x (multiple of 32).
+ * @param y Block-space origin y (multiple of 32).
+ * @param z Block-space origin z (multiple of 32).
+ * @returns A new segment with independent block objects.
  */
-function _divUSeg(i: number): number {
-  return i >> 5; // div par 32 (Chunk32 mode)
-}
-
-/**
- * Handles the modU16 operation used by StarMade blueprint and segment file parsing.
- *
- * @param i - Input value for the _modU16 operation.
- * @returns The computed StarMade-Decoder value.
- */
-function _modU16(i: number): number {
-  return ((i % 16) + 16) % 16;
-}
-
-// ── Empty segment creation ────────────────────────────────────────────────
-
-/** Creates an empty SegmentData with all blocks set to type=0. */
 export function emptySegment(x = 0, y = 0, z = 0): SegmentData {
-  return {
-    x, y, z,
-    lastChanged: BigInt(Date.now()),
-    version: VERSION_4BYTE,
-    blocks: new Array(BLOCK_COUNT).fill({ type: 0, hp: 0, orientation: 0, active: false }),
-    blockCount: 0,
-  };
+  const segment: SegmentData = { x, y, z, lastChanged: BigInt(Date.now()), version: VERSION_4BYTE,
+    blocks: Array.from({ length: BLOCK_COUNT }, () => ({ type: 0, hp: 0, orientation: 0, active: false })), blockCount: 0 };
+  localIndex(segment);
+  return segment;
 }
-
-/** Creates an empty Smd3File with no segments. */
+/** @returns An empty, complete SMD3 region. */
 export function emptySmd3File(): Smd3File {
-  return { headerVersion: VERSION_4BYTE, segments: [], usedSlots: 0 };
+  return { headerVersion: VERSION_4BYTE, segments: [], usedSlots: 0, complete: true, diagnostics: [] };
+}
+/**
+ * Replaces one block and refreshes cached occupancy even after direct edits.
+ * @param segment Segment to mutate.
+ * @param x Local x. @param y Local y. @param z Local z.
+ * @param block Replacement value (copied, never shared).
+ * @throws {RangeError} On invalid coordinates or block fields.
+ */
+export function setBlock(segment: SegmentData, x: number, y: number, z: number, block: BlockData): void {
+  encodeBlock(block, 7);
+  const index = posToIndex(x, y, z);
+  segment.blocks[index] = { ...block };
+  segment.blockCount = segment.blocks.reduce((count, value) => count + Number(value.type !== 0), 0);
 }

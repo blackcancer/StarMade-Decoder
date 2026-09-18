@@ -1,0 +1,37 @@
+name: Decoder validation
+
+on:
+  push:
+    branches: [main, fix/audit-data-integrity]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm run docs:check
+      - run: npm test
+      - run: npm run test:java
+      - run: npm run test:package
+      - run: npm run coverage:check
+      - name: Check tracked source and lockfile are unchanged
+        run: git diff --exit-code
