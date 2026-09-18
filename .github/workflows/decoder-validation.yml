@@ -1,0 +1,39 @@
+name: Decoder validation
+
+on:
+  push:
+    branches: [main, fix/audit-data-integrity]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Capture reproducible source snapshot
+        run: |
+          mkdir -p validation
+          git archive --format=tar HEAD | gzip > validation/source.tar.gz
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm run docs:check
+      - run: npm test
+      - run: npm run coverage:check
+      - name: Preserve validation source snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: decoder-validation-source
+          path: validation/source.tar.gz
+          retention-days: 7
+          if-no-files-found: error
