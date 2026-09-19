@@ -29,6 +29,8 @@
 import zlib from 'node:zlib';
 import { BufferReader } from '../core/BufferReader.js';
 import { BufferWriter } from '../core/BufferWriter.js';
+import { DecodeError } from '../core/DecodeError.js';
+import { MAX_DATABASE_BYTES, readDatabase, readZeroPadding } from './DatabaseValidation.js';
 
 /**
  * Describes the TradePriceEntry data shape used by StarMade database object parsing.
@@ -69,19 +71,24 @@ export interface TradePrices {
  * Throws on malformed zlib data.
  */
 export function decodeTradeNodeItems(data: Buffer | Uint8Array | null | undefined): TradePrices | null {
-  if (!data || data.length < 8) return null;
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-  const r = BufferReader.from(buf);
+  if (!data || data.length === 0) return null;
+  return readDatabase(data, 'TRADE_NODES.ITEMS', r => {
 
   const uncompressedSize = r.readInt32BE();
   const deflatedSize     = r.readInt32BE();
+  if (uncompressedSize < 12 || uncompressedSize > MAX_DATABASE_BYTES) throw new DecodeError('E_LIMIT', 'Invalid trade inflated size budget');
   const compressed       = Buffer.from(r.readBytes(deflatedSize));
+  readZeroPadding(r);
 
-  const payload = zlib.inflateRawSync(compressed, { maxOutputLength: uncompressedSize + 64 });
+  const inflated = zlib.inflateRawSync(compressed, { maxOutputLength: uncompressedSize, info: true }) as unknown as {
+    buffer: Buffer; engine: { bytesWritten: number };
+  };
+  const payload = inflated.buffer;
+  if (payload.length !== uncompressedSize || inflated.engine.bytesWritten !== compressed.length) throw new DecodeError('E_FORMAT', 'Trade compressed or inflated size mismatch');
   const pr = BufferReader.from(payload);
 
   const entDbId = pr.readInt64BE();
-  const count   = pr.readInt32BE();
+  const count   = pr.readCount(14, Math.floor(MAX_DATABASE_BYTES / 14));
   const entries: TradePriceEntry[] = [];
 
   for (let i = 0; i < count; i++) {
@@ -94,7 +101,9 @@ export function decodeTradeNodeItems(data: Buffer | Uint8Array | null | undefine
     entries.push({ type, isBuyOrder, blockType, amount, price, limit });
   }
 
+  if (!pr.isEOF()) throw new DecodeError('E_FORMAT', 'Unexpected trade payload suffix');
   return { entDbId, entries };
+  });
 }
 
 /**
@@ -102,7 +111,7 @@ export function decodeTradeNodeItems(data: Buffer | Uint8Array | null | undefine
  */
 export function encodeTradeNodeItems(prices: TradePrices): Buffer {
   // Build payload
-  const pw = new BufferWriter();
+  const pw = new BufferWriter(256, MAX_DATABASE_BYTES);
   pw.writeInt64BE(prices.entDbId);
   pw.writeInt32BE(prices.entries.length);
   for (const e of prices.entries) {

@@ -1,8 +1,7 @@
 /**
  * @fileoverview Database wire shapes, immutable collections and boundary cases.
  * Synthetic values are checked independently of the installed game database.
- * Java stream fragments characterize the existing diagnostic fallback only;
- * they are not an ObjectOutputStream interoperability certification.
+ * Malformed Java fragments must be rejected; genuine JDK fixtures are covered separately.
  */
 import { assert } from 'chai';
 import { BufferWriter } from '../src/core/BufferWriter.js';
@@ -43,9 +42,9 @@ describe('Database contracts — complete command arguments', () => {
 
   it('rejects underflow, unknown types and negative byte-array lengths', () => {
     for (const suffix of [Buffer.from([1, 99]), Buffer.from([1, 8, 255, 255, 255, 255]), Buffer.from([1, 2, 0])]) {
-      assert.isNull(Fleet.decodeFleetCommand(Buffer.concat([Buffer.alloc(12), suffix])));
+      assert.throws(() => Fleet.decodeFleetCommand(Buffer.concat([Buffer.alloc(12), suffix])));
     }
-    assert.isNull(Fleet.decodeFleetCommand(new Uint8Array([0])));
+    assert.throws(() => Fleet.decodeFleetCommand(new Uint8Array([0])));
     const ordinary = FleetCommandObject.create(4n, 'IDLE');
     assert.throws(() => ordinary.withCommand('UNKNOWN' as any), RangeError);
     assert.include(ordinary.toString(), 'type=IDLE');
@@ -59,9 +58,9 @@ describe('Database contracts — complete command arguments', () => {
 
   it('distinguishes malformed remote bytes, missing values and both network states', () => {
     for (const b of [Buffer.from([1]), Buffer.from([0xac, 0])]) {
-      const decoded = Fleet.decodeFleetRemotes(new Uint8Array(b));
+      const decoded = Fleet.decodeFleetRemotes(new Uint8Array(b), { mode: 'recover' });
       assert.equal(decoded.remotes.size, 0); assert.deepEqual(decoded.raw, b);
-      assert.deepEqual(FleetRemotesObject.fromBytes(b).raw, b);
+      assert.deepEqual(FleetRemotesObject.fromBytes(b, { mode: 'recover' }).raw, b);
     }
     const empty = FleetRemotesObject.empty();
     assert.isFalse(empty.isActive('missing')); assert.equal(empty.toString(), 'FleetRemotes(empty)');
@@ -76,14 +75,17 @@ describe('Database contracts — complete command arguments', () => {
     const magic = Buffer.from([0xac, 0xed, 0, 5]);
     const boolean = (v: number): Buffer => Buffer.concat([Buffer.from([0x73]), Buffer.from('java.lang.Booleanvalue'), Buffer.from([v])]);
     const diagnostic = Buffer.concat([magic, string('alpha'), string('beta'), string('class.name'), string('path/name'), string('value'), boolean(1), boolean(0)]);
-    assert.deepEqual(Fleet.decodeFleetRemotes(diagnostic).remotes, new Map([['alpha', true], ['beta', false]]));
+    assert.throws(() => Fleet.decodeFleetRemotes(diagnostic));
+    const recovered = Fleet.decodeFleetRemotes(diagnostic, { mode: 'recover' });
+    assert.isFalse(recovered.complete); assert.deepEqual(recovered.raw, diagnostic);
+    assert.equal(recovered.remotes.size, 0); assert.lengthOf(recovered.diagnostics, 1);
     for (const fragment of [
       Buffer.from([0x74, 255, 255, 0]), Buffer.from([0x73]),
       Buffer.concat([Buffer.from([0x73]), Buffer.alloc(35), Buffer.from('java.lang.Boolean')]),
       Buffer.concat([Buffer.from([0x73]), Buffer.from('java.lang.Boolean')]),
       Buffer.concat([Buffer.from([0x73]), Buffer.from('java.lang.Boolean'), Buffer.alloc(65), Buffer.from('value')]),
       boolean(2),
-    ]) assert.equal(Fleet.decodeFleetRemotes(Buffer.concat([magic, fragment])).remotes.size, 0);
+    ]) assert.throws(() => Fleet.decodeFleetRemotes(Buffer.concat([magic, fragment])));
   });
 });
 

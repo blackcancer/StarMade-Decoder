@@ -22,6 +22,7 @@ export {
 export type {
   FleetCommand,
   FleetRemotes,
+  FleetRemotesDecodeOptions,
   FleetCommandType,
   CommandArg,
 } from './FleetDb.js';

@@ -106,7 +106,7 @@ class ElementCountMapParser {
    * @param r - Input value for the parse operation.
    */
   parse(r: BufferReader) {
-    const size = r.readCount();
+    const size = r.readCount(6);
     for (let i = 0; i < size; i++) {
       r.readInt16BE(); // type
       r.readInt32BE(); // count
@@ -175,7 +175,7 @@ class LongSetParser {
    * @param r - Input value for the parse operation.
    */
   parse(r: BufferReader) {
-    const size = r.readCount();
+    const size = r.readCount(8);
     for (let i = 0; i < size; i++) r.readInt64BE();
   }
 }
@@ -211,12 +211,13 @@ class ControlElementMapperParser {
     if (keySize * 10 > r.remaining()) {
       throw new DecodeError('E_TRUNCATED', 'Truncated legacy controller records', { offset: r.offset });
     }
+    if (header >= 0) r.validateCollectionCount(keySize, 10);
     for (let i = 0; i < keySize; i++) {
       r.readInt16BE(); r.readInt16BE(); r.readInt16BE(); // 3×short key position
-      const valueSize = r.readCount();
+      const valueSize = r.readCount(6);
       for (let v = 0; v < valueSize; v++) {
         r.readInt16BE(); // short type
-        const elemSize = r.readCount();
+        const elemSize = r.readCount(isDisk ? 6 : 3);
         if (isDisk) {
           // serializeForDisk: 3×short per element (writeIndexAsShortPos)
           for (let e = 0; e < elemSize; e++) {
@@ -255,7 +256,7 @@ class BlockBufferParser {
    * @param r - Input value for the parse operation.
    */
   parse(r: BufferReader) {
-    const size = r.readCount();
+    const size = r.readCount(11);
     const controllerSize = r.readCount();
     const conSize = r.readCount();
     let c = 0, conC = 0;
@@ -265,7 +266,7 @@ class BlockBufferParser {
       const meta = r.readInt8() !== 0; // boolean
       if (meta) {
         r.readInt64BE(); // long controller
-        const mSize = r.readCount();
+        const mSize = r.readCount(8);
         for (let j = 0; j < mSize; j++) {
           r.readInt64BE(); // long connectedFromThis
         }
@@ -288,7 +289,7 @@ class Long2Vector3fMapParser {
    * @param r - Input value for the parse operation.
    */
   parse(r: BufferReader) {
-    const size = r.readCount();
+    const size = r.readCount(20);
     for (let i = 0; i < size; i++) {
       r.readInt64BE();      // key
       r.readFloat32BE(); r.readFloat32BE(); r.readFloat32BE(); // x, y, z
@@ -310,7 +311,7 @@ class Long2TransformMapParser {
    * @param r - Input value for the parse operation.
    */
   parse(r: BufferReader) {
-    const size = r.readCount();
+    const size = r.readCount(56);
     for (let i = 0; i < size; i++) {
       r.readInt64BE(); // key
       // Matrix3f : 9 floats

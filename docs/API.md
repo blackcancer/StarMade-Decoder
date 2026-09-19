@@ -61,7 +61,7 @@ const root = readFrom(fs.readFileSync('FACTIONS.fac'));
 
 ### `writeTo(tag: Tag): Buffer`
 
-Serializes a Tag tree back to a binary `Buffer` in the non-GZIP format (with the `short version = 1` prefix). Use the result directly with `fs.writeFileSync`.
+Serializes a Tag tree to canonical non-GZIP bytes with the `short version = 0` prefix. This does not preserve an input file’s compression, version or trailing bytes. Use `readTagDocument(data)` and `document.toBuffer()` when those must be retained.
 
 ```ts
 fs.writeFileSync('FACTIONS.fac', writeTo(root));

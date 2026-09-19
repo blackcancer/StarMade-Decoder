@@ -337,8 +337,9 @@ describe('StarSystem', function () {
     assert.strictEqual(sys!.sectors.length, 0);
   });
 
-  it('fromBytes returns null for undersized infos', function () {
-    assert.isNull(StarSystem.fromBytes(Buffer.alloc(100), Buffer.alloc(19)));
+  it('fromBytes rejects undersized infos instead of treating them as absent', function () {
+    assert.throws(() => StarSystem.fromBytes(Buffer.alloc(100), Buffer.alloc(19)));
+    assert.isNull(StarSystem.fromBytes(Buffer.alloc(0), Buffer.alloc(19)));
   });
 
   it('withSectorType + getSector + infosToBytes round-trips', function () {

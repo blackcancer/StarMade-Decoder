@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @fileoverview Runs independent JDK write/read checks against the compiled SDK.
- * Requires javac/java on PATH. Fails rather than silently skipping a missing JDK.
+ * Requires a full JDK java launcher on PATH (compiler module included). Fails rather than silently skipping a missing JDK.
  * @example npm run build && npm run test:interop
  */
 import assert from 'node:assert/strict';
@@ -18,7 +18,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'decoder-java-'));
 const values = ['', 'ASCII', '\u0000', '\u00e9\u4e2d', '\ud83d\ude80', '\ud800', 'x'.repeat(65535), '\u0000'.repeat(32767)];
 try {
-  execFileSync('javac', ['-d', temp, path.join(root, 'test/fixtures/WireOracle.java')], { stdio: 'inherit', timeout: 30000 });
+  execFileSync('java', ['-m', 'jdk.compiler/com.sun.tools.javac.Main', '-d', temp, path.join(root, 'test/fixtures/WireOracle.java')], { stdio: 'inherit', timeout: 30000 });
   const run = mode => execFileSync('java', ['-cp', temp, 'WireOracle', mode, temp], { stdio: 'inherit', timeout: 30000 });
   run('generate');
   for (let i = 0; i < values.length; i++) {

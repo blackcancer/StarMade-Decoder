@@ -28,6 +28,7 @@
 import { DecodeError } from '../core/DecodeError.js';
 import { BufferReader } from '../core/BufferReader.js';
 import { readFrom } from '../core/TagParser.js';
+import type { TagReadOptions } from '../core/TagParser.js';
 import type { Tag } from '../core/Tag.js';
 import { TagType } from '../core/TagType.js';
 import { Tags } from '../core/TagBuilder.js';
@@ -750,9 +751,10 @@ function basenameBlueprintEntityName(name: string): string {
  * Parses Smbpm for StarMade blueprint and segment file parsing.
  *
  * @param data - Input value for the parseSmbpm operation.
+ * @param tagOptions - Limits shared by every embedded Tag, including nested GZIP payloads.
  * @returns The computed StarMade-Decoder value.
  */
-export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
+export function parseSmbpm(data: Buffer | Uint8Array, tagOptions: TagReadOptions = {}): BlueprintMeta {
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const r = BufferReader.from(buf);
 
@@ -787,7 +789,7 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
         const tagBuf = buf.slice(r.offset);
         internals.managerRaw = new Uint8Array(tagBuf);
         try {
-          internals.managerTag = readFrom(tagBuf);
+          internals.managerTag = readFrom(tagBuf, tagOptions);
           result.manager = ManagerContainer.fromTag(internals.managerTag);
         } catch (cause) { throw new DecodeError(cause instanceof DecodeError ? cause.code : 'E_FORMAT', 'Invalid manager Tag in blueprint metadata', { cause }); }
         return finalizeSmbpm(result, internals); // SEG_MANAGER_BYTE ends reading
@@ -840,7 +842,7 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
           if (tagSize > 0) {
             const tagBytes = r.readBytes(tagSize);
             tagRaw = new Uint8Array(tagBytes);
-            childTag = readFrom(tagBytes);
+            childTag = readFrom(tagBytes, tagOptions);
           }
           const request = parseRailChildRequestFromTag(childTag);
           const offset = getRailChildOffsetFromRequest(request);
@@ -860,7 +862,7 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
           const tagBytes = r.readBytes(tagSize);
           internals.aiRaw = new Uint8Array(tagBytes);
           try {
-            internals.aiTag = readFrom(tagBytes);
+            internals.aiTag = readFrom(tagBytes, tagOptions);
             result.aiConfig = parseAiConfigTag(internals.aiTag);
           } catch (cause) { throw new DecodeError(cause instanceof DecodeError ? cause.code : 'E_FORMAT', 'Invalid embedded Tag in blueprint metadata', { cause }); }
         }
@@ -905,7 +907,7 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
         const tagBuf = buf.slice(r.offset);
         internals.thrustRaw = new Uint8Array(tagBuf);
         try {
-          internals.thrustTag = readFrom(tagBuf);
+          internals.thrustTag = readFrom(tagBuf, tagOptions);
           result.thrustConfig = ThrustConfig.fromTag(internals.thrustTag);
         } catch (cause) { throw new DecodeError(cause instanceof DecodeError ? cause.code : 'E_FORMAT', 'Invalid embedded Tag in blueprint metadata', { cause }); }
         return finalizeSmbpm(result, internals); // tag consumes the rest of the stream
