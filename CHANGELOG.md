@@ -1,12 +1,41 @@
-## Unreleased — complete line and branch coverage
+# Changelog
+
+## Unreleased
+
+The changes below are implemented in `main` through PRs #1–#3. They describe
+completed development awaiting a versioned release, not outstanding tasks.
+No npm release or in-game import qualification is implied.
+
+### Fixed
+
+- Preserve faction field names, STRUCT terminators and HP-match metadata during edits.
+- Reject malformed nonempty database cells instead of returning valid empty values;
+  validate trade payload lengths, sector-item padding and system-grid sizes.
+- Decode actual Java `HashMap<String, Boolean>` fleet-remotes streams instead of
+  scanning heuristically; preserve the input format during edits. Explicit recovery
+  retains raw bytes and diagnostics and prevents editing or serializing incomplete data.
+- Share node and nested-inflation budgets across blueprint metadata, bound serialized
+  collections and command recursion, and apply consistent `TagDocument` limits.
+- Index archive paths once with exact parent relationships and explicit depth/entity
+  limits; reject unsupported SMD3 source versions before writing.
+
+### Validation
 
 - Require exact 100% line, statement and branch coverage for every production source file.
 - Add portable configuration, domain-model, binary boundary and filesystem-race regressions.
-- Preserve faction field names, STRUCT terminators and HP-match metadata during edits.
 - Report exact all-source counters and reject coverage ignores or missing modules.
 - Simplify proven redundant internal branches without weakening public validation.
+- Exercise real XML/ZIP parsing from the installed production package, independent JDK
+  map and geometry oracles, and resource failures in a bounded child process.
+- On 2026-09-19, `STARMADE_TEST_DIR=/srv/StarMade npm run coverage:check` passed
+  **1,096 tests, zero pending and zero failing**, with **27,980/27,980 lines** and
+  **6,288/6,288 branches** covered across **98 production modules**. These are measured
+  results for the implementation merged as `04d77af`, not permanent coverage claims.
+- CI passed on Node.js 20, 22 and 24; the Node.js 22 job also passed JDK and LZ4 checks.
 
-# Changelog
+See [audit resolution](docs/AUDIT_RESOLUTION.md) for the A01–A10 evidence,
+[coverage requirements](docs/TEST_COVERAGE.md) for the blocking gates, and
+[migration notes](docs/INTEGRITY_AND_MIGRATION.md) for changed parsing behavior.
 
 ## 1.5.0 — integrity correction candidate (2026-09-18)
 
@@ -28,7 +57,7 @@
 See `docs/INTEGRITY_AND_MIGRATION.md` before upgrading. This candidate has not been
 validated by launching the game and is not published to npm by the correction workflow.
 
-## Earlier unreleased development
+## Earlier development included in the 1.5.0 candidate
 
 ### Added
 
@@ -107,7 +136,8 @@ validated by launching the game and is not published to npm by the correction wo
 
 ### Coverage
 
-- **681 tests passing**, 0 pending
+- Historical validation at this development stage: **681 tests passing**, 0 pending.
+  Current qualification is recorded in `Unreleased` above.
 - `npm run docs:check` passes
 
 ---

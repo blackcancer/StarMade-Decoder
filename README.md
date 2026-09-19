@@ -4,24 +4,41 @@ TypeScript SDK for reading, inspecting, and rewriting **StarMade** save files an
 
 The SDK implements the Java `org.schema.schine.resource.tag.Tag` binary format and higher-level helpers for entities, blueprints and configuration files.
 
+`main` contains the **1.5.0 integrity correction candidate**, including the completed
+audit corrections and exact coverage checks. [Unreleased in the changelog](CHANGELOG.md#unreleased)
+records implemented changes awaiting a versioned release. Pushing these changes to
+GitHub does not publish an npm package.
+
 **Upgrading from 1.4.0:** read [Data integrity and migration](docs/INTEGRITY_AND_MIGRATION.md). Strict error handling, Java modified UTF-8 and v7 LZ4 serialization correct earlier incompatible behavior. Back up source files before migration.
 
 ## Features
 
 - Read and write StarMade Tag files (`.ent`, `.fac`, `.cat`, `.tag`, `.sim`)
-- Preserve binary round-trips for supported save files
-- Parse StarMade blueprint formats (`.sment`, `.smd3`, `.smtpl`, `.smbpl`, `.smbpm`, `.smbmm`)
+- Preserve unchanged Tag files byte-for-byte with `TagDocument`, and retain their
+  compression, version and trailing data when editing
+- Parse StarMade blueprint formats (`.sment`, `.smd3`, `.smtpl`, `.smbph`, `.smbpl`, `.smbpm`, `.smbmm`)
 - Use typed domain objects for ships, stations, players, factions, catalogs, trading, inventories, and serializable payloads
 - Load StarMade configuration files, inspect BlockConfig element information, and save custom overrides safely
+- Read and write HSQLDB binary columns for fleet commands/remotes, sector items,
+  trade prices and system data, including Java fleet-remotes object streams
+- Read and write auxiliary `.seed`, `.smdat`, `.sbv` and `systemNames.syl` files
+- Use strict blueprint/database decoding, bounded Tag traversal and explicit
+  diagnostics for opted-in blueprint and fleet-remotes recovery
 - Fetch and test public retrocompatibility samples from StarMadeDock
 
-## Installation
+## Build from source
+
+Requires **Node.js 20.19.0 or newer**. From a checkout of this repository:
 
 ```bash
-npm install
+npm ci --ignore-scripts
 npm run build
 npm test
 ```
+
+The build creates the JavaScript and TypeScript declarations in `dist/`.
+JDK 21+ and Python with `lz4` are needed only for the independent interoperability
+checks described below.
 
 ## Basic usage
 
@@ -62,6 +79,10 @@ console.log(blocks.getElementInfoByTypeName('CARGO_SPACE')?.render.defaultOrient
 - [Getting started guide](docs/GUIDE.md) — file system overview, first steps, common pitfalls
 - [API reference](docs/API.md) — complete method and field documentation
 - [Examples](docs/EXAMPLES.md) — ready-to-run code snippets
+- [Changelog](CHANGELOG.md) — implemented changes and earlier versions
+- [Data integrity and migration](docs/INTEGRITY_AND_MIGRATION.md) — strict parsing, recovery, budgets and format changes
+- [Audit resolution](docs/AUDIT_RESOLUTION.md) — completed corrections and independent validation evidence
+- [Coverage requirements](docs/TEST_COVERAGE.md) — exact counters, fixture scope and blocking gates
 
 ## Binary tag format
 
@@ -110,9 +131,10 @@ src/
   entity/        legacy typed parsers by file type
   objects/       high-level business objects and entity classes
   config/        StarMade config loaders and immutable editors
+  db/            HSQLDB binary codecs, business objects and auxiliary save files
   smd3/          blueprint and segment parsers/writers
 test/            round-trip, parser, writer, config, and retrocompat tests
-scripts/         sample fetch helpers
+scripts/         coverage gates, package checks, Java/LZ4 oracles and sample helpers
 ```
 
 ## Validation
@@ -120,24 +142,41 @@ scripts/         sample fetch helpers
 ```bash
 npm run build
 npm run docs:check
-npm test
-npm run coverage
-npm run coverage:verify
+npm run coverage:check
+node scripts/test-coverage-gate.mjs
 npm run test:interop   # Requires JDK 21+
 npm run test:package   # Installs the packed SDK in a fresh production consumer
+# With Python's lz4==4.4.5 installed:
+python scripts/check-lz4-interop.py
 ```
 
 Coverage is measured on each CI run rather than stated as a permanent percentage.
-Installation-specific tests require `STARMADE_TEST_DIR`; missing optional fixtures
-are reported as pending. CI qualifies Node.js 20, 22 and 24, with independent JDK
-and LZ4 checks on Node.js 22. These checks do not launch the StarMade game/server.
+CI qualifies Node.js 20, 22 and 24, with independent JDK and LZ4 checks on Node.js 22.
+Installation-specific tests are pending when not enabled or when optional fixtures
+are absent; they are not counted as passes. These checks do not launch the StarMade
+game/server.
 
-See [Data integrity and migration](docs/INTEGRITY_AND_MIGRATION.md) for resource
-budgets, recovery diagnostics, supported migrations and explicit limitations.
+On a development host with the game installed, enable the installation tests
+explicitly; finding the default directory alone does not enable them:
+
+```bash
+STARMADE_TEST_DIR=/srv/StarMade npm run coverage:check
+```
+
+Once these installation tests are enabled, missing required configuration or
+auxiliary files fail the run. Installation files are read only.
+
+The local run on **2026-09-19** for the implementation merged as
+[`04d77af`](https://github.com/blackcancer/StarMade-Decoder/commit/04d77afa11ed79aa8034fb9163cf55c7480a80b7)
+passed **1,096 tests with zero pending and zero failing**. All **98 production
+modules** reached **27,980/27,980 lines** and **6,288/6,288 branches** covered.
+The [CI run on that commit](https://github.com/blackcancer/StarMade-Decoder/actions/runs/35472413782)
+passed on all three Node.js versions. See the [dated qualification report](docs/AUDIT_RESOLUTION.md#qualification)
+for scope and limitations.
 
 ## Exact coverage acceptance
 
-The correction branch requires 100% lines and branches across every production
+The project requires 100% lines, statements and branches across every production
 source module, without coverage exclusions or ignore directives. Run
 `npm run coverage:check`; see [the coverage contract](docs/TEST_COVERAGE.md) for
 exact-counter gates, fixture scope and independent validation requirements.

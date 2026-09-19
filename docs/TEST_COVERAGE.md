@@ -30,8 +30,19 @@ Fault injection is limited to boundaries that deliberately support failures:
 filesystem identity/size changes, failed high-level simulation decoders and
 mutable SERIALIZABLE callbacks. Global replacements are restored in `finally`.
 No game installation, downloaded assets or network access is needed for the
-regular test suite. Installation-only checks remain explicitly pending unless
-their required fixtures are present; they are not counted as passes.
+regular test suite. Configuration and auxiliary-format installation tests require
+an explicit `STARMADE_TEST_DIR`; the existence of `/srv/StarMade` alone does not
+enable them. Without that variable, these tests are pending and are not counted
+as passes. Once enabled, missing required files fail the tests.
+
+On the development host, run the complete suite against the available installation:
+
+```sh
+STARMADE_TEST_DIR=/srv/StarMade npm run coverage:check
+```
+
+The installation files are read only. See [the dated qualification
+results](AUDIT_RESOLUTION.md#qualification) for test counts and exact coverage.
 
 ## Bugs exposed by the additional tests
 
