@@ -159,8 +159,10 @@ python -m pip install lz4==4.4.5
 python scripts/check-lz4-interop.py
 ```
 
-The JDK check requires Java 21+ and verifies both directions for modified UTF,
-plain/GZIP Tags and all 32,768 independently produced raw block words. The LZ4
+The binary checks require Python 3 and verify both directions for modified UTF,
+plain/GZIP Tags and all 32,768 independently produced raw block words. They use
+independent implementations and captured JDK vectors; Java source files and a
+JDK installation are not required or distributed. The LZ4
 check exchanges 36 SDK-encoded blocks and 72 independently compressed blocks with
 python-lz4. Package qualification installs the npm tarball in a fresh production
 consumer and checks root imports, runtime behavior and declaration resolution.

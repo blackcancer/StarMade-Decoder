@@ -5,3 +5,9 @@ coverage/
 .tmp_*
 *.tmp
 *.js.map
+__pycache__/
+# Game sources remain external, read-only references and must never be published.
+*.java
+*.class
+*.jar
+*.war

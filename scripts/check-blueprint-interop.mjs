@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * @fileoverview Independent JDK qualification of public blueprint document exports.
- * BlueprintOracle.java pins the local StarMade-Open reference and limits the claim:
- * wire-format interoperability for these vectors, never an actual in-game import.
- * Requires built dist and a full JDK; no npm package or game runtime is downloaded.
+ * @fileoverview Independent Python qualification of public blueprint document exports.
+ * Source-entry vectors are pinned to external JDK binary captures. ZIP local
+ * records and zipfile independently verify CRCs, descriptors and all contents.
+ * Requires built dist and python3; this is neither a JDK run nor an in-game import.
  * @example npm run build && node scripts/check-blueprint-interop.mjs
  */
 import assert from 'node:assert/strict';
@@ -23,15 +23,13 @@ const time = 123456789n;
 const sdkVersion = 'sdk\0🚀';
 const air = () => ({ type: 0, hp: 0, active: false, orientation: 0 });
 const index = (x, y, z) => x + y * 32 + z * 1024;
-const java = (...args) => execFileSync('java', args, { stdio: 'inherit', timeout: 30000 });
+const oracle = mode => execFileSync('python3', ['-B', path.join(root, 'test/fixtures/blueprint_oracle.py'), mode, temp], { stdio: 'inherit', timeout: 30000 });
 try {
-  java('-m', 'jdk.compiler/com.sun.tools.javac.Main', '-d', temp,
-    path.join(root, 'test/fixtures/BlueprintOracle.java'));
-  java('-cp', temp, 'BlueprintOracle', 'generate', temp);
-  const original = fs.readFileSync(path.join(temp, 'java.sment'));
-  assert.ok(original.readUInt16LE(6) & 8, 'JDK fixture must contain data descriptors');
+  oracle('generate');
+  const original = fs.readFileSync(path.join(temp, 'reference.sment'));
+  assert.ok(original.readUInt16LE(6) & 8, 'Independent fixture must contain data descriptors');
   const document = BlueprintDocument.fromSment(original);
-  assert.deepEqual(document.toBuffer(), original, 'Java ZIP no-op must be byte-exact');
+  assert.deepEqual(document.toBuffer(), original, 'Independent ZIP no-op must be byte-exact');
   fs.writeFileSync(path.join(temp, 'noop.sment'), writeSment(document));
 
   const segment = document.root.segments[0].segments[0];
@@ -52,9 +50,9 @@ try {
   segment.blocks = originalBlocks; segment.lastChanged = time;
   document.root.header.classification = 2; document.root.header.gameVersion = 'java\0🚀';
   document.removeFile('added.bin').setFile('delete.me', Buffer.from([11, 12]));
-  assert.deepEqual(document.toBuffer(), original, 'edit/revert must restore exact Java ZIP');
+  assert.deepEqual(document.toBuffer(), original, 'edit/revert must restore exact input ZIP');
 
-  // Build this archive exclusively from caller-created models, without parsing Java bytes.
+  // Build this archive exclusively from caller-created models, without parsing reference bytes.
   const negative = emptySegment(-32, 32, -64), positive = emptySegment(32, 0, 0), empty = emptySegment(0, -32, 0);
   for (const item of [negative, positive, empty]) item.lastChanged = time + 2n;
   negative.blocks[index(31, 0, 16)] = { type: 511, hp: 73, active: true, orientation: 5, extra: 12 };
@@ -76,5 +74,5 @@ try {
   assert.deepEqual(BlueprintDocument.fromArchive(archive).toBuffer(), created,
     'document factory and direct writer must agree for a new archive');
   fs.writeFileSync(path.join(temp, 'created.sment'), created);
-  java('-cp', temp, 'BlueprintOracle', 'verify', temp);
+  oracle('verify');
 } finally { fs.rmSync(temp, { recursive: true, force: true }); }

@@ -12,10 +12,10 @@ upstream revisions.
 | Finding | Final behavior | Evidence |
 | --- | --- | --- |
 | A01 runtime dependencies | XML/ZIP libraries are runtime dependencies. The installed tarball parses real XML and ZIP fixtures and exercises Tags/SMD3 in a fresh production consumer. | `scripts/check-package-consumer.mjs` |
-| A02 Java strings | Save and network fields use validated modified UTF, including NUL, supplementary characters and lone surrogates. | `test/audit-core.test.ts`, `test/audit-integrity.test.ts`, `scripts/check-java-interop.mjs` |
+| A02 Java strings | Save and network fields use validated modified UTF, including NUL, supplementary characters and lone surrogates. | `test/audit-core.test.ts`, `test/audit-integrity.test.ts`, `scripts/check-wire-interop.mjs` |
 | A03 segment truncation | Writer checks record capacity before copying and rejects unrepresentable segments. | `test/audit-integrity.test.ts`, `test/coverage-binary-models.test.ts` |
 | A04 block editing | Empty/SINGLE blocks are independent, edits persist despite stale counters, and writers derive occupancy. Unsupported runtime versions are rejected explicitly. | `test/audit-integrity.test.ts`, `test/audit-smd3-version.test.ts`, `test/writers.test.ts` |
-| A05 SINGLE_SIDE_EDGE | Exact integer/float geometry is applied with supplied normals; missing context fails explicitly. | `scripts/check-geometry-interop.mjs`, `test/fixtures/GeometryOracle.java` |
+| A05 SINGLE_SIDE_EDGE | Exact integer/float geometry is applied with supplied normals; missing context fails explicitly. | `scripts/check-geometry-interop.mjs`, `test/fixtures/geometry_oracle.py` |
 | A06 attached entities | Exact direct-parent relationships, no sibling descendants, one bounded path index, explicit depth/entity failures. | `test/audit-archive-index.test.ts`, `test/audit-integrity.test.ts` |
 | A07 resource budgets | Negative/unsafe lengths fail. Tag nodes include FINISH and SERIALIZABLE items. Blueprint-wide bytes include nested inflation; metadata nodes share an aggregate allowance. Command recursion/arguments and database inflation are bounded. | `test/audit-tag-budget.test.ts`, `test/audit-metadata-budget.test.ts`, `test/audit-resource-process.test.ts`, `test/audit-database-integrity.test.ts` |
 | A08 partial results | Strict parsing rejects corrupt records and cells. Blueprint recovery reports omissions. Remotes recovery preserves detached raw bytes and diagnostics, and cannot be edited/serialized. Actual Java HashMap decoding replaces heuristic string/boolean scanning. Trade sizes/padding, system grids and sector item tails are validated. | `test/audit-integrity.test.ts`, `test/legacy-segment-resources.test.ts`, `test/audit-database-integrity.test.ts`, `scripts/check-database-interop.mjs` |
@@ -67,15 +67,20 @@ round trips occur in memory or temporary directories. Without the environment
 variable, 26 installation tests are deliberately pending even when the default
 path exists. They must be enabled for qualification on this host.
 
-`test:interop` invokes three independent JDK harnesses: modified UTF/Tags/block
-words, actual ObjectOutputStream/ObjectInputStream maps, and SINGLE_SIDE_EDGE
-regions. The geometry harness compares every field of all 1,146,880 block
-positions across 35 independently generated regions, including integer overflow,
-float rounding, oblique planes and subnormals. Its normal vectors are synthetic;
-no game assets or complete proprietary Java source are distributed. The map
-harness checks both directions, repeated Boolean references, punctuation, NUL,
+The original dated qualification used independent JDK harnesses. Those Java
+sources have since been removed. `test:interop` now runs independent Python
+implementations for modified UTF/Tags/block words, ObjectStream maps,
+SINGLE_SIDE_EDGE regions and blueprint archives. Captured JDK output hashes and
+binary vectors retain a fixed external reference; running Python checks does
+not constitute a new JDK-runtime qualification.
+
+The geometry harness compares every field of all 1,146,880 block positions across
+35 independently generated regions, including integer overflow, float rounding,
+oblique planes and subnormals. Its normal vectors are synthetic. The map harness
+checks both directions, repeated Boolean references, punctuation, NUL,
 supplementary/lone-surrogate keys and the 65,535-byte modified-UTF boundary.
-External python-lz4 checks complement the Java and SDK fixtures.
+External python-lz4 checks complement these fixtures. Game sources are local,
+read-only references and must not be included in the project or publications.
 
 Resource-failure regressions execute with a 128 MiB V8 heap, a 10-second process
 timeout and bounded captured output. A timeout, signal, abnormal exit or missing

@@ -1,4 +1,4 @@
-/** @fileoverview Bidirectional JDK ObjectStream qualification of the actual database codec. */
+/** @fileoverview Independent ObjectStream qualification with actual fixed JDK binary captures and a Python decoder. */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -10,18 +10,16 @@ import { decodeFleetRemotes, encodeFleetRemotes, FleetRemotesObject } from '../d
 const root = fileURLToPath(new URL('..', import.meta.url));
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'decoder-database-'));
 try {
-  execFileSync('java', ['-m', 'jdk.compiler/com.sun.tools.javac.Main', '-d', temp,
-    path.join(root, 'test/fixtures/DatabaseOracle.java')], { stdio: 'inherit', timeout: 30000 });
-  const run = mode => execFileSync('java', ['-cp', temp, 'DatabaseOracle', mode, temp], { stdio: 'inherit', timeout: 30000 });
+  const run = mode => execFileSync('python3', ['-B', path.join(root, 'test/fixtures/database_oracle.py'), mode, temp], { stdio: 'inherit', timeout: 30000 });
   run('generate');
   const keys = ['', 'dot.name', 'slash/name', 'value', 'nul\u0000', 'rocket\ud83d\ude80', 'lone\ud800', 'x'.repeat(65535)];
   for (const [id, expected] of [new Map(), new Map(keys.map((key, i) => [key, i % 2 === 0]))].entries()) {
-    const java = fs.readFileSync(path.join(temp, `java-map-${id}`));
-    const decoded = decodeFleetRemotes(java);
+    const reference = fs.readFileSync(path.join(temp, `reference-map-${id}`));
+    const decoded = decodeFleetRemotes(reference);
     assert.deepEqual(decoded.remotes, expected);
     assert.equal(decoded.format, 'java'); assert.equal(decoded.complete, true); assert.deepEqual(decoded.diagnostics, []);
     const output = encodeFleetRemotes(expected, 'java');
-    assert.deepEqual(decodeFleetRemotes(FleetRemotesObject.fromBytes(java).toBytes()).remotes, expected);
+    assert.deepEqual(decodeFleetRemotes(FleetRemotesObject.fromBytes(reference).toBytes()).remotes, expected);
     fs.writeFileSync(path.join(temp, `sdk-map-${id}`), output);
   }
   run('verify');

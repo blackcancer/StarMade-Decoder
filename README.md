@@ -40,8 +40,10 @@ npm test
 ```
 
 The build creates the JavaScript and TypeScript declarations in `dist/`.
-JDK 21+ and Python with `lz4` are needed only for the independent interoperability
-checks described below.
+Python 3 is required for source-publication checks and independent binary oracles;
+the separate LZ4 qualification additionally uses `lz4==4.4.5`. No JDK is required.
+Game sources remain external, read-only references: this repository and its
+published package must not contain Java source files or Java binaries.
 
 ## Basic usage
 
@@ -157,24 +159,27 @@ src/
   db/            HSQLDB binary codecs, business objects and auxiliary save files
   smd3/          blueprint and segment parsers/writers
 test/            round-trip, parser, writer, config, and retrocompat tests
-scripts/         coverage gates, package checks, Java/LZ4 oracles and sample helpers
+scripts/         coverage gates, package checks, Python/LZ4 oracles and sample helpers
 ```
 
 ## Validation
 
 ```bash
 npm run build
+npm run source:check
 npm run docs:check
 npm run coverage:check
 node scripts/test-coverage-gate.mjs
-npm run test:interop   # Requires JDK 21+
+npm run test:interop   # Requires Python 3
 npm run test:package   # Installs the packed SDK in a fresh production consumer
 # With Python's lz4==4.4.5 installed:
 python scripts/check-lz4-interop.py
 ```
 
 Coverage is measured on each CI run rather than stated as a permanent percentage.
-CI qualifies Node.js 20, 22 and 24, with independent JDK and LZ4 checks on Node.js 22.
+CI qualifies Node.js 20, 22 and 24, with independent Python binary oracles and LZ4
+checks on Node.js 22. It rejects Java sources/binaries, including nested archives,
+before producing evidence. Validation artifacts no longer embed source archives.
 Installation-specific tests are pending when not enabled or when optional fixtures
 are absent; they are not counted as passes. These checks do not launch the StarMade
 game/server.

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * @fileoverview Checks every field of Java-produced SINGLE_SIDE_EDGE regions.
- * GeometryOracle.java records the pinned reference and its qualification limits.
- * Requires a full JDK 21+; the compiler module also works without a javac launcher.
+ * @fileoverview Checks every field of independently produced SINGLE_SIDE_EDGE regions.
+ * Python binary32/int32 vectors must match the complete fixed JDK binary corpus.
+ * Requires python3; no Java or game runtime is executed.
  * @example npm run build && node scripts/check-geometry-interop.mjs
  */
 import assert from 'node:assert/strict';
@@ -19,9 +19,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'decoder-geometry-'));
 const filled = { type: 37, hp: 93, active: true, orientation: 17, extra: 42 };
 const air = { type: 0, hp: 0, active: false, orientation: 0 };
 try {
-  execFileSync('java', ['-m', 'jdk.compiler/com.sun.tools.javac.Main', '-d', temp,
-    path.join(root, 'test/fixtures/GeometryOracle.java')], { stdio: 'inherit', timeout: 30000 });
-  execFileSync('java', ['-cp', temp, 'GeometryOracle', temp], { stdio: 'inherit', timeout: 30000 });
+  execFileSync('python3', ['-B', path.join(root, 'test/fixtures/geometry_oracle.py'), temp], { stdio: 'inherit', timeout: 60000 });
   const reference = fs.readFileSync(path.join(temp, 'geometry.bin'));
   const cases = reference.readInt32BE(0);
   assert.ok(cases > 0);
@@ -46,12 +44,12 @@ try {
     for (let index = 0; index < BLOCK_COUNT; index++) {
       assert.ok(mask[index] === 0 || mask[index] === 1);
       assert.deepEqual(segment.blocks[index], mask[index] ? filled : air,
-        `Java geometry mismatch: case=${id}, index=${index}`);
+        `Pinned geometry mismatch: case=${id}, index=${index}`);
       count += mask[index];
     }
     assert.equal(segment.blockCount, count);
     filledPositions += count;
   }
   assert.ok(filledPositions > 0 && filledPositions < cases * BLOCK_COUNT);
-  console.log(`Geometry interoperability passed: ${cases} Java regions, ${cases * BLOCK_COUNT} complete block-field comparisons (${filledPositions} filled positions).`);
+  console.log(`Geometry interoperability passed: ${cases} independent regions matching fixed JDK vectors, ${cases * BLOCK_COUNT} complete block-field comparisons (${filledPositions} filled positions).`);
 } finally { fs.rmSync(temp, { recursive: true, force: true }); }

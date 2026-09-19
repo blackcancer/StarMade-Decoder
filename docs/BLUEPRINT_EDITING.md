@@ -138,11 +138,12 @@ identity, every Warehouse folder resource, edit/revert behavior, attachment
 updates, component envelopes, limits and invalid edits. The ZIP, folder and SMD3
 modules have additional byte-layout and injected-filesystem-failure regressions.
 
-`npm run test:interop` includes an independent JDK blueprint oracle. Java creates
+`npm run test:interop` includes an independent Python blueprint oracle. It creates
 an archive with data descriptors; the SDK preserves and edits it, and creates a
-new archive from models. Both `ZipInputStream` and `ZipFile` check all three
-outputs. Independent Java logic compares 163,840 complete block words, region
-tables, timestamps, padding, headers, counts, bounds, metadata and logic vectors.
+new archive from models. Independent checks inspect local and central ZIP records,
+CRC values and decoded contents for all three outputs. The oracle compares
+163,840 complete block words, region tables, timestamps, padding, headers, counts,
+bounds, metadata and logic vectors. No Java source is distributed in this project.
 This qualifies the tested binary contracts; it does not launch StarMade or claim
 an in-game import test.
 

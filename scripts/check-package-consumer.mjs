@@ -21,6 +21,8 @@ const npm = (args, cwd) => execFileSync(process.execPath, [npmCli, ...args], { c
 try {
   const packed = JSON.parse(npm(['pack', '--ignore-scripts', '--json', '--pack-destination', temp], root));
   assert.equal(packed.length, 1);
+  assert.deepEqual(packed[0].files.filter(f => /\.(?:java|class|jar|war)$/i.test(f.path)), [],
+    'Published package must not contain Java sources or binaries');
   assert.ok(packed[0].files.some(f => f.path === 'dist/index.js'));
   assert.ok(packed[0].files.some(f => f.path === 'dist/index.d.ts'));
   const consumer = path.join(temp, 'consumer'); fs.mkdirSync(consumer);

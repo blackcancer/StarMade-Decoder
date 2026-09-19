@@ -6,6 +6,15 @@ The changes below describe completed development awaiting a versioned release,
 not outstanding tasks. The package version is now the 1.6.0 candidate.
 No npm release or in-game import qualification is implied.
 
+### Source publication boundary
+
+- Remove Java test sources and replace executable Java harnesses with independent
+  Python binary oracles and captured reference vectors; no JDK is required.
+- Reject Java sources and binaries in project files, nested archives and the npm
+  package. CI evidence no longer includes a copy of the source tree.
+- Keep StarMade-Open as an external, read-only reference. Historical JDK results
+  below describe earlier runs, not the current Python validation mechanism.
+
 ### Added — complete blueprint writing
 
 - Add `BlueprintDocument`, `.sment` writers and complete folder snapshots/exports,

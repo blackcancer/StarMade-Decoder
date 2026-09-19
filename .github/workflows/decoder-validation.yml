@@ -30,13 +30,19 @@ jobs:
         with:
           node-version: '${{ matrix.node }}'
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Reject Java sources and binaries before creating artifacts
+        run: |
+          python scripts/check-source-boundary.py
+          python scripts/test-source-boundary.py
       - name: Record validation environment
         run: |
           mkdir -p validation
           git rev-parse HEAD > validation/commit.txt
           node --version > validation/node-version.txt
           npm --version > validation/npm-version.txt
-          git archive --format=tar HEAD | gzip > validation/source.tar.gz
       - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm run docs:check
@@ -56,16 +62,11 @@ jobs:
       - name: Record development dependency advisories
         if: always()
         run: npm audit --json > validation/dependency-audit.json || true
-      - uses: actions/setup-java@v4
-        if: matrix.node == '22'
-        with:
-          distribution: temurin
-          java-version: '21'
-      - name: JDK interoperability
+      - name: Independent binary interoperability
         if: matrix.node == '22'
         run: |
           set -o pipefail
-          npm run test:interop 2>&1 | tee validation/java-interop.log
+          npm run test:interop 2>&1 | tee validation/binary-interop.log
       - name: Independent LZ4 qualification
         if: matrix.node == '22'
         run: |
