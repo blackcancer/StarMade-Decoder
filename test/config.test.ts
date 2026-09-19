@@ -20,7 +20,7 @@ import { BlockBehaviorConfig } from '../src/config/BlockBehaviorConfig.js';
 import { FactionConfig } from '../src/config/FactionConfig.js';
 import { parseSystemNames, writeSystemNames } from '../src/config/SystemNames.js';
 
-const STARMADE_DIR = '/srv/StarMade';
+import { installationDir as STARMADE_DIR, describeInstallation, itInstallation } from './helpers/installation.js';
 
 // ── SMToolConfig ──────────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ describe('SMToolConfig', function () {
     console.log('    paths.serverCfg:', cfg.paths.serverCfg);
   });
 
-  it('validate() passes for a valid StarMade installation', () => {
+  itInstallation('validate() passes for a valid StarMade installation', () => {
     const cfg = SMToolConfig.fromData({ starmadeDir: STARMADE_DIR, worldDir: 'world0' });
     assert.doesNotThrow(() => cfg.validate());
     assert.isTrue(cfg.isValid());
@@ -72,7 +72,7 @@ describe('ServerConfig', function () {
   let cfg: SMToolConfig;
   before(() => { cfg = SMToolConfig.fromData({ starmadeDir: STARMADE_DIR, worldDir: 'world0' }); });
 
-  it('loads server.cfg', () => {
+  itInstallation('loads server.cfg', () => {
     const sc = ServerConfig.load(cfg);
     assert.instanceOf(sc, ServerConfig);
     console.log('    WORLD:', sc.getString('WORLD'));
@@ -81,7 +81,7 @@ describe('ServerConfig', function () {
     console.log('    THRUST_SPEED_LIMIT:', sc.getNumber('THRUST_SPEED_LIMIT'));
   });
 
-  it('get() returns typed values', () => {
+  itInstallation('get() returns typed values', () => {
     const sc = ServerConfig.load(cfg);
     assert.isString(sc.getString('WORLD'));
     assert.isNumber(sc.getNumber('MAX_CLIENTS'));
@@ -101,7 +101,7 @@ describe('ServerConfig', function () {
     assert.isDefined(SERVER_CONFIG_SCHEMA['NPC_FACTION_SPAWN_LIMIT']);
   });
 
-  it('set() updates immutably', () => {
+  itInstallation('set() updates immutably', () => {
     const sc1 = ServerConfig.load(cfg);
     const sc2 = sc1.set('MAX_CLIENTS', 99);
     assert.equal(sc2.getNumber('MAX_CLIENTS'), 99);
@@ -109,12 +109,12 @@ describe('ServerConfig', function () {
     assert.notEqual(sc1.getNumber('MAX_CLIENTS'), 99);
   });
 
-  it('set() throws TypeError for an unknown key', () => {
+  itInstallation('set() throws TypeError for an unknown key', () => {
     const sc = ServerConfig.load(cfg);
     assert.throws(() => sc.set('UNKNOWN_KEY_XYZ', 42), TypeError);
   });
 
-  it('toString() preserves comments', () => {
+  itInstallation('toString() preserves comments', () => {
     const sc = ServerConfig.load(cfg);
     const str = sc.toString();
     assert.include(str, '=');
@@ -124,7 +124,7 @@ describe('ServerConfig', function () {
     }
   });
 
-  it('setMany + round-trip parse', () => {
+  itInstallation('setMany + round-trip parse', () => {
     const sc = ServerConfig.load(cfg);
     const modified = sc.setMany({ MAX_CLIENTS: 50, ENEMY_SPAWNING: false, THRUST_SPEED_LIMIT: 100 });
     // Reparse from string
@@ -138,7 +138,7 @@ describe('ServerConfig', function () {
 
 // ── BlockConfig ───────────────────────────────────────────────────────────────
 
-describe('BlockConfig', function () {
+describeInstallation('BlockConfig', function () {
   this.timeout(30_000);
 
   let cfg: SMToolConfig;
@@ -336,7 +336,7 @@ describe('BlockConfig', function () {
 
 // ── BlockBehaviorConfig ───────────────────────────────────────────────────────
 
-describe('BlockBehaviorConfig', function () {
+describeInstallation('BlockBehaviorConfig', function () {
   this.timeout(10_000);
 
   let cfg: SMToolConfig;
@@ -370,7 +370,7 @@ describe('BlockBehaviorConfig', function () {
 
 // ── FactionConfig ─────────────────────────────────────────────────────────────
 
-describe('FactionConfig', function () {
+describeInstallation('FactionConfig', function () {
 
   let cfg: SMToolConfig;
   before(() => { cfg = SMToolConfig.fromData({ starmadeDir: STARMADE_DIR, worldDir: 'world0' }); });
@@ -394,7 +394,7 @@ describe('FactionConfig', function () {
 
 // ── systemNames.syl ──────────────────────────────────────────────────────────
 
-describe('SystemNames', function () {
+describeInstallation('SystemNames', function () {
   it('parses and writes systemNames.syl', () => {
     const file = path.join(STARMADE_DIR, 'data/config/systemNames.syl');
     const parsed = parseSystemNames(fs.readFileSync(file));

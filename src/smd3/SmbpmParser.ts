@@ -13,28 +13,30 @@
  * Format (BlueprintEntry.readMeta / readMetaNew) :
  *   int  metaVersion
  *   loop on byte dataType until FINISH_BYTE(1) :
- *     2=SEG_MANAGER_BYTE  → Tag.readFrom (tag binaire standard)
+ *     2=SEG_MANAGER_BYTE  → Tag.readFrom (standard binary Tag)
  *     3=DOCKING_BYTE      → int size + size×(UTF name + 3×int pos + 3×float size + short style + byte orient)
- *     4=RAIL_BYTE         → 3×float min + 3×float max + [si v≥2] UTF uid + int wirelessSize×... + int childSize×(UTF+int+bytes Tag)
+ *     4=RAIL_BYTE         → 3×float min + 3×float max + [if v≥2] UTF uid + int wirelessSize×... + int childSize×(UTF+int+bytes Tag)
  *     5=AI_CONFIG_BYTE    → int tagSize + bytes Tag
- *     6=RAIL_DOCKER_BYTE  → byte exists + [si exists] int size × VoidUniqueSegmentPiece(3×int pos + short type + byte orient + byte active + byte hp)
+ *     6=RAIL_DOCKER_BYTE  → byte exists + [if exists] int size × VoidUniqueSegmentPiece(3×int pos + short type + byte orient + byte active + byte hp)
  *     7=CARGO_BYTE        → byte exists + [if exists] int size × (long pos + double capacity)
- *     8=LOCK_BOX_BYTE     → identique CARGO_BYTE
+ *     8=LOCK_BOX_BYTE     → same as CARGO_BYTE
  *     9=THRUST_CONFIG_BYTE→ Tag.readFrom
  *
  * Java source: BlueprintEntry.java (readMeta / readMetaNew)
  */
 
+import { DecodeError } from '../core/DecodeError.js';
 import { BufferReader } from '../core/BufferReader.js';
 import { readFrom } from '../core/TagParser.js';
 import type { Tag } from '../core/Tag.js';
 import { TagType } from '../core/TagType.js';
 import { Tags } from '../core/TagBuilder.js';
 import { Matrix4f } from '../types/Matrices.js';
-import { SegmentControllerObject } from '../objects/SegmentController.js';
+import type { SegmentControllerObject } from '../objects/SegmentController.js';
+import { ManagerContainer } from '../objects/components/ManagerContainer.js';
 import { ThrustConfig } from '../objects/components/PowerAndThrust.js';
 
-// ── Constantes ────────────────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
 
 /**
  * Defines FINISH_BYTE for StarMade blueprint and segment file parsing.
@@ -206,9 +208,9 @@ export interface WirelessMarker {
  */
 export interface SmbpmFile {
   metaVersion: number;
-  /** High-level SegmentController view, when present and parseable. */
-  manager: SegmentControllerObject | null;
-  /** Connexions de docking classiques */
+  /** Manager-container state. Legacy entity objects remain accepted as explicit writer input. */
+  manager: ManagerContainer | SegmentControllerObject | null;
+  /** Legacy docking connections */
   dockingEntries: DockingEntry[];
   /** Rail UID (for RAIL_BYTE) */
   railUID?: string;
@@ -226,7 +228,7 @@ export interface SmbpmFile {
   aiConfig: AiConfig | null;
   /** Rail docker pieces */
   railDockerPieces: RailDockerPiece[];
-  /** Points de cargo */
+  /** Cargo points */
   cargoPoints: CargoPoint[];
   /** Lock box (same format as cargo) */
   lockBoxPoints: CargoPoint[];
@@ -238,6 +240,10 @@ export interface SmbpmFile {
  * Describes the SmbpmInternalState data shape used by StarMade blueprint and segment file parsing.
  */
 export interface SmbpmInternalState {
+  /** Presence flags distinguish an absent section payload from a present empty list. */
+  cargoPresent?: boolean;
+  lockBoxPresent?: boolean;
+  railDockerPresent?: boolean;
   managerRaw?: Uint8Array | null;
   managerTag?: Tag | null;
   aiRaw?: Uint8Array | null;
@@ -268,7 +274,7 @@ const RAIL_CHILD_INTERNALS = new WeakMap<object, RailChildInternalState>();
  */
 export class BlueprintMeta implements SmbpmFile {
   metaVersion: number;
-  manager: SegmentControllerObject | null;
+  manager: ManagerContainer | SegmentControllerObject | null;
   dockingEntries: DockingEntry[];
   railUID?: string;
   railRootMin: Vector3f | null;
@@ -372,7 +378,7 @@ export class BlueprintMeta implements SmbpmFile {
    * @param manager - Input value for the withManager operation.
    * @returns The computed StarMade-Decoder value.
    */
-  withManager(manager: SegmentControllerObject | null): BlueprintMeta {
+  withManager(manager: ManagerContainer | SegmentControllerObject | null): BlueprintMeta {
     return this._with({ manager }, { preserveManager: false });
   }
 
@@ -570,6 +576,9 @@ export class BlueprintMeta implements SmbpmFile {
 
     const previous = getSmbpmInternals(this);
     defineSmbpmInternals(next, {
+      cargoPresent: previous.cargoPresent,
+      lockBoxPresent: previous.lockBoxPresent,
+      railDockerPresent: previous.railDockerPresent,
       managerRaw: options.preserveManager === false ? null : previous.managerRaw,
       managerTag: options.preserveManager === false ? null : previous.managerTag,
       aiRaw: options.preserveAi === false ? null : previous.aiRaw,
@@ -678,7 +687,8 @@ function finalizeSmbpm(input: SmbpmFile, internals: SmbpmInternalState): Bluepri
 
   for (let i = 0; i < meta.railChildren.length; i++) {
     const source = input.railChildren[i];
-    const internal = source ? getRailChildInternals(source) : null;
+    // BlueprintMeta copies the dense railChildren array without changing its length.
+    const internal = getRailChildInternals(source);
     if (internal) {
       defineRailChildInternals(meta.railChildren[i], internal);
     }
@@ -778,13 +788,13 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
         internals.managerRaw = new Uint8Array(tagBuf);
         try {
           internals.managerTag = readFrom(tagBuf);
-          result.manager = SegmentControllerObject.fromTag(internals.managerTag);
-        } catch { /* tag invalid, on continue */ }
+          result.manager = ManagerContainer.fromTag(internals.managerTag);
+        } catch (cause) { throw new DecodeError(cause instanceof DecodeError ? cause.code : 'E_FORMAT', 'Invalid manager Tag in blueprint metadata', { cause }); }
         return finalizeSmbpm(result, internals); // SEG_MANAGER_BYTE ends reading
       }
 
       case DOCKING_BYTE: {
-        const size = r.readInt32BE();
+        const size = r.readCount();
         for (let i = 0; i < size; i++) {
           const name = r.readJavaUTF();
           const posX = r.readInt32BE(), posY = r.readInt32BE(), posZ = r.readInt32BE();
@@ -812,7 +822,7 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
 
         if (metaVersion >= 2) {
           result.railUID = r.readJavaUTF();
-          const wirelessSize = r.readInt32BE();
+          const wirelessSize = r.readCount();
           for (let i = 0; i < wirelessSize; i++) {
             const marking        = r.readJavaUTF();
             const markerLocation = r.readInt64BE();
@@ -821,16 +831,16 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
           }
         }
 
-        const size = r.readInt32BE();
+        const size = r.readCount();
         for (let i = 0; i < size; i++) {
           const name = r.readJavaUTF();
-          const tagSize = r.readInt32BE();
+          const tagSize = r.readCount(1, r.remaining());
           let childTag: Tag | null = null;
           let tagRaw: Uint8Array | null = null;
-          if (tagSize > 0 && tagSize < 100_000_000) {
+          if (tagSize > 0) {
             const tagBytes = r.readBytes(tagSize);
             tagRaw = new Uint8Array(tagBytes);
-            try { childTag = readFrom(tagBytes); } catch { /* skip */ }
+            childTag = readFrom(tagBytes);
           }
           const request = parseRailChildRequestFromTag(childTag);
           const offset = getRailChildOffsetFromRequest(request);
@@ -845,22 +855,23 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
       }
 
       case AI_CONFIG_BYTE: {
-        const tagSize = r.readInt32BE();
-        if (tagSize > 0 && tagSize < 100_000_000) {
+        const tagSize = r.readCount(1, r.remaining());
+        if (tagSize > 0) {
           const tagBytes = r.readBytes(tagSize);
           internals.aiRaw = new Uint8Array(tagBytes);
           try {
             internals.aiTag = readFrom(tagBytes);
             result.aiConfig = parseAiConfigTag(internals.aiTag);
-          } catch { /* skip */ }
+          } catch (cause) { throw new DecodeError(cause instanceof DecodeError ? cause.code : 'E_FORMAT', 'Invalid embedded Tag in blueprint metadata', { cause }); }
         }
         break;
       }
 
       case RAIL_DOCKER_BYTE: {
         const exists = r.readInt8() > 0;
+        internals.railDockerPresent = exists;
         if (exists) {
-          const size = r.readInt32BE();
+          const size = r.readCount();
           for (let i = 0; i < size; i++) {
             const posX = r.readInt32BE(), posY = r.readInt32BE(), posZ = r.readInt32BE();
             const type = r.readInt16BE();
@@ -876,9 +887,11 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
       case CARGO_BYTE:
       case LOCK_BOX_BYTE: {
         const exists = r.readInt8() > 0;
+        if (dataType === CARGO_BYTE) internals.cargoPresent = exists;
+        else internals.lockBoxPresent = exists;
         const target = dataType === CARGO_BYTE ? result.cargoPoints : result.lockBoxPoints;
         if (exists) {
-          const size = r.readInt32BE();
+          const size = r.readCount();
           for (let i = 0; i < size; i++) {
             const posIndex = r.readInt64BE();
             const capacity = r.readFloat64BE();
@@ -894,13 +907,13 @@ export function parseSmbpm(data: Buffer | Uint8Array): BlueprintMeta {
         try {
           internals.thrustTag = readFrom(tagBuf);
           result.thrustConfig = ThrustConfig.fromTag(internals.thrustTag);
-        } catch { /* skip */ }
+        } catch (cause) { throw new DecodeError(cause instanceof DecodeError ? cause.code : 'E_FORMAT', 'Invalid embedded Tag in blueprint metadata', { cause }); }
         return finalizeSmbpm(result, internals); // tag consumes the rest of the stream
       }
 
       default:
-        // Unknown type — cannot continue without knowing the size
-        return finalizeSmbpm(result, internals);
+        // Unknown types have no generic length, so safe skipping is impossible.
+        throw new DecodeError('E_UNSUPPORTED', `Unknown blueprint metadata type ${dataType}`, { offset: r.offset - 1 });
     }
   }
 
