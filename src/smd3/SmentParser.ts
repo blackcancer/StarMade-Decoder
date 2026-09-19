@@ -848,13 +848,17 @@ function _parseEntity(
   const logic = context.attempt(`${entityPath}/logic.smbpl`,
     () => _parseLogicBuffer(_readEntry(zip, `${entityPath}/logic.smbpl`, context)), null);
 
-  // Segments .smd3
+  // Include legacy resources so unsupported data cannot be silently discarded.
   const segments: Smd3File[] = [];
   const dataPrefix = `${entityPath}/DATA/`;
   for (const entry of allEntries) {
-    if (entry.entryName.startsWith(dataPrefix) && !entry.entryName.slice(dataPrefix.length).includes('/') && entry.entryName.endsWith('.smd3')) {
-      const file = context.attempt(entry.entryName,
-        () => context.readSegments(context.readZipEntry(entry), entry.entryName), null);
+    if (entry.entryName.startsWith(dataPrefix) && !entry.entryName.slice(dataPrefix.length).includes('/') && /\.smd[0-3]$/.test(entry.entryName)) {
+      const file = context.attempt(entry.entryName, () => {
+        if (!entry.entryName.endsWith('.smd3')) {
+          throw new DecodeError('E_UNSUPPORTED', 'Unsupported legacy segment resource; explicit migration is required');
+        }
+        return context.readSegments(context.readZipEntry(entry), entry.entryName);
+      }, null);
       if (file) segments.push(file);
     }
   }

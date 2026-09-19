@@ -21,6 +21,10 @@ No game assets or proprietary reference-source files are distributed here.
 - SMD3, blueprint archives and blueprint folders use **strict parsing** by
   default. Invalid records are not silently dropped. Optional missing metadata
   and logic files remain allowed, but invalid present files are errors.
+- Legacy `DATA/*.smd0`, `*.smd1` and `*.smd2` resources require an explicit
+  migration. Archives and folders reject them with `E_UNSUPPORTED` in strict
+  mode; recovery reports their paths and returns `complete: false`, retaining
+  any successfully decoded SMD3 resources, including attached entities.
 - `parseSmbph`, `parseSmbpl` and `parseSmbpm` reject invalid required payloads.
   Unversioned legacy controller maps use the Java +8 coordinate-origin migration.
 - New SMD3 output uses v7 **raw LZ4**, with native **little-endian** 32-bit words
