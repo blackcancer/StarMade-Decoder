@@ -12,6 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { assert } from 'chai';
 import AdmZip from 'adm-zip';
+import { DecodeError } from '../src/core/DecodeError.js';
 import { parseSment } from '../src/smd3/SmentParser.js';
 import { parseSmtpl } from '../src/smd3/SmtplParser.js';
 
@@ -60,10 +61,21 @@ describe('Retrocompat — StarMadeDock samples', function () {
       const data = fs.readFileSync(file);
 
       if (sample.filename.endsWith('.sment')) {
-        const blueprint = parseSment(data);
         const entries = new AdmZip(data).getEntries().map(e => e.entryName);
         const smd2Count = entries.filter(e => e.endsWith('.smd2')).length;
         const smd3Count = entries.filter(e => e.endsWith('.smd3')).length;
+        const legacyEntries = entries.filter(e => ['.smd0', '.smd1', '.smd2'].some(extension => e.endsWith(extension)));
+        const blueprint = parseSment(data, legacyEntries.length > 0 ? { mode: 'recover' } : {});
+        if (legacyEntries.length > 0) {
+          const failure = assert.throws(() => parseSment(data), DecodeError, /legacy segment/);
+          assert.equal((failure as DecodeError).code, 'E_UNSUPPORTED');
+          assert.isFalse(blueprint.complete);
+          assert.deepEqual(blueprint.diagnostics.map(d => d.path).sort(), [...legacyEntries].sort());
+          assert.isTrue(blueprint.diagnostics.every(d => d.code === 'E_UNSUPPORTED'));
+        } else {
+          assert.isTrue(blueprint.complete);
+          assert.isEmpty(blueprint.diagnostics);
+        }
 
         assert.isAbove(blueprint.totalEntities, 0);
         assert.isString(blueprint.root.header.entityType);
@@ -74,8 +86,8 @@ describe('Retrocompat — StarMadeDock samples', function () {
           assert.isAbove(blueprint.totalSegments, 0);
         } else {
           // Very old StarMadeDock blueprints: .sment archives with .smd2 segments.
-          // The parser must at least remain stable and extract headers/children;
-          // blockk-by-blockk .smd2 decoding belongs to a dedicated legacy layer.
+          // Explicit recovery extracts headers/children and reports every skipped resource;
+          // block-by-block .smd2 decoding belongs to a dedicated legacy layer.
           assert.isAbove(smd2Count, 0);
           assert.equal(blueprint.totalSegments, 0);
           assert.isAbove(blueprint.root.header.totalBlockCount, 0);

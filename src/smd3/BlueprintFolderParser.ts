@@ -74,14 +74,20 @@ function _parseEntityFolder(
   const meta = context.attempt(metaPath, () => _readMeta(metaPath, context), null);
   const logic = context.attempt(logicPath, () => _readLogic(logicPath, context), null);
 
-  // Segments DATA/*.smd3
+  // Include legacy resources so unsupported data cannot be silently discarded.
   const segments: ReturnType<typeof parseSmd3>[] = [];
   const dataDir = path.join(folderPath, 'DATA');
   if (fs.existsSync(dataDir)) {
     if (fs.lstatSync(dataDir).isSymbolicLink()) throw new DecodeError('E_FORMAT', 'DATA directory symlinks are not followed');
-    for (const f of fs.readdirSync(dataDir).filter(n => n.endsWith('.smd3')).sort()) {
+    for (const f of fs.readdirSync(dataDir).filter(n => /\.smd[0-3]$/.test(n)).sort()) {
       const filePath = path.join(dataDir, f);
-      const file = context.attempt(filePath, () => context.readSegments(readBoundedFile(filePath, context), filePath), null);
+      const file = context.attempt(filePath, () => {
+        if (!f.endsWith('.smd3')) {
+          context.chargeFile();
+          throw new DecodeError('E_UNSUPPORTED', 'Unsupported legacy segment resource; explicit migration is required');
+        }
+        return context.readSegments(readBoundedFile(filePath, context), filePath);
+      }, null);
       if (file) segments.push(file);
     }
   }
