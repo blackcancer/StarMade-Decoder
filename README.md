@@ -2,7 +2,9 @@
 
 TypeScript SDK for reading, inspecting, and rewriting **StarMade** save files and blueprint formats.
 
-It is a faithful port of the Java `org.schema.schine.resource.tag.Tag` binary tag format, with higher-level helpers for entities, blueprints, configuration files, and round-trip-safe edits.
+The SDK implements the Java `org.schema.schine.resource.tag.Tag` binary format and higher-level helpers for entities, blueprints and configuration files.
+
+**Upgrading from 1.4.0:** read [Data integrity and migration](docs/INTEGRITY_AND_MIGRATION.md). Strict error handling, Java modified UTF-8 and v7 LZ4 serialization correct earlier incompatible behavior. Back up source files before migration.
 
 ## Features
 
@@ -25,15 +27,17 @@ npm test
 
 ```ts
 import fs from 'node:fs';
-import { readFrom, writeTo, toJSON } from 'starmade-decoder';
+import { readTagDocument, registerAllFactories, toJSON } from 'starmade-decoder';
 
 const data = fs.readFileSync('server-database/world0/FACTIONS.fac');
-const root = readFrom(data);
+registerAllFactories();
+const document = readTagDocument(data);
+const root = document.root;
 
 console.log(toJSON(root, 2));
 
-const out = writeTo(root);
-fs.writeFileSync('FACTIONS.fac', out);
+const out = document.toBuffer(root);
+fs.writeFileSync('FACTIONS.edited.fac', out);
 ```
 
 ## BlockConfig element information
@@ -73,7 +77,7 @@ StarMade files use an NBT-style tag system:
 | FLOAT | 5 | float32 BE |
 | DOUBLE | 6 | float64 BE |
 | BYTE_ARRAY | 7 | int32 length + bytes |
-| STRING | 8 | Java UTF (uint16 length + UTF-8) |
+| STRING | 8 | Java modified UTF-8 (uint16 encoded byte length) |
 | VECTOR3f | 9 | 3× float32 |
 | VECTOR3i | 10 | 3× int32 |
 | VECTOR3b | 11 | 3× int8 |
@@ -88,9 +92,9 @@ StarMade files use an NBT-style tag system:
 Non-GZIP files start with:
 
 ```text
-short version (= 1)
+short version (new uncompressed output = 0)
 byte prType  (> 0 = named, < 0 = anonymous, 0 = FINISH)
-[if named] uint16 length + UTF-8 (Java readUTF)
+[if named] uint16 byte length + modified UTF-8 (Java readUTF)
 payload by type
 ```
 
@@ -116,17 +120,24 @@ scripts/         sample fetch helpers
 ```bash
 npm run build
 npm run docs:check
-npm test          # 681 tests
-npm run coverage  # 99% statements, 82% branches
-npm run coverage:check
+npm test
+npm run coverage
+npm run coverage:verify
+npm run test:interop   # Requires JDK 21+
+npm run test:package   # Installs the packed SDK in a fresh production consumer
 ```
 
-## Test coverage (as of v1.0.0)
+Coverage is measured on each CI run rather than stated as a permanent percentage.
+Installation-specific tests require `STARMADE_TEST_DIR`; missing optional fixtures
+are reported as pending. CI qualifies Node.js 20, 22 and 24, with independent JDK
+and LZ4 checks on Node.js 22. These checks do not launch the StarMade game/server.
 
-| Metric | Value |
-|---|---|
-| Statements | 99% |
-| Lines | 99% |
-| Functions | 93% |
-| Branches | 82% |
-| Tests | 681 passing |
+See [Data integrity and migration](docs/INTEGRITY_AND_MIGRATION.md) for resource
+budgets, recovery diagnostics, supported migrations and explicit limitations.
+
+## Exact coverage acceptance
+
+The correction branch requires 100% lines and branches across every production
+source module, without coverage exclusions or ignore directives. Run
+`npm run coverage:check`; see [the coverage contract](docs/TEST_COVERAGE.md) for
+exact-counter gates, fixture scope and independent validation requirements.

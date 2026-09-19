@@ -102,7 +102,7 @@ export function writeSmbpm(file: SmbpmFile): Buffer {
 
   // ── RAIL_DOCKER_BYTE ────────────────────────────────────────────────────────
   w.writeInt8(RAIL_DOCKER_BYTE);
-  if (file.railDockerPieces.length === 0) {
+  if (file.railDockerPieces.length === 0 && !internals.railDockerPresent) {
     w.writeInt8(0); // not present
   } else {
     w.writeInt8(1);
@@ -118,7 +118,7 @@ export function writeSmbpm(file: SmbpmFile): Buffer {
 
   // ── CARGO_BYTE ──────────────────────────────────────────────────────────────
   w.writeInt8(CARGO_BYTE);
-  if (file.cargoPoints.length === 0) {
+  if (file.cargoPoints.length === 0 && !internals.cargoPresent) {
     w.writeInt8(0);
   } else {
     w.writeInt8(1);
@@ -130,13 +130,16 @@ export function writeSmbpm(file: SmbpmFile): Buffer {
   }
 
   // ── LOCK_BOX_BYTE ───────────────────────────────────────────────────────────
-  if (file.lockBoxPoints.length > 0) {
+  if (file.lockBoxPoints.length > 0 || internals.lockBoxPresent !== undefined) {
     w.writeInt8(LOCK_BOX_BYTE);
-    w.writeInt8(1);
-    w.writeInt32BE(file.lockBoxPoints.length);
-    for (const c of file.lockBoxPoints) {
-      w.writeInt64BE(c.posIndex);
-      w.writeFloat64BE(c.capacity);
+    const present = file.lockBoxPoints.length > 0 || internals.lockBoxPresent === true;
+    w.writeInt8(present ? 1 : 0);
+    if (present) {
+      w.writeInt32BE(file.lockBoxPoints.length);
+      for (const c of file.lockBoxPoints) {
+        w.writeInt64BE(c.posIndex);
+        w.writeFloat64BE(c.capacity);
+      }
     }
   }
 

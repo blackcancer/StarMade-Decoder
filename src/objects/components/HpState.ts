@@ -4,7 +4,7 @@
  * Defines reusable domain components used by StarMade entity object models.
  *
  * @author InitSysRev
- * @version 1.0.0
+ * @version 1.5.0
  */
 
 /**
@@ -18,8 +18,8 @@
  *     [1] STRUCT values [
  *       [0] LONG|INT hp
  *       [1] LONG|INT maxHp
- *       [2] LONG|INT armorHp   (optionnel)
- *       [3] LONG|INT maxArmorHp (optionnel)
+ *       [2] LONG|INT armorHp   (optional)
+ *       [3] LONG|INT maxArmorHp (optional)
  *       [4] LONG rebootStarted
  *       [5] LONG rebootTime
  *       [6] SERIALIZABLE currentHPMatch (ElementCountMap)
@@ -32,7 +32,8 @@
 import { Tag } from '../../core/Tag.js';
 import { Tags } from '../../core/TagBuilder.js';
 import { TagType } from '../../core/TagType.js';
-import { FINISH_TAG } from '../../core/Tag.js';
+import type { SerializableTagElement } from '../../serializable/SerializableTagElement.js';
+import { RawElement } from '../../serializable/Factories.js';
 
 /**
  * Represents the HpState model used by high-level entity component modelling.
@@ -51,7 +52,8 @@ export class HpState {
    * @param maxArmorHp - Input value for the constructor operation.
    * @param rebootStarted - Input value for the constructor operation.
    * @param rebootTime - Input value for the constructor operation.
-   * @param rebootRecover - Input value for the constructor operation.
+   * @param rebootRecover - Whether reboot recovery is enabled.
+   * @param currentHPMatch - Preserved ElementCountMap payload; defaults to an empty map.
    */
   constructor(
     readonly classId: number,
@@ -62,6 +64,7 @@ export class HpState {
     readonly rebootStarted: bigint,
     readonly rebootTime: bigint,
     readonly rebootRecover: boolean,
+    readonly currentHPMatch: SerializableTagElement = new RawElement(1, new Uint8Array(4)),
   ) {}
 
   static EMPTY = new HpState(HpState.CLASS_INT, 0n, 0n, 0n, 0n, 0n, 0n, false);
@@ -97,7 +100,6 @@ export class HpState {
   static fromTag(tag: Tag): HpState {
     const top = tag.getStruct().filter(t => t.type !== TagType.FINISH);
     const classId  = top[0]?.type === TagType.BYTE   ? top[0].getByte() : HpState.CLASS_INT;
-    const useLong  = classId === HpState.CLASS_LONG;
     const values   = top[1]?.type === TagType.STRUCT
       ? top[1].getStruct().filter(t => t.type !== TagType.FINISH)
       : [];
@@ -118,6 +120,7 @@ export class HpState {
       values[4]?.type === TagType.LONG ? values[4].getLong() : 0n,
       values[5]?.type === TagType.LONG ? values[5].getLong() : 0n,
       values.length > 7 && values[7]?.type === TagType.BYTE ? values[7].getByte() !== 0 : false,
+      values[6]?.type === TagType.SERIALIZABLE ? values[6].getSerializable() : undefined,
     );
   }
 
@@ -139,7 +142,8 @@ export class HpState {
       makeHp(this.maxArmorHp),
       Tags.long(null, this.rebootStarted),
       Tags.long(null, this.rebootTime),
-      // [6] ElementCountMap placeholder (SERIALIZABLE) — omitted when empty
+      // Java always requires this position, even for an empty ElementCountMap.
+      new Tag(TagType.SERIALIZABLE, null, this.currentHPMatch),
       Tags.byte(null, this.rebootRecover ? 1 : 0),
     ];
 
@@ -157,7 +161,7 @@ export class HpState {
    */
   withHp(hp: bigint): HpState {
     return new HpState(this.classId, hp, this.maxHp, this.armorHp, this.maxArmorHp,
-      this.rebootStarted, this.rebootTime, this.rebootRecover);
+      this.rebootStarted, this.rebootTime, this.rebootRecover, this.currentHPMatch);
   }
 
   /**
@@ -168,7 +172,7 @@ export class HpState {
    */
   withMaxHp(maxHp: bigint): HpState {
     return new HpState(this.classId, this.hp, maxHp, this.armorHp, this.maxArmorHp,
-      this.rebootStarted, this.rebootTime, this.rebootRecover);
+      this.rebootStarted, this.rebootTime, this.rebootRecover, this.currentHPMatch);
   }
 
   /**

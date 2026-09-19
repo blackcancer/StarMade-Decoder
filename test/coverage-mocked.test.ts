@@ -115,15 +115,15 @@ describe('TagParser — writePayload NOTHING tag', () => {
   });
 });
 
-// ── serializable/Factories — ControlElementMapper header >= 0 throws ─────────
+// ── serializable/Factories — ControlElementMapper truncated legacy format ─────────
 
-describe('Factories — ControlElementMapper header >= 0 throws', () => {
-  it('factory 0 throws when header is positive', () => {
+describe('Factories — ControlElementMapper truncated legacy format', () => {
+  it('factory 0 rejects a truncated legacy controller count', () => {
     const w = new BufferWriter();
-    w.writeInt32BE(1);   // header = 1 (positive) → throws
+    w.writeInt32BE(1);   // legacy controller count = 1, without the required record
     const factory = SerializableTagRegister.register[0];
     const r = BufferReader.from(w.toBuffer());
-    assert.throws(() => factory.create(r), /unexpected positive header/);
+    assert.throws(() => factory.create(r), /Truncated/);
   });
 });
 
@@ -319,28 +319,20 @@ describe('ThrustConfig — version 0/1 VECTOR4f path', () => {
 
 // ── smd3/SmbplParser — buf.length < 4 early return (line 49) ─────────────────
 
-describe('SmbplParser — early return paths', () => {
-  it('returns empty result when buf.length < 4 (line 49)', () => {
-    const buf = Buffer.from([0x00, 0x01]); // only 2 bytes
-    const file = parseSmbpl(buf);
-    assert.equal(file.links.length, 0);
-    assert.equal(file.controllerCount, 0);
+describe('SmbplParser — malformed input is rejected', () => {
+  it('rejects a truncated structure version', () => {
+    assert.throws(() => parseSmbpl(Buffer.from([0x00, 0x01])), /Truncated/);
   });
 
-  it('returns empty result when exactly 4 bytes (isEOF after version, line 54)', () => {
-    const w = new BufferWriter();
-    w.writeInt32BE(0); // structureVersion only
-    const file = parseSmbpl(w.toBuffer());
-    assert.equal(file.structureVersion, 0);
-    assert.equal(file.links.length, 0);
+  it('rejects a missing controller map', () => {
+    assert.throws(() => parseSmbpl(Buffer.alloc(4)), /Missing/);
   });
 
-  it('returns early result when header >= 0 (line 60-62 old format)', () => {
+  it('rejects a truncated non-empty unversioned map', () => {
     const w = new BufferWriter();
-    w.writeInt32BE(0); // structureVersion
-    w.writeInt32BE(5); // header = 5 (positive) → old format, return early
-    const file = parseSmbpl(w.toBuffer());
-    assert.equal(file.links.length, 0); // returned early without throwing
+    w.writeInt32BE(0);
+    w.writeInt32BE(5);
+    assert.throws(() => parseSmbpl(w.toBuffer()), /truncated/);
   });
 });
 
@@ -507,7 +499,9 @@ describe('BlueprintFolderParser — _emptyHeader fallback (lines 59-60, 92-100)'
       fs.mkdirSync(rootDir);
       // No header.smbph → _emptyHeader() is called (lines 58-60, 92-100)
 
-      const result = parseBlueprintFolder(rootDir);
+      const result = parseBlueprintFolder(rootDir, { mode: 'recover' });
+      assert.isFalse(result.complete);
+      assert.isAbove(result.diagnostics.length, 0);
       assert.isDefined(result);
       assert.equal(result.root.header.entityType, 'UNKNOWN'); // _emptyHeader returns UNKNOWN
       assert.equal(result.root.header.totalBlockCount, 0);
@@ -521,7 +515,8 @@ describe('BlueprintFolderParser — _emptyHeader fallback (lines 59-60, 92-100)'
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bptest-'));
     try {
       fs.mkdirSync(path.join(tmp, 'MyBP'));
-      const result = parseBlueprintFolder(path.join(tmp, 'MyBP'));
+      const result = parseBlueprintFolder(path.join(tmp, 'MyBP'), { mode: 'recover' });
+      assert.isFalse(result.complete);
       assert.equal(result.root.header.headerVersion, -1);
       assert.deepEqual(result.root.header.boundingBox, { minX:0, minY:0, minZ:0, maxX:0, maxY:0, maxZ:0 });
     } finally {

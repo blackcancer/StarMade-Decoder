@@ -1,5 +1,7 @@
 # StarMade-Decoder Examples
 
+> **1.5.0 integrity update:** [Read the migration contract](INTEGRITY_AND_MIGRATION.md) for strict parsing, v7 LZ4, TagDocument, geometry context and changed error handling. Older examples using `writeTo` serialize only the root Tag, not its complete file envelope.
+
 All examples use ESM syntax. Replace paths with files from your StarMade installation.
 
 > **Note:** before parsing `.ent` files containing SERIALIZABLE payloads, call `registerAllFactories()` once at startup.

@@ -23,6 +23,7 @@
  * Java source: BlueprintEntry.readStructure()
  */
 
+import { DecodeError } from '../core/DecodeError.js';
 import { BufferReader } from '../core/BufferReader.js';
 import type { BlockPosition } from '../objects/ElementPosition.js';
 
@@ -363,47 +364,49 @@ export function parseSmbpl(data: Buffer | Uint8Array): BlueprintLogic {
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const result: SmbplFile = { structureVersion: 0, controllers: [], links: [], controllerCount: 0 };
 
-  if (buf.length < 4) return new BlueprintLogic(result);
+  if (buf.length < 4) throw new DecodeError('E_TRUNCATED', 'Truncated blueprint logic header');
 
   const r = BufferReader.from(buf);
   result.structureVersion = r.readInt32BE();
 
-  if (r.isEOF()) return new BlueprintLogic(result);
+  if (r.isEOF()) throw new DecodeError('E_TRUNCATED', 'Missing blueprint controller map');
 
-  // ControlElementMap.deserialize — port of factory id=0 parser
-  try {
-    const header = r.readInt32BE(); // negative
-    if (header >= 0) {
-      // Very old format without versioning (shift=8), cannot be parsed without context
-      return new BlueprintLogic(result);
+  // Java ControlElementMapper.deserialize: non-negative headers are legacy
+  // disk counts. Only that format and network v1 require the +8 origin shift.
+  {
+    const header = r.readInt32BE();
+    const legacy = header >= 0;
+    const version = legacy ? 0 : -header;
+    const isDisk = legacy || version > 1024;
+    const shift = legacy || (!isDisk && version < 2) ? 8 : 0;
+    const adjust = (value: number): number => ((value + shift) << 16) >> 16;
+    const keySize = legacy ? header : r.readCount(10);
+    if (keySize > 1_000_000 || keySize * 10 > r.remaining()) {
+      throw new DecodeError('E_TRUNCATED', 'Invalid or truncated blueprint controller count');
     }
-
-    const version = -header;
-    const isDisk = version > 1024;
-    const keySize = r.readInt32BE();
 
     result.controllerCount = keySize;
 
     for (let i = 0; i < keySize; i++) {
-      const fromX = r.readInt16BE();
-      const fromY = r.readInt16BE();
-      const fromZ = r.readInt16BE();
+      const fromX = adjust(r.readInt16BE());
+      const fromY = adjust(r.readInt16BE());
+      const fromZ = adjust(r.readInt16BE());
 
-      const valueSize = r.readInt32BE();
+      const valueSize = r.readCount();
       const controller: ControlController = { x: fromX, y: fromY, z: fromZ, groups: [] };
 
       for (let v = 0; v < valueSize; v++) {
         const type = r.readInt16BE();
-        const elemSize = r.readInt32BE();
+        const elemSize = r.readCount();
 
         const targets: Array<{ x: number; y: number; z: number }> = [];
 
         if (isDisk) {
           // serializeForDisk : 3×short per element
           for (let e = 0; e < elemSize; e++) {
-            const tx = r.readInt16BE();
-            const ty = r.readInt16BE();
-            const tz = r.readInt16BE();
+            const tx = adjust(r.readInt16BE());
+            const ty = adjust(r.readInt16BE());
+            const tz = adjust(r.readInt16BE());
             targets.push({ x: tx, y: ty, z: tz });
           }
         } else {
@@ -413,9 +416,9 @@ export function parseSmbpl(data: Buffer | Uint8Array): BlueprintLogic {
           const bigZ = r.readInt8() !== 0;
           const mX = r.readInt16BE(), mY = r.readInt16BE(), mZ = r.readInt16BE();
           for (let e = 0; e < elemSize; e++) {
-            const tx = (bigX ? r.readInt16BE() : r.readInt8()) + mX;
-            const ty = (bigY ? r.readInt16BE() : r.readInt8()) + mY;
-            const tz = (bigZ ? r.readInt16BE() : r.readInt8()) + mZ;
+            const tx = adjust((bigX ? r.readInt16BE() : r.readInt8()) + mX);
+            const ty = adjust((bigY ? r.readInt16BE() : r.readInt8()) + mY);
+            const tz = adjust((bigZ ? r.readInt16BE() : r.readInt8()) + mZ);
             targets.push({ x: tx, y: ty, z: tz });
           }
         }
@@ -425,7 +428,8 @@ export function parseSmbpl(data: Buffer | Uint8Array): BlueprintLogic {
       }
       result.controllers.push(controller);
     }
-  } catch { /* unknown or truncated format */ }
+  }
+  if (!r.isEOF()) throw new DecodeError('E_FORMAT', 'Trailing bytes after blueprint controller map');
 
   return new BlueprintLogic(result);
 }

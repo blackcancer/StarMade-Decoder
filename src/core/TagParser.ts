@@ -13,7 +13,7 @@
  * Exact port of Java Tag.readFrom() / Tag.writeTo().
  *
  * Format (non-GZIP) :
- *   short version (2 BE bytes, value 1)
+ *   short version (2 BE bytes; new uncompressed files use 0)
  *   root tag body:
  *     signed prType byte  (positive = named, negative = anonymous, 0 = FINISH)
  *     [if named && != FINISH]: readUTF() (uint16 len + UTF-8)
@@ -24,7 +24,8 @@
  * Source: org.schema.schine.resource.tag.Tag.readFrom / writeTo
  */
 
-import { gunzipSync } from 'zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
+import { DecodeError, boundedInteger } from './DecodeError.js';
 
 import { TagType, TAG_TYPE_COUNT } from './TagType.js';
 import { Tag, FINISH_TAG, NULL_STRING } from './Tag.js';
@@ -37,31 +38,150 @@ import type { SerializableTagElement } from '../serializable/SerializableTagElem
 
 // ── Reading ────────────────────────────────────────────────────────────────
 
-/**
- * Reads a tag from a binary buffer with automatic GZIP detection.
- */
-export function readFrom(data: Buffer | Uint8Array): Tag {
-  let buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+/** Limits shared by Tag reads and validation before writing. */
+export interface TagReadOptions {
+  maxInputBytes?: number;
+  maxInflatedBytes?: number;
+  maxDepth?: number;
+  maxNodes?: number;
+  maxListLength?: number;
+  /** Root-only API accepts legacy trailing bytes by default; TagDocument preserves them. */
+  allowTrailingBytes?: boolean;
+}
 
-  // GZIP detection (magic bytes 0x1F 0x8B)
-  const isGzip = buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b;
-  if (isGzip) {
-    buf = gunzipSync(buf);
-    // GZIP : no leading short version; read the root tag directly
-    const reader = BufferReader.from(buf);
-    return _readTag(reader);
+/** Internal counters are local to one call, never shared across concurrent parsers. */
+interface TagBudget {
+  maxDepth: number;
+  maxListLength: number;
+  nodesLeft: number;
+}
+
+/**
+ * Creates validated per-call traversal counters.
+ * @param options - Requested limits.
+ * @returns A new budget.
+ * @throws {DecodeError} For invalid option values.
+ */
+function tagBudget(options: TagReadOptions): TagBudget {
+  return {
+    maxDepth: boundedInteger(options.maxDepth ?? 64, 'maxDepth', 256),
+    maxListLength: boundedInteger(options.maxListLength ?? 1_000_000, 'maxListLength'),
+    nodesLeft: boundedInteger(options.maxNodes ?? 1_000_000, 'maxNodes'),
+  };
+}
+
+/**
+ * Parses a root Tag with bounded decompression and recursive traversal.
+ * @param data - Save-file bytes, optionally GZIP compressed.
+ * @param options - Per-call limits; defaults to 256 MiB input/output and depth 64.
+ * @returns The root Tag only; use readTagDocument to preserve the file envelope.
+ * @throws {DecodeError} For resource limits or disallowed trailing bytes.
+ * @throws {Error} For invalid binary values, malformed UTF or missing factories.
+ * @remarks writeTo is a canonical root serializer, not a byte-exact file editor.
+ */
+export function readFrom(data: Buffer | Uint8Array, options: TagReadOptions = {}): Tag {
+  return parseRoot(data, options).root;
+}
+
+/**
+ * Parses a root and captures its surrounding envelope without losing trailing bytes.
+ * @param data - Complete save-file bytes.
+ * @param options - Bounded parsing options.
+ * @returns Root, envelope and trailing bytes.
+ * @throws {Error} For malformed input or resource exhaustion.
+ */
+function parseRoot(data: Buffer | Uint8Array, options: TagReadOptions) {
+  const maxInput = boundedInteger(options.maxInputBytes ?? 256 * 1024 * 1024, 'maxInputBytes');
+  const maxInflated = boundedInteger(options.maxInflatedBytes ?? 256 * 1024 * 1024, 'maxInflatedBytes');
+  const budget = tagBudget(options);
+  if (data.length > maxInput) throw new DecodeError('E_LIMIT', 'Tag input byte budget exceeded');
+  let buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const compressed = buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b;
+  if (compressed) {
+    if (maxInflated === 0) throw new DecodeError('E_LIMIT', 'Tag inflation byte budget exceeded');
+    try { buf = gunzipSync(buf, { maxOutputLength: maxInflated }); }
+    catch (cause) { throw new DecodeError('E_FORMAT', 'Invalid or oversized GZIP Tag payload', { cause }); }
+  } else if (buf.length > maxInflated) {
+    throw new DecodeError('E_LIMIT', 'Tag payload byte budget exceeded');
+  }
+  const reader = BufferReader.from(buf);
+  const version = compressed ? null : reader.readInt16BE();
+  const root = _readTag(reader, budget, 0);
+  if (options.allowTrailingBytes === false && !reader.isEOF()) {
+    throw new DecodeError('E_FORMAT', 'Trailing bytes after root Tag', { offset: reader.offset });
+  }
+  return { root, compressed, version, trailing: buf.subarray(reader.offset) };
+}
+
+/**
+ * A save-file envelope that preserves legacy trailing data and original bytes.
+ * Unchanged documents are returned byte-for-byte, including GZIP headers. Edits
+ * preserve the envelope kind/version and trailing bytes, but recompress GZIP.
+ */
+export class TagDocument {
+  private readonly original: Buffer;
+  private readonly canonical: Buffer;
+  private readonly trailing: Buffer;
+  readonly root: Tag;
+  readonly compressed: boolean;
+  readonly version: number | null;
+  private readonly options: TagReadOptions;
+
+  /**
+   * Parses and snapshots a complete document.
+   * @param data - Original file contents.
+   * @param options - Resource budgets applied to reading and later writing.
+   * @throws {Error} For invalid input or resource exhaustion.
+   */
+  constructor(data: Buffer | Uint8Array, options: TagReadOptions = {}) {
+    const parsed = parseRoot(data, options);
+    this.root = parsed.root;
+    this.compressed = parsed.compressed;
+    this.version = parsed.version;
+    this.trailing = Buffer.from(parsed.trailing);
+    this.original = Buffer.from(data);
+    this.options = { ...options };
+    this.canonical = writeTo(parsed.root, options).subarray(2);
   }
 
-  // Non-GZIP: read and ignore the short version
-  const reader = BufferReader.from(buf);
-  reader.readInt16BE(); // version (ignored, typical value = 1)
-  return _readTag(reader);
+  /** @returns A defensive copy of the bytes following the root Tag. */
+  get trailingData(): Buffer { return Buffer.from(this.trailing); }
+
+  /**
+   * Saves the original or an edited root while preserving its file envelope.
+   * @param root - Replacement root, or the document's root by default.
+   * @returns A new buffer; no input buffer is modified.
+   * @throws {Error} For an invalid tree or an exceeded output budget.
+   */
+  toBuffer(root: Tag = this.root): Buffer {
+    const payload = writeTo(root, this.options).subarray(2);
+    if (payload.equals(this.canonical)) return Buffer.from(this.original);
+    const maxOutput = this.options.maxInflatedBytes ?? 256 * 1024 * 1024;
+    const size = payload.length + this.trailing.length + (this.compressed ? 0 : 2);
+    if (size > maxOutput) throw new DecodeError('E_LIMIT', 'Tag document output byte budget exceeded');
+    const body = Buffer.concat([payload, this.trailing]);
+    if (this.compressed) return gzipSync(body);
+    const version = Buffer.alloc(2);
+    version.writeInt16BE(this.version!, 0);
+    return Buffer.concat([version, body]);
+  }
+}
+
+/**
+ * Opens an envelope-preserving save-file editor.
+ * @param data - Complete save-file bytes.
+ * @param options - Per-document resource limits.
+ * @returns A document supporting byte-exact unmodified output.
+ * @throws {Error} For invalid input or resource exhaustion.
+ */
+export function readTagDocument(data: Buffer | Uint8Array, options: TagReadOptions = {}): TagDocument {
+  return new TagDocument(data, options);
 }
 
 /**
  * Reads a tag from a BufferReader for internal recursive use.
  */
-function _readTag(reader: BufferReader): Tag {
+function _readTag(reader: BufferReader, budget: TagBudget, depth: number): Tag {
   const prType = reader.readInt8();
   const typeOrd = Math.abs(prType);
   const hasName = prType > 0;
@@ -81,7 +201,7 @@ function _readTag(reader: BufferReader): Tag {
     name = reader.readJavaUTF();
   }
 
-  const { value, listType } = _readPayload(reader, type);
+  const { value, listType } = _readPayload(reader, type, budget, depth);
 
   return new Tag(type, name, value, listType);
 }
@@ -92,9 +212,12 @@ function _readTag(reader: BufferReader): Tag {
  */
 function _readPayload(
   reader: BufferReader,
-  type: TagType
+  type: TagType,
+  budget: TagBudget,
+  depth: number
 ): { value: Tag['value']; listType?: TagType } {
 
+  if (depth > budget.maxDepth || --budget.nodesLeft < 0) throw new DecodeError('E_LIMIT', 'Tag traversal budget exceeded');
   switch (type) {
     case TagType.FINISH:
       return { value: null };
@@ -118,7 +241,7 @@ function _readPayload(
       return { value: reader.readFloat64BE() };
 
     case TagType.BYTE_ARRAY: {
-      const len = reader.readInt32BE();
+      const len = reader.readCount(1, reader.remaining());
       return { value: reader.readBytes(len) };
     }
 
@@ -136,10 +259,12 @@ function _readPayload(
 
     case TagType.LIST: {
       const listTypeOrd = reader.readUInt8() as TagType;
-      const count = reader.readInt32BE();
+      if (listTypeOrd >= TAG_TYPE_COUNT) throw new DecodeError('E_FORMAT', `Unknown list type ${listTypeOrd}`);
+      const count = reader.readCount(0, budget.maxListLength);
+      if (count > budget.nodesLeft) throw new DecodeError('E_LIMIT', 'Tag node budget exceeded by list');
       const items: Tag[] = [];
       for (let i = 0; i < count; i++) {
-        const { value: itemVal, listType: itemListType } = _readPayload(reader, listTypeOrd);
+        const { value: itemVal, listType: itemListType } = _readPayload(reader, listTypeOrd, budget, depth + 1);
         items.push(new Tag(listTypeOrd, null, itemVal, itemListType));
       }
       return { value: items, listType: listTypeOrd };
@@ -149,7 +274,7 @@ function _readPayload(
       const children: Tag[] = [];
       // Read until FINISH
       while (true) {
-        const child = _readTag(reader);
+        const child = _readTag(reader, budget, depth + 1);
         children.push(child);
         if (child.type === TagType.FINISH) break;
       }
@@ -194,8 +319,6 @@ function _readPayload(
       return { value: m };
     }
 
-    default:
-      throw new Error(`Unhandled tag type: ${type}`);
   }
 }
 
@@ -203,13 +326,56 @@ function _readPayload(
 
 /**
  * Serializes a root tag to a binary buffer.
- * Port of Tag.writeTo() — writes short version=1 followed by the tag.
+ * Writes a canonical short version=0 followed by the tag.
+ * @param tag - Root to serialize.
+ * @param options - Tree and output byte budgets.
+ * @returns Canonical uncompressed bytes. Use TagDocument to preserve a file envelope.
+ * @throws {Error} For malformed trees, cycles, invalid values or budget exhaustion.
  */
-export function writeTo(tag: Tag): Buffer {
-  const writer = new BufferWriter();
+export function writeTo(tag: Tag, options: TagReadOptions = {}): Buffer {
+  validateWritableTree(tag, tagBudget(options));
+  const maximum = boundedInteger(options.maxInflatedBytes ?? 256 * 1024 * 1024, 'maxInflatedBytes');
+  if (maximum < 3) throw new DecodeError('E_LIMIT', 'Tag output budget is too small');
+  const writer = new BufferWriter(Math.min(4096, maximum), maximum);
   writer.writeInt16BE(0); // version (Java default = 0)
   _writeTag(writer, tag);
   return writer.toBuffer();
+}
+
+/**
+ * Rejects invalid heterogeneous lists, missing terminators and recursive cycles.
+ * @param root - Root to validate before any bytes are written.
+ * @param budget - Per-write traversal limits.
+ * @throws {DecodeError} For invalid structure or resource exhaustion.
+ */
+function validateWritableTree(root: Tag, budget: TagBudget): void {
+  const ancestors = new Set<Tag>();
+  const stack: { tag: Tag; depth: number; exit: boolean }[] = [{ tag: root, depth: 0, exit: false }];
+  while (stack.length) {
+    const frame = stack.pop()!;
+    const tag = frame.tag;
+    if (frame.exit) { ancestors.delete(tag); continue; }
+    if (frame.depth > budget.maxDepth || --budget.nodesLeft < 0) throw new DecodeError('E_LIMIT', 'Tag write traversal budget exceeded');
+    if (!(tag instanceof Tag) || !Number.isInteger(tag.type) || tag.type < 0 || tag.type >= TAG_TYPE_COUNT) throw new DecodeError('E_FORMAT', 'Invalid Tag type');
+    if (ancestors.has(tag)) throw new DecodeError('E_FORMAT', 'Cyclic Tag tree');
+    if (tag.type !== TagType.STRUCT && tag.type !== TagType.LIST) continue;
+    const items = tag.value;
+    if (!Array.isArray(items) || items.length > budget.maxListLength) throw new DecodeError('E_RANGE', 'Invalid Tag collection');
+    if (tag.type === TagType.STRUCT) {
+      if (!items.length || items[items.length - 1].type !== TagType.FINISH || items.slice(0, -1).some(t => t.type === TagType.FINISH)) {
+        throw new DecodeError('E_FORMAT', 'STRUCT requires exactly one final FINISH tag');
+      }
+    } else {
+      const type = tag.listType ?? TagType.NOTHING;
+      if (!Number.isInteger(type) || type < 0 || type >= TAG_TYPE_COUNT || items.some(t => t.type !== type)) {
+        throw new DecodeError('E_FORMAT', 'LIST payloads must match their declared type');
+      }
+    }
+    if (items.length > budget.nodesLeft) throw new DecodeError('E_LIMIT', 'Tag write node budget exceeded');
+    ancestors.add(tag);
+    stack.push({ tag, depth: frame.depth, exit: true });
+    for (let i = items.length - 1; i >= 0; i--) stack.push({ tag: items[i], depth: frame.depth + 1, exit: false });
+  }
 }
 
 /**

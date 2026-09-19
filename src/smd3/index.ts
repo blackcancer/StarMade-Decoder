@@ -25,7 +25,7 @@ export {
   VERSION_4BYTE,
 } from './Smd3Parser.js';
 
-export type { Smd3File, SegmentData, BlockData } from './Smd3Parser.js';
+export type { Smd3File, SegmentData, BlockData, Smd3ParseOptions } from './Smd3Parser.js';
 
 export {
   parseSment,
@@ -110,10 +110,15 @@ export { parseSim } from './SimParser.js';
 export type { SimFile, SimGroup } from './SimParser.js';
 
 // ── Writers ────────────────────────────────────────────────────────────────
-export { writeSmd3, emptySegment, emptySmd3File } from './Smd3Writer.js';
+export { writeSmd3, emptySegment, emptySmd3File, setBlock, encodeBlockWord } from './Smd3Writer.js';
 export { writeSmtpl } from './SmtplWriter.js';
 export { writeSmbpl } from './SmbplWriter.js';
 export { writeSmbph } from './SmbphWriter.js';
 export { writeSmbpm } from './SmbpmWriter.js';
 export { writeSmbmm, emptyModMappings } from './SmbmmWriter.js';
 export { writeSim } from './SimWriter.js';
+
+export { readIcoSideNormals, isPointInIcoSide } from './IcoGeometry.js';
+export type { IcoNormal, IcoSideNormals } from './IcoGeometry.js';
+
+export type { BlueprintParseOptions } from './BlueprintReadContext.js';

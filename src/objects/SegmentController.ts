@@ -146,8 +146,7 @@ export class SegmentControllerObject {
       const s = transformable.getStruct().filter(t => t.type !== TagType.FINISH);
       const newChildren = [...s];
       if (newChildren[4]?.type === TagType.INT) newChildren[4] = Tags.int(newChildren[4].name, code);
-      const newTransformable = new Tag(TagType.STRUCT, transformable.name,
-        [...newChildren, ...(newChildren.at(-1)?.type === TagType.FINISH ? [] : [])]);
+      const newTransformable = Tags.struct(transformable.name, newChildren);
       tag = Tags.setField(tag, 'transformable', newTransformable);
     }
     return SegmentControllerObject.fromTag(tag);
