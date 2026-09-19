@@ -208,7 +208,7 @@ export class BlueprintReadContext {
     const file = parseSmd3(data, { ...this.options.segmentOptions, mode: this.mode, maxBlocks: this.maxBlocks - this.blocks });
     this.blocks += file.usedSlots * BLOCK_COUNT;
     if (this.blocks > this.maxBlocks) throw new DecodeError('E_LIMIT', 'Blueprint block budget exceeded');
-    for (const d of file.diagnostics ?? []) this.diagnostics.push({ ...d, path: `${path}:${d.path ?? ''}` });
+    for (const d of file.diagnostics!) this.diagnostics.push({ ...d, path: `${path}:${d.path}` });
     return file;
   }
 }

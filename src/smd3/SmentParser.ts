@@ -835,7 +835,7 @@ function _parseEntity(
   context: BlueprintReadContext
 ): BlueprintEntity {
   context.enterEntity(depth);
-  const name = entityPath.split('/').filter(Boolean).slice(-1)[0] ?? entityPath;
+  const name = entityPath.substring(entityPath.lastIndexOf('/') + 1);
 
   // Header
   const header = context.attempt(`${entityPath}/header.smbph`, () => {
@@ -868,12 +868,12 @@ function _parseEntity(
       if (!entry.entryName.startsWith(`${entityPath}/`)) continue;
       const rel = entry.entryName.slice(entityPath.length + 1);
       const parts = rel.split('/');
-      if (/^ATTACHED_\d+$/.test(parts[0] ?? '') && parts.length > 1) {
+      if (/^ATTACHED_\d+$/.test(parts[0]) && parts.length > 1) {
         childPaths.add(`${entityPath}/${parts[0]}`);
       }
     }
     for (const childPath of [...childPaths].sort()) {
-      const childName = childPath.split('/').filter(Boolean).slice(-1)[0] ?? childPath;
+      const childName = childPath.substring(childPath.lastIndexOf('/') + 1);
       const childOffset = childOffsets.get(childName) ?? ZERO_OFFSET;
       children.push(_parseEntity(zip, allEntries, childPath, depth + 1, childOffset, _addOffset(worldOffset, childOffset), context));
     }

@@ -687,7 +687,8 @@ function finalizeSmbpm(input: SmbpmFile, internals: SmbpmInternalState): Bluepri
 
   for (let i = 0; i < meta.railChildren.length; i++) {
     const source = input.railChildren[i];
-    const internal = source ? getRailChildInternals(source) : null;
+    // BlueprintMeta copies the dense railChildren array without changing its length.
+    const internal = getRailChildInternals(source);
     if (internal) {
       defineRailChildInternals(meta.railChildren[i], internal);
     }

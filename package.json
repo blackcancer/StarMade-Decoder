@@ -10,15 +10,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "node --import tsx/esm --no-warnings node_modules/mocha/bin/mocha.js",
-    "coverage": "c8 --reporter=text --reporter=html --reporter=json-summary npm test",
-    "coverage:check": "c8 --check-coverage --lines 70 --functions 70 --branches 60 --statements 70 npm test",
+    "coverage": "c8 npm test",
+    "coverage:check": "npm run coverage && npm run coverage:verify",
     "docs:check": "node scripts/check-jsdoc-coverage.mjs",
     "samples:fetch-starmadedock": "node scripts/fetch-starmadedock-samples.mjs",
     "clean": "rimraf dist coverage",
-    "prepublishOnly": "npm run build && npm run docs:check && npm test",
+    "prepublishOnly": "npm run build && npm run docs:check && npm run coverage:check",
     "test:interop": "node scripts/check-java-interop.mjs",
     "test:package": "node scripts/check-package-consumer.mjs",
-    "coverage:verify": "c8 check-coverage --lines 70 --functions 70 --branches 60 --statements 70"
+    "coverage:verify": "c8 check-coverage --per-file=false --lines 100 --branches 100 --statements 100 --functions 70 && node scripts/check-coverage.mjs"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",

@@ -319,8 +319,6 @@ function _readPayload(
       return { value: m };
     }
 
-    default:
-      throw new Error(`Unhandled tag type: ${type}`);
   }
 }
 

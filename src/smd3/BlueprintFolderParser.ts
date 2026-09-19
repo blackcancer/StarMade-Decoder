@@ -217,7 +217,7 @@ function readBoundedFile(filePath: string, context: BlueprintReadContext): Buffe
   context.chargeFile();
   const initial = fs.lstatSync(filePath);
   if (!initial.isFile() || initial.isSymbolicLink()) throw new DecodeError('E_FORMAT', 'Expected a regular blueprint file', { path: filePath });
-  const fd = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  const fd = fs.openSync(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
   try {
     const stat = fs.fstatSync(fd);
     if (!stat.isFile() || stat.ino !== initial.ino || stat.dev !== initial.dev) throw new DecodeError('E_IO', 'Blueprint file changed before reading');
