@@ -32,7 +32,8 @@ try {
   const script = `
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { Tags, writeTo, readFrom, BlockConfig, parseSment, emptySegment, emptySmd3File, writeSmd3, parseSmd3 } from 'starmade-decoder';
+import { Tags, writeTo, readFrom, BlockConfig, parseSment, emptySegment, emptySmd3File, writeSmd3, parseSmd3,
+  Smd3Document, readBlueprintDocument, readBlueprintFolderDocument, writeSment, writeBlueprintFolder } from 'starmade-decoder';
 assert.equal(readFrom(writeTo(Tags.string('name', '\\u0000\\ud83d\\ude80'))).getString(), '\\u0000\\ud83d\\ude80');
 const config = BlockConfig.fromXml('<Config><Block type="5" name="Consumer Hull"><Hitpoints>100</Hitpoints><Mass>2</Mass></Block></Config>');
 assert.equal(config.getElementInfoById(5).identity.name, 'Consumer Hull');
@@ -42,15 +43,37 @@ assert.equal(blueprint.root.name, 'Consumer');
 assert.equal(blueprint.complete, true);
 const seg = emptySegment(); seg.blocks[0].type = 5;
 assert.equal(parseSmd3(writeSmd3({...emptySmd3File(),segments:[seg]})).segments[0].blockCount, 1);
-console.log('Isolated production consumer parsed XML and ZIP fixtures and exercised Tags and SMD3.');
+const original = fs.readFileSync('consumer.sment');
+const document = readBlueprintDocument(original);
+assert.deepEqual(writeSment(document), original);
+document.root.segments.push({...emptySmd3File(),segments:[seg]});
+document.setFile('notes.bin', Buffer.from([1, 2, 3]));
+const edited = readBlueprintDocument(writeSment(document));
+assert.equal(edited.root.header.totalBlockCount, 1);
+assert.equal(edited.root.segments[0].segments[0].blocks[0].type, 5);
+writeBlueprintFolder(document, 'Consumer-folder');
+const folder = readBlueprintFolderDocument('Consumer-folder');
+assert.equal(folder.root.header.totalBlockCount, 1);
+assert.deepEqual(folder.files.get('Consumer-folder/notes.bin'), Buffer.from([1, 2, 3]));
+const regionBytes = writeSmd3({...emptySmd3File(),segments:[seg]});
+assert.deepEqual(new Smd3Document(regionBytes).toBuffer(), regionBytes);
+console.log('Isolated production consumer exercised XML, Tags, SMD3 and complete ZIP/folder writers.');
 `;
   fs.writeFileSync(path.join(consumer, 'smoke.mjs'), script);
   const env = { ...process.env }; delete env.NODE_PATH;
   execFileSync(process.execPath, ['smoke.mjs'], { cwd: consumer, env, stdio: 'inherit', timeout: 30000 });
-  fs.writeFileSync(path.join(consumer, 'smoke.ts'), `import { Tags, writeTo, readFrom, type BlockData, type Smd3ParseOptions } from 'starmade-decoder';
+  fs.writeFileSync(path.join(consumer, 'smoke.ts'), `import { Tags, writeTo, readFrom, type BlockData, type Smd3ParseOptions,
+    readBlueprintDocument, writeBlueprintFolder, type BlueprintFileMap, type BlueprintWriteOptions } from 'starmade-decoder';
 const options: Smd3ParseOptions = { mode: 'strict' };
 const block: BlockData = {type:1, hp:127, active:true, orientation:0, extra:63};
 readFrom(writeTo(Tags.int('value', block.type))); void options;
+const exportOptions: BlueprintWriteOptions = { overwrite: true, maxBlocks: 32768 };
+function exportBlueprint(bytes: Buffer): BlueprintFileMap {
+  const document = readBlueprintDocument(bytes);
+  writeBlueprintFolder(document, 'output', exportOptions);
+  return document.files;
+}
+void exportBlueprint;
 `);
   fs.writeFileSync(path.join(consumer, 'tsconfig.json'), JSON.stringify({ compilerOptions: {
     target: 'ES2023', module: 'NodeNext', moduleResolution: 'NodeNext', noEmit: true,

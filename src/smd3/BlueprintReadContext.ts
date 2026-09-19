@@ -43,7 +43,7 @@ const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, i) => {
  * @param bytes - Uncompressed entry bytes.
  * @returns Unsigned CRC32.
  */
-function crc32(bytes: Buffer): number {
+export function crc32(bytes: Buffer): number {
   let crc = 0xffffffff;
   for (const byte of bytes) crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ byte) & 255];
   return (crc ^ 0xffffffff) >>> 0;

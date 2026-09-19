@@ -675,6 +675,20 @@ function defineRailChildInternals(child: RailChildEntry, internals: RailChildInt
   RAIL_CHILD_INTERNALS.set(child, internals);
 }
 
+/** Copies an attached-entity reference while retaining its original opaque rail Tag. */
+export function renameRailChild(child: RailChildEntry, name: string): RailChildEntry {
+  const copy = { ...child, name };
+  defineRailChildInternals(copy, getRailChildInternals(child));
+  return copy;
+}
+
+/** Copies metadata with explicit persistence state, retaining component presence flags. */
+export function copySmbpmWithInternals(meta: BlueprintMeta, internals: SmbpmInternalState): BlueprintMeta {
+  const copy = new BlueprintMeta(meta);
+  defineSmbpmInternals(copy, internals);
+  return copy;
+}
+
 /**
  * Handles the finalizeSmbpm operation used by StarMade blueprint and segment file parsing.
  *

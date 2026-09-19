@@ -912,6 +912,21 @@ import { parseSmd3, writeSmd3, emptySegment, emptySmd3File, getBlock, posToIndex
 **`BlueprintEntity` fields:** `name`, `header: BlueprintHeader`, `meta: BlueprintMeta | null`, `logic: BlueprintLogic | null`, `offset`, `worldOffset`, `segments: Smd3File[]`, `children: SmentEntity[]`.
 **`BlueprintEntity` helpers:** `entityType`, `directBlockCount`, `declaredBlockCount`, `segmentFileCount`, `attachmentCount`, `child(name)`, `findEntity(name)`, `allEntities()`, `withHeader(header)`, `withMeta(meta)`, `withLogic(logic)`, `withChildren(children)`.
 
+### Complete blueprint documents and writers
+
+- `readBlueprintDocument(data, options?)` / `BlueprintDocument.fromSment(...)` — strict complete `.sment` document with retained original bytes.
+- `readBlueprintFolderDocument(path, options?)` / `BlueprintDocument.fromFolder(...)` — complete file snapshot.
+- `BlueprintDocument.fromArchive(archive, options?)` — canonical document from a new complete model.
+- `writeSment(documentOrArchive, options?)` — `.sment` `Buffer`.
+- `writeBlueprintFolder(documentOrArchive, destination, options?)` — staged folder publication; destination is the root itself.
+- `document.root`, `document.archive` — editable models; `document.files` / `toFiles(options?)` — detached `Map<string, Buffer | null>` inventory.
+- `document.setFile(relativePath, bytes)`, `removeFile(relativePath)` — ancillary resource edits.
+- `document.toBuffer(options?)`, `writeFolder(destination, options?)` — exports.
+- `new Smd3Document(bytes, segmentOptions?)` — `file` and `toBuffer(replacementFile?)` preserve original region allocation and unchanged records.
+
+`BlueprintWriteOptions` extends `BlueprintParseOptions` with `overwrite?: boolean`.
+See [guarantees, model updates, Java reference and qualification](BLUEPRINT_EDITING.md).
+
 ### `.smbph` header files
 
 - `parseSmbph(data)` — parses a `.smbph` file into `BlueprintHeader`.

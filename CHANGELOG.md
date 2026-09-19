@@ -2,9 +2,25 @@
 
 ## Unreleased
 
-The changes below are implemented in `main` through PRs #1–#3. They describe
-completed development awaiting a versioned release, not outstanding tasks.
+The changes below describe completed development awaiting a versioned release,
+not outstanding tasks. The package version is now the 1.6.0 candidate.
 No npm release or in-game import qualification is implied.
+
+### Added — complete blueprint writing
+
+- Add `BlueprintDocument`, `.sment` writers and complete folder snapshots/exports,
+  including unknown resources, mod mappings, empty directories and attachments.
+- Return exact source ZIP bytes for unchanged documents and semantic edit/revert;
+  preserve unchanged local records, descriptors, compression and envelope metadata.
+- Add `Smd3Document` for sector-preserving edits, retained allocations and v7 LZ4
+  encoding of changed records. Recompute block counts/bounds and invalidate stale scores.
+- Rebase attachment references on rename/folder publication; preserve opaque rail
+  Tags and manager/thrust Tag envelopes and extensions.
+- Stage folder writes with explicit overwrite, rollback and retained-backup errors;
+  reject incomplete models, unsafe paths, unsupported formats and resource excesses.
+- Add an independent JDK blueprint oracle and production-package writer checks.
+
+See [blueprint editing](docs/BLUEPRINT_EDITING.md) for guarantees and limits.
 
 ### Fixed
 
@@ -20,6 +36,12 @@ No npm release or in-game import qualification is implied.
   limits; reject unsupported SMD3 source versions before writing.
 
 ### Validation
+
+- The local 1.6.0 run on 2026-09-19 passed **1,186 tests, zero pending/failing**,
+  **29,175/29,175 lines** and **6,905/6,905 branches** across **102 production
+  modules**. Build, documentation, exact coverage gate, installed package and
+  independent JDK/LZ4 checks passed. The earlier audit measurements below are
+  retained as historical evidence.
 
 - Require exact 100% line, statement and branch coverage for every production source file.
 - Add portable configuration, domain-model, binary boundary and filesystem-race regressions.

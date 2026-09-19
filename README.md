@@ -4,8 +4,8 @@ TypeScript SDK for reading, inspecting, and rewriting **StarMade** save files an
 
 The SDK implements the Java `org.schema.schine.resource.tag.Tag` binary format and higher-level helpers for entities, blueprints and configuration files.
 
-`main` contains the **1.5.0 integrity correction candidate**, including the completed
-audit corrections and exact coverage checks. [Unreleased in the changelog](CHANGELOG.md#unreleased)
+`main` contains the **1.6.0 blueprint-writing candidate**, including complete `.sment` and
+blueprint-folder writers, the completed audit corrections and exact coverage checks. [Unreleased in the changelog](CHANGELOG.md#unreleased)
 records implemented changes awaiting a versioned release. Pushing these changes to
 GitHub does not publish an npm package.
 
@@ -16,6 +16,9 @@ GitHub does not publish an npm package.
 - Read and write StarMade Tag files (`.ent`, `.fac`, `.cat`, `.tag`, `.sim`)
 - Preserve unchanged Tag files byte-for-byte with `TagDocument`, and retain their
   compression, version and trailing data when editing
+- Read, edit and write complete `.sment` archives and blueprint folders with
+  `BlueprintDocument`, preserving unchanged archives byte-for-byte
+- Preserve SMD3 sector layouts with `Smd3Document`; update only changed records
 - Parse StarMade blueprint formats (`.sment`, `.smd3`, `.smtpl`, `.smbph`, `.smbpl`, `.smbpm`, `.smbmm`)
 - Use typed domain objects for ships, stations, players, factions, catalogs, trading, inventories, and serializable payloads
 - Load StarMade configuration files, inspect BlockConfig element information, and save custom overrides safely
@@ -56,6 +59,26 @@ console.log(toJSON(root, 2));
 const out = document.toBuffer(root);
 fs.writeFileSync('FACTIONS.edited.fac', out);
 ```
+
+## Lossless blueprint editing
+
+```ts
+import fs from 'node:fs';
+import { readBlueprintDocument, writeBlueprintFolder } from 'starmade-decoder';
+
+const bytes = fs.readFileSync('Ship.sment');
+const document = readBlueprintDocument(bytes);
+console.assert(document.toBuffer().equals(bytes));
+
+document.root.header = document.root.header.withClassification(7);
+fs.writeFileSync('Ship.edited.sment', document.toBuffer());
+writeBlueprintFolder(document, '/tmp/Ship-edited');
+```
+
+See [complete blueprint editing](docs/BLUEPRINT_EDITING.md) for folder snapshots,
+new models, attachment updates, byte-preservation guarantees and supported limits.
+Unknown resources and mod mappings are retained. Existing destinations require
+explicit `overwrite: true`; new ZIPs from plain folders have a new envelope.
 
 ## BlockConfig element information
 
@@ -166,13 +189,13 @@ STARMADE_TEST_DIR=/srv/StarMade npm run coverage:check
 Once these installation tests are enabled, missing required configuration or
 auxiliary files fail the run. Installation files are read only.
 
-The local run on **2026-09-19** for the implementation merged as
-[`04d77af`](https://github.com/blackcancer/StarMade-Decoder/commit/04d77afa11ed79aa8034fb9163cf55c7480a80b7)
-passed **1,096 tests with zero pending and zero failing**. All **98 production
-modules** reached **27,980/27,980 lines** and **6,288/6,288 branches** covered.
-The [CI run on that commit](https://github.com/blackcancer/StarMade-Decoder/actions/runs/35472413782)
-passed on all three Node.js versions. See the [dated qualification report](docs/AUDIT_RESOLUTION.md#qualification)
-for scope and limitations.
+The local 1.6.0 qualification on **2026-09-19** passed **1,186 tests with zero
+pending and zero failing**. All **102 production modules** reached
+**29,175/29,175 lines** and **6,905/6,905 branches**, with the exact blocking gate
+and no coverage exclusions. The installed-package check and independent Java/LZ4
+oracles also passed. See [blueprint qualification](docs/BLUEPRINT_EDITING.md#reference-and-qualification)
+for tested contracts and limitations. The earlier audit evidence remains in
+[the dated audit report](docs/AUDIT_RESOLUTION.md#qualification).
 
 ## Exact coverage acceptance
 

@@ -122,3 +122,8 @@ export { readIcoSideNormals, isPointInIcoSide } from './IcoGeometry.js';
 export type { IcoNormal, IcoSideNormals } from './IcoGeometry.js';
 
 export type { BlueprintParseOptions } from './BlueprintReadContext.js';
+
+export { Smd3Document } from './Smd3Document.js';
+export { BlueprintDocument, readBlueprintDocument, readBlueprintFolderDocument,
+  writeSment, writeBlueprintFolder } from './BlueprintDocument.js';
+export type { BlueprintFileMap, BlueprintWriteOptions } from './BlueprintDocument.js';

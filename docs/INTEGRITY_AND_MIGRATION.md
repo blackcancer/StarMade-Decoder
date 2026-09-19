@@ -173,8 +173,9 @@ user's supported game version.
 
 Dense pre-v7 fixtures are decoded using their wire layout. Pre-v6 writing and
 pre-v6 optimized-segment migration are deliberately refused: historical
-orientation/block migrations require game-specific context. SMD3 writing is
-semantic migration, not preservation of original sector layout/compression.
+orientation/block migrations require game-specific context. `writeSmd3` performs semantic migration. The additive `Smd3Document` and
+`BlueprintDocument` APIs preserve original layouts and unaffected resources; see
+[complete blueprint editing](BLUEPRINT_EDITING.md).
 
 The game/server has **not** been launched by these checks. Final acceptance of
 modified saves and v7 blueprints inside StarMade remains an integration gate.
