@@ -23,6 +23,9 @@
  */
 
 import fs from 'fs';
+import { DecodeError } from '../core/DecodeError.js';
+import { BlueprintReadContext } from './BlueprintReadContext.js';
+import type { BlueprintParseOptions } from './BlueprintReadContext.js';
 import path from 'path';
 import { parseSmd3 } from './Smd3Parser.js';
 import { BlueprintArchive, BlueprintEntity, BlueprintHeader, _parseHeaderBuffer } from './SmentParser.js';
@@ -36,10 +39,11 @@ import type { SmentEntity } from './SmentParser.js';
  * Parses a StarMade blueprint from a filesystem folder.
  * @param folderPath Absolute path of the blueprint root folder
  */
-export function parseBlueprintFolder(folderPath: string): BlueprintArchive {
+export function parseBlueprintFolder(folderPath: string, options: BlueprintParseOptions = {}): BlueprintArchive {
+  const context = new BlueprintReadContext(options);
   const rootName = path.basename(folderPath);
-  const root = _parseEntityFolder(folderPath, rootName, 0, ZERO_OFFSET, ZERO_OFFSET);
-  return new BlueprintArchive(root);
+  const root = _parseEntityFolder(folderPath, rootName, 0, ZERO_OFFSET, ZERO_OFFSET, context);
+  return new BlueprintArchive(root, context.diagnostics);
 }
 
 /**
@@ -57,38 +61,37 @@ function _parseEntityFolder(
   name: string,
   depth: number,
   offset: BlueprintChildOffset,
-  worldOffset: BlueprintChildOffset
+  worldOffset: BlueprintChildOffset,
+  context: BlueprintReadContext
 ): BlueprintEntity {
+  context.enterEntity(depth);
+  if (fs.lstatSync(folderPath).isSymbolicLink()) throw new DecodeError('E_FORMAT', 'Blueprint directory symlinks are not followed');
   // Header
   const headerPath = path.join(folderPath, 'header.smbph');
-  let header: BlueprintHeader;
-  try {
-    const hbuf = fs.readFileSync(headerPath);
-    header = _parseHeaderBuffer(hbuf);
-  } catch {
-    header = _emptyHeader();
-  }
-  const meta = _readMeta(path.join(folderPath, 'meta.smbpm'));
-  const logic = _readLogic(path.join(folderPath, 'logic.smbpl'));
+  const header = context.attempt(headerPath, () => _parseHeaderBuffer(readBoundedFile(headerPath, context)), _emptyHeader());
+  const metaPath = path.join(folderPath, 'meta.smbpm');
+  const logicPath = path.join(folderPath, 'logic.smbpl');
+  const meta = context.attempt(metaPath, () => _readMeta(metaPath, context), null);
+  const logic = context.attempt(logicPath, () => _readLogic(logicPath, context), null);
 
   // Segments DATA/*.smd3
   const segments: ReturnType<typeof parseSmd3>[] = [];
   const dataDir = path.join(folderPath, 'DATA');
   if (fs.existsSync(dataDir)) {
-    for (const f of fs.readdirSync(dataDir).filter(n => n.endsWith('.smd3'))) {
-      try {
-        const smd3buf = fs.readFileSync(path.join(dataDir, f));
-        segments.push(parseSmd3(smd3buf));
-      } catch { /* skip */ }
+    if (fs.lstatSync(dataDir).isSymbolicLink()) throw new DecodeError('E_FORMAT', 'DATA directory symlinks are not followed');
+    for (const f of fs.readdirSync(dataDir).filter(n => n.endsWith('.smd3')).sort()) {
+      const filePath = path.join(dataDir, f);
+      const file = context.attempt(filePath, () => context.readSegments(readBoundedFile(filePath, context), filePath), null);
+      if (file) segments.push(file);
     }
   }
 
   // ATTACHED_N children
   const children: SmentEntity[] = [];
-  if (depth < 5) {
+  {
     const childOffsets = _readChildOffsets(meta);
     const childNames = fs.readdirSync(folderPath)
-      .filter(n => n.startsWith('ATTACHED_') && fs.statSync(path.join(folderPath, n)).isDirectory())
+      .filter(n => /^ATTACHED_\d+$/.test(n) && (fs.lstatSync(path.join(folderPath, n)).isDirectory() || fs.lstatSync(path.join(folderPath, n)).isSymbolicLink()))
       .sort((a, b) => {
         const na = parseInt(a.replace('ATTACHED_', ''));
         const nb = parseInt(b.replace('ATTACHED_', ''));
@@ -101,7 +104,8 @@ function _parseEntityFolder(
         childName,
         depth + 1,
         childOffset,
-        _addOffset(worldOffset, childOffset)
+        _addOffset(worldOffset, childOffset),
+        context
       ));
     }
   }
@@ -135,16 +139,12 @@ const ZERO_OFFSET: BlueprintChildOffset = Object.freeze({ x: 0, y: 0, z: 0 });
  * @param metaPath - Input value for the _readMeta operation.
  * @returns The computed StarMade-Decoder value.
  */
-function _readMeta(metaPath: string): BlueprintMeta | null {
+function _readMeta(metaPath: string, context: BlueprintReadContext): BlueprintMeta | null {
   if (!fs.existsSync(metaPath)) {
     return null;
   }
 
-  try {
-    return parseSmbpm(fs.readFileSync(metaPath));
-  } catch {
-    return null;
-  }
+  return parseSmbpm(readBoundedFile(metaPath, context));
 }
 
 /**
@@ -153,16 +153,12 @@ function _readMeta(metaPath: string): BlueprintMeta | null {
  * @param logicPath - Input value for the _readLogic operation.
  * @returns The computed StarMade-Decoder value.
  */
-function _readLogic(logicPath: string): BlueprintLogic | null {
+function _readLogic(logicPath: string, context: BlueprintReadContext): BlueprintLogic | null {
   if (!fs.existsSync(logicPath)) {
     return null;
   }
 
-  try {
-    return parseSmbpl(fs.readFileSync(logicPath));
-  } catch {
-    return null;
-  }
+  return parseSmbpl(readBoundedFile(logicPath, context));
 }
 
 /**
@@ -208,4 +204,35 @@ function _addOffset(left: BlueprintChildOffset, right: BlueprintChildOffset): Bl
     y: left.y + right.y,
     z: left.z + right.z,
   };
+}
+
+/**
+ * Reads a regular file after charging its size to the shared operation budget.
+ * @param filePath - Exact filesystem path.
+ * @param context - Shared byte/depth/block budget.
+ * @returns File bytes.
+ * @throws {DecodeError} For symlinks, non-regular files, changing sizes or budget exhaustion.
+ */
+function readBoundedFile(filePath: string, context: BlueprintReadContext): Buffer {
+  context.chargeFile();
+  const initial = fs.lstatSync(filePath);
+  if (!initial.isFile() || initial.isSymbolicLink()) throw new DecodeError('E_FORMAT', 'Expected a regular blueprint file', { path: filePath });
+  const fd = fs.openSync(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || stat.ino !== initial.ino || stat.dev !== initial.dev) throw new DecodeError('E_IO', 'Blueprint file changed before reading');
+    context.chargeBytes(stat.size);
+    const data = Buffer.alloc(stat.size);
+    let offset = 0;
+    while (offset < data.length) {
+      const count = fs.readSync(fd, data, offset, data.length - offset, null);
+      if (count === 0) throw new DecodeError('E_IO', 'Blueprint file was truncated while being read');
+      offset += count;
+    }
+    const extra = Buffer.alloc(1), after = fs.fstatSync(fd);
+    if (fs.readSync(fd, extra, 0, 1, null) !== 0 || after.size !== stat.size || after.mtimeMs !== stat.mtimeMs) {
+      throw new DecodeError('E_IO', 'Blueprint file changed while being read', { path: filePath });
+    }
+    return data;
+  } finally { fs.closeSync(fd); }
 }

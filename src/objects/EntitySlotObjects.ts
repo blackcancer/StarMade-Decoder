@@ -2385,7 +2385,7 @@ export class ManagerModuleEntryState {
     const children = tagChildren(tag);
     const positionTag = children[0];
     if (positionTag?.type === TagType.VECTOR3i) {
-      this.position = vector3iFromTag(positionTag) ?? { x: 0, y: 0, z: 0 };
+      this.position = vector3iFromTag(positionTag)!;
       this.positionIndex = posToIndex(this.position.x, this.position.y, this.position.z);
     } else {
       this.positionIndex = positionTag?.type === TagType.LONG ? positionTag.getLong() : 0n;
@@ -3381,13 +3381,11 @@ function matrix4fFromArray(values: EntMatrix4f): Matrix4f {
  */
 function rebuildContainerTag(tag: Tag, children: Tag[]): Tag {
   if (tag.type === TagType.LIST) {
-    const listType = tag.listType ?? children[0]?.type ?? TagType.NOTHING;
+    const listType = tag.listType ?? children[0].type;
     return new Tag(TagType.LIST, tag.name, children, listType);
   }
-  if (tag.type === TagType.STRUCT) {
-    return new Tag(TagType.STRUCT, tag.name, [...children, FINISH_TAG]);
-  }
-  throw new TypeError(`Cannot rebuild ${tagTypeName(tag.type)} as a container`);
+  // Both callers validate a non-empty STRUCT/LIST before rebuilding.
+  return new Tag(TagType.STRUCT, tag.name, [...children, FINISH_TAG]);
 }
 
 /**
@@ -3455,7 +3453,6 @@ function coerceTagValue(current: Tag, value: unknown): Tag {
       throw new TypeError(`Entity field "${current.name ?? 'byteArray'}" expects a Uint8Array or byte array`);
     case TagType.STRUCT:
     case TagType.LIST:
-      if (value instanceof EntSlotObject) return Tags.rename(value.toTag(), current.name);
       throw new TypeError(`Entity field "${current.name ?? 'container'}" expects an EntSlotObject`);
     case TagType.NOTHING:
     case TagType.FINISH:

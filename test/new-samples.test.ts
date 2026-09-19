@@ -119,7 +119,7 @@ describe('BlueprintFolderParser — folder blueprints', function () {
 
     for (const f of smentFiles) {
       const data = fs.readFileSync(path.join(dir, f));
-      const sment = parseSment(data);
+      const sment = parseSment(data, { maxBlocks: 64 * 1024 * 1024 });
       const r = sment.root;
       const bb = r.header.boundingBox;
       console.log('    [' + f + ']:');
@@ -127,6 +127,10 @@ describe('BlueprintFolderParser — folder blueprints', function () {
       console.log('      BoundingBox: min(' + bb.minX.toFixed(0) + ',' + bb.minY.toFixed(0) + ',' + bb.minZ.toFixed(0) + ')' +
                                ' max(' + bb.maxX.toFixed(0) + ',' + bb.maxY.toFixed(0) + ',' + bb.maxZ.toFixed(0) + ')');
       console.log('      blocks:', r.header.totalBlockCount, ' segments:', sment.totalSegments);
+      assert.isTrue(sment.complete);
+      assert.isAbove(sment.totalSegments, 0);
+      // Release this large corpus item before allocating the next one.
+      for (const entity of sment.entities) entity.segments.length = 0;
     }
   });
 

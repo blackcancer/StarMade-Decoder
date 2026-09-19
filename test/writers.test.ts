@@ -38,7 +38,7 @@ registerAllFactories();
 
 const S  = path.resolve('samples');
 const BASE = path.join(S, 'BASE_Warehouse_Station');
-const ISANTH_BLUEPRINT = '/srv/StarMade/blueprints/Isanth Type-PNR-25-B';
+const ISANTH_BLUEPRINT = path.join(process.env.STARMADE_TEST_DIR ?? '/srv/StarMade', 'blueprints/Isanth Type-PNR-25-B');
 
 // ── TagBuilder ────────────────────────────────────────────────────────────────
 
@@ -137,9 +137,9 @@ describe('Smd3Writer — .smd3 encoding', function () {
     assert.equal(file2.segments.length, file1.segments.length);
     const s1 = file1.segments[0], s2 = file2.segments[0];
     assert.equal(s2.blockCount, s1.blockCount);
-    // Check a few blockks
-    for (let i = 0; i < 100; i++) {
-      assert.equal(s2.blocks[i].type, s1.blocks[i].type, `bloc ${i} type`);
+    // Compare every block field in every segment, not only the first 100 types.
+    for (let j = 0; j < file1.segments.length; j++) {
+      assert.deepEqual(file2.segments[j].blocks, file1.segments[j].blocks, `segment ${j} blocks`);
     }
     console.log('    Isanth round-trip: ' + s1.blockCount + ' blocks → ok');
   });
@@ -301,7 +301,7 @@ describe('SmbplWriter — .smbpl encoding', function () {
   });
 
   it('updates logic through high-level helpers', () => {
-    const logic = parseSmbpl(Buffer.alloc(4));
+    const logic = parseSmbpl(writeSmbpl({ structureVersion: 0, controllers: [], links: [], controllerCount: 0 }));
     const from = { x: 1, y: 2, z: 3 };
     const movedFrom = { x: 4, y: 5, z: 6 };
     const target = { x: 7, y: 8, z: 9 };
@@ -519,10 +519,16 @@ describe('SmbpmWriter — .smbpm encoding', function () {
   it('all 43 .smbpm files round-trip without crashing', async () => {
     const { parseSmbpm } = await import('../src/smd3/SmbpmParser.js');
     const { writeSmbpm } = await import('../src/smd3/SmbpmWriter.js');
-    const dir = path.join(BASE, '..');
-    const files = fs.readdirSync(dir)
-      .filter(f => f.endsWith('.smbpm'))
-      .map(f => path.join(dir, f));
+    const files: string[] = [];
+    const collect = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const file = path.join(dir, entry.name);
+        if (entry.isDirectory()) collect(file);
+        else if (entry.name.endsWith('.smbpm')) files.push(file);
+      }
+    };
+    collect(BASE);
+    assert.lengthOf(files, 43, 'The committed metadata corpus must actually be exercised');
     let ok = 0, fail = 0;
     for (const file of files) {
       try {
@@ -531,6 +537,7 @@ describe('SmbpmWriter — .smbpm encoding', function () {
         const encoded = writeSmbpm(m1);
         const m2 = parseSmbpm(encoded);
         assert.equal(m2.metaVersion, m1.metaVersion);
+        assert.deepEqual(encoded, data, file);
         ok++;
       } catch (e) {
         fail++;
@@ -639,7 +646,7 @@ describe('Tag-based objects — toBuffer() round-trips', function () {
 
   it('FactionManager.toBuffer() round-trips FACTIONS.fac', async () => {
     const { FactionManager } = await import('../src/objects/Factions.js');
-    const data = fs.readFileSync('/srv/StarMade/server-database/world0/FACTIONS.fac');
+    const data = fs.readFileSync(path.join(S, 'FACTIONS.fac'));
     const fm1 = FactionManager.fromBuffer(data);
     const fm2 = FactionManager.fromBuffer(fm1.toBuffer());
     assert.equal(fm2.factions.size, fm1.factions.size, 'faction count');
@@ -649,7 +656,7 @@ describe('Tag-based objects — toBuffer() round-trips', function () {
 
   it('Catalog.toBuffer() round-trips CATALOG.cat', async () => {
     const { Catalog } = await import('../src/objects/Catalog.js');
-    const data = fs.readFileSync('/srv/StarMade/server-database/world0/CATALOG.cat');
+    const data = fs.readFileSync(path.join(S, 'CATALOG.cat'));
     const c1 = Catalog.fromBuffer(data);
     const c2 = Catalog.fromBuffer(c1.toBuffer());
     assert.equal(c2.entries.length, c1.entries.length, 'entry count');
@@ -658,7 +665,7 @@ describe('Tag-based objects — toBuffer() round-trips', function () {
 
   it('TradingManager.toBuffer() round-trips TRADING.tag', async () => {
     const { TradingManager } = await import('../src/objects/Trading.js');
-    const tradePath = '/srv/StarMade/server-database/world0/TRADING.tag';
+    const tradePath = path.join(S, 'TRADING.tag');
     if (!fs.existsSync(tradePath)) return;
     const data = fs.readFileSync(tradePath);
     const t1 = TradingManager.fromBuffer(data);
@@ -669,7 +676,7 @@ describe('Tag-based objects — toBuffer() round-trips', function () {
 
   it('ChatChannelManager.toBuffer() round-trips chatchannels.tag', async () => {
     const { ChatChannelManager } = await import('../src/objects/ChatChannels.js');
-    const data = fs.readFileSync('/srv/StarMade/server-database/world0/chatchannels.tag');
+    const data = fs.readFileSync(path.join(S, 'chatchannels.tag'));
     const c1 = ChatChannelManager.fromBuffer(data);
     const c2 = ChatChannelManager.fromBuffer(c1.toBuffer());
     assert.equal(c2.channels.length, c1.channels.length, 'channel count');

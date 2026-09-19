@@ -19,7 +19,7 @@
  *   0 = ControlElementMapper  (links between controller and controlled blocks)
  *   1 = ElementCountMap        (block counts by type)
  *   2 = NPCFactionNewsEvent    (NPC faction news event)
- *   3 = LongSet                (ensemble de positions/identifiants long)
+ *   3 = LongSet                (set of long positions/identifiers)
  *   4 = BlockBuffer            (copied/pasted block buffer)
  *   5 = Long2Vector3fMap       (map long→Vector3f, for example rail positions)
  *   6 = Long2TransformMap      (map long→Transform, for example rail orientations)
@@ -29,6 +29,7 @@
  *          BlockBuffer.java, TransformTools.java
  */
 
+import { DecodeError } from '../core/DecodeError.js';
 import { BufferReader } from '../core/BufferReader.js';
 import { BufferWriter } from '../core/BufferWriter.js';
 import { RawElement } from '../serializable/Factories.js';
@@ -65,7 +66,7 @@ function makeRaw(fn: (w: BufferWriter) => void): Uint8Array {
  * Describes the ControlLink data shape used by high-level StarMade object modelling.
  */
 export interface ControlLink {
-  /** Controller block position (x, y, z en short) */
+  /** Controller block position (x, y, z as signed shorts) */
   from: BlockPosition;
   /** Controlled block type */
   type: number;
@@ -105,36 +106,45 @@ export class ControlElementMapper {
     if (r.isEOF()) return new ControlElementMapper(links);
 
     const header = r.readInt32BE();
-    if (header >= 0) return new ControlElementMapper(links); // unsupported network format
-    const isDisk = -header > 1024;
-    const keySize = r.readInt32BE();
+    const legacy = header >= 0;
+    const version = legacy ? 0 : -header;
+    const isDisk = legacy || version > 1024;
+    const shift = legacy || (!isDisk && version < 2) ? 8 : 0;
+    // Match Java short narrowing after the legacy origin migration.
+    const coordinate = (value: number): number => ((value + shift) << 16) >> 16;
+    const keySize = legacy ? header : r.readCount(10);
+    if (keySize > 1_000_000) throw new DecodeError('E_LIMIT', 'Too many legacy controllers');
+    if (keySize * 10 > r.remaining()) {
+      throw new DecodeError('E_TRUNCATED', 'Truncated legacy controller records', { offset: r.offset });
+    }
 
     for (let i = 0; i < keySize; i++) {
-      const fx = r.readInt16BE(), fy = r.readInt16BE(), fz = r.readInt16BE();
+      const fx = coordinate(r.readInt16BE()), fy = coordinate(r.readInt16BE()), fz = coordinate(r.readInt16BE());
       const from: BlockPosition = { x: fx, y: fy, z: fz };
-      const valueSize = r.readInt32BE();
+      const valueSize = r.readCount(6);
       for (let v = 0; v < valueSize; v++) {
         const type = r.readInt16BE();
-        const elemSize = r.readInt32BE();
+        const elemSize = r.readCount(isDisk ? 6 : 3);
         const targets: BlockPosition[] = [];
         if (isDisk) {
           for (let e = 0; e < elemSize; e++) {
-            targets.push({ x: r.readInt16BE(), y: r.readInt16BE(), z: r.readInt16BE() });
+            targets.push({ x: coordinate(r.readInt16BE()), y: coordinate(r.readInt16BE()), z: coordinate(r.readInt16BE()) });
           }
         } else {
           const bigX = r.readInt8() !== 0, bigY = r.readInt8() !== 0, bigZ = r.readInt8() !== 0;
           const mx = r.readInt16BE(), my = r.readInt16BE(), mz = r.readInt16BE();
           for (let e = 0; e < elemSize; e++) {
             targets.push({
-              x: (bigX ? r.readInt16BE() : r.readInt8()) + mx,
-              y: (bigY ? r.readInt16BE() : r.readInt8()) + my,
-              z: (bigZ ? r.readInt16BE() : r.readInt8()) + mz,
+              x: coordinate((bigX ? r.readInt16BE() : r.readInt8()) + mx),
+              y: coordinate((bigY ? r.readInt16BE() : r.readInt8()) + my),
+              z: coordinate((bigZ ? r.readInt16BE() : r.readInt8()) + mz),
             });
           }
         }
         links.push({ from, type, targets });
       }
     }
+    if (!r.isEOF()) throw new DecodeError('E_FORMAT', 'Trailing controller bytes', { offset: r.offset });
     return new ControlElementMapper(links);
   }
 

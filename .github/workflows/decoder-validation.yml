@@ -1,0 +1,86 @@
+name: Decoder validation
+
+on:
+  push:
+    branches: [main, fix/audit-data-integrity, fix/audit-integrity-complete]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: decoder-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22', '24']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '${{ matrix.node }}'
+          cache: npm
+      - name: Record validation environment
+        run: |
+          mkdir -p validation
+          git rev-parse HEAD > validation/commit.txt
+          node --version > validation/node-version.txt
+          npm --version > validation/npm-version.txt
+          git archive --format=tar HEAD | gzip > validation/source.tar.gz
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm run docs:check
+      - name: Tests and measured coverage
+        run: |
+          set -o pipefail
+          npm run coverage 2>&1 | tee validation/tests.log
+          npm run coverage:verify
+      - name: Reject incomplete or rounded coverage reports
+        run: node scripts/test-coverage-gate.mjs
+      - name: Isolated production package consumer
+        run: |
+          set -o pipefail
+          npm run test:package 2>&1 | tee validation/package-consumer.log
+      - name: Production dependency audit
+        run: npm audit --omit=dev --json > validation/runtime-audit.json
+      - name: Record development dependency advisories
+        if: always()
+        run: npm audit --json > validation/dependency-audit.json || true
+      - uses: actions/setup-java@v4
+        if: matrix.node == '22'
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: JDK interoperability
+        if: matrix.node == '22'
+        run: |
+          set -o pipefail
+          npm run test:interop 2>&1 | tee validation/java-interop.log
+      - name: Independent LZ4 qualification
+        if: matrix.node == '22'
+        run: |
+          set -o pipefail
+          python -m pip install lz4==4.4.5
+          python scripts/check-lz4-interop.py 2>&1 | tee validation/lz4-interop.log
+      - name: Verify validation did not modify tracked files
+        run: git diff --exit-code
+      - name: Preserve validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: decoder-validation-node-${{ matrix.node }}
+          path: |
+            coverage/
+            !coverage/tmp/**
+            validation/
+          retention-days: 14
