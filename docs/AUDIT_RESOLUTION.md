@@ -52,6 +52,21 @@ python scripts/check-lz4-interop.py
 npm audit --omit=dev
 ```
 
+The installation integration tests require an explicit path. On the development
+host, `/srv/StarMade` is available; enable it for the complete local run:
+
+```sh
+STARMADE_TEST_DIR=/srv/StarMade npm run coverage:check
+```
+
+On 19 September 2026, this run on Node 20.20.2 passed **1,096 tests**, with
+**zero pending and zero failing tests**. The exact gate passed for all
+**98 production modules**: **27,980/27,980 lines** and **6,288/6,288 branches**,
+with zero skipped coverage entries. Installation files are only read; edits and
+round trips occur in memory or temporary directories. Without the environment
+variable, 26 installation tests are deliberately pending even when the default
+path exists. They must be enabled for qualification on this host.
+
 `test:interop` invokes three independent JDK harnesses: modified UTF/Tags/block
 words, actual ObjectOutputStream/ObjectInputStream maps, and SINGLE_SIDE_EDGE
 regions. The geometry harness compares every field of all 1,146,880 block
@@ -66,8 +81,8 @@ Resource-failure regressions execute with a 128 MiB V8 heap, a 10-second process
 timeout and bounded captured output. A timeout, signal, abnormal exit or missing
 success assertion fails the parent test.
 
-Coverage proves executed paths, not every historical format combination. Tests
-requiring unavailable optional installation fixtures remain pending and are not
+Coverage proves executed paths, not every historical format combination. In CI,
+optional installation fixtures are unavailable; pending tests there are not
 counted as passing. No game runtime/import was executed; game-version-specific
 geometry assets and in-game re-import remain outside this SDK-level correction
 qualification. Unsupported formats now fail explicitly instead of being silently
