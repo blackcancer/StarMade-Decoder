@@ -45,6 +45,8 @@ jobs:
           set -o pipefail
           npm run coverage 2>&1 | tee validation/tests.log
           npm run coverage:verify
+      - name: Reject incomplete or rounded coverage reports
+        run: node scripts/test-coverage-gate.mjs
       - name: Isolated production package consumer
         run: |
           set -o pipefail
@@ -70,12 +72,15 @@ jobs:
           set -o pipefail
           python -m pip install lz4==4.4.5
           python scripts/check-lz4-interop.py 2>&1 | tee validation/lz4-interop.log
+      - name: Verify validation did not modify tracked files
+        run: git diff --exit-code
       - name: Preserve validation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: decoder-validation-node-${{ matrix.node }}
           path: |
-            coverage/coverage-summary.json
+            coverage/
+            !coverage/tmp/**
             validation/
           retention-days: 14
