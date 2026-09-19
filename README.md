@@ -134,3 +134,10 @@ and LZ4 checks on Node.js 22. These checks do not launch the StarMade game/serve
 
 See [Data integrity and migration](docs/INTEGRITY_AND_MIGRATION.md) for resource
 budgets, recovery diagnostics, supported migrations and explicit limitations.
+
+## Exact coverage acceptance
+
+The correction branch requires 100% lines and branches across every production
+source module, without coverage exclusions or ignore directives. Run
+`npm run coverage:check`; see [the coverage contract](docs/TEST_COVERAGE.md) for
+exact-counter gates, fixture scope and independent validation requirements.

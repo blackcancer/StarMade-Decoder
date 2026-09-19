@@ -1,3 +1,11 @@
+## Unreleased — complete line and branch coverage
+
+- Require exact 100% line, statement and branch coverage for every production source file.
+- Add portable configuration, domain-model, binary boundary and filesystem-race regressions.
+- Preserve faction field names, STRUCT terminators and HP-match metadata during edits.
+- Report exact all-source counters and reject coverage ignores or missing modules.
+- Simplify proven redundant internal branches without weakening public validation.
+
 # Changelog
 
 ## 1.5.0 — integrity correction candidate (2026-09-18)

@@ -333,7 +333,7 @@ export class PlayerStateEntity extends StarMadeEntity {
       t => t.name === 'pFac-v0' || t.name === 'pFac'
     );
     if (facTag?.name) {
-      const newTag = Tags.setField(this._rootTag, facTag.name, membership.toTag());
+      const newTag = Tags.setField(this._rootTag, facTag.name, Tags.rename(membership.toTag(), facTag.name));
       return PlayerStateEntity.fromTag(new Tag(TagType.STRUCT, newTag.name,
         [...newTag.getStruct().filter(t => t.type !== TagType.FINISH),
          ...( [newTag.getStruct().find(t => t.type === TagType.FINISH)!])]));

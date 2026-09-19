@@ -163,7 +163,8 @@ export function decodeSystemInfos(
     const entry: SectorInfo = { x, y, z, index: idx, sectorTypeOrdinal, sectorType, metadata };
     if (sectorType === 'PLANET' || sectorType === 'GAS_PLANET') {
       const pt = PLANET_TYPES[Math.min(PLANET_TYPES.length - 1, metadata)];
-      entry.planetType = pt ?? 'UNKNOWN';
+      // The byte index is clamped into the non-empty PLANET_TYPES table.
+      entry.planetType = pt;
     }
     results.push(entry);
   }
