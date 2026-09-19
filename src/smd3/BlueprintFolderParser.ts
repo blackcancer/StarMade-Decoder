@@ -150,7 +150,7 @@ function _readMeta(metaPath: string, context: BlueprintReadContext): BlueprintMe
     return null;
   }
 
-  return parseSmbpm(readBoundedFile(metaPath, context));
+  return parseSmbpm(readBoundedFile(metaPath, context), context.tagOptions);
 }
 
 /**

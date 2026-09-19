@@ -10,9 +10,12 @@
  * @version 1.1.0
  */
 
-import zlib from 'node:zlib';
 import { BufferReader } from '../core/BufferReader.js';
 import { BufferWriter } from '../core/BufferWriter.js';
+import { DecodeError, boundedInteger } from '../core/DecodeError.js';
+import type { DecodeDiagnostic } from '../core/DecodeError.js';
+import { MAX_DATABASE_BYTES, readDatabase, readZeroPadding } from './DatabaseValidation.js';
+import { readJavaBooleanMap, writeJavaBooleanMap } from './JavaBooleanMap.js';
 
 // ── FleetCommandTypes enum (ordinal order from FleetCommandTypes.java) ────────
 
@@ -115,23 +118,22 @@ export interface FleetCommand {
  */
 export function decodeFleetCommand(data: Buffer | Uint8Array | null | undefined): FleetCommand | null {
   if (!data || data.length === 0) return null;
-  const r = BufferReader.from(Buffer.isBuffer(data) ? data : Buffer.from(data));
-  try {
+  return readDatabase(data, 'FLEETS.COMMAND', r => {
     const fleetDbId = r.readInt64BE();
     const commandOrdinal = r.readInt32BE();
     const commandType = FLEET_COMMAND_TYPES[commandOrdinal] as FleetCommandType | undefined;
     const args = readCommandArgs(r);
+    readZeroPadding(r);
     return { fleetDbId, commandOrdinal, commandType, args };
-  } catch {
-    return null;
-  }
+  });
 }
 
 /**
  * Encodes a `FleetCommand` back to VARBINARY bytes (padded to 1024 bytes as Java does).
  */
 export function encodeFleetCommand(cmd: FleetCommand, padTo = 1024): Buffer {
-  const w = new BufferWriter();
+  boundedInteger(padTo, 'command padding', MAX_DATABASE_BYTES);
+  const w = new BufferWriter(256, MAX_DATABASE_BYTES);
   w.writeInt64BE(cmd.fleetDbId);
   w.writeInt32BE(cmd.commandOrdinal);
   writeCommandArgs(w, cmd.args);
@@ -150,8 +152,11 @@ export function encodeFleetCommand(cmd: FleetCommand, padTo = 1024): Buffer {
  * @param r - Input value for the readCommandArgs operation.
  * @returns The computed StarMade-Decoder value.
  */
-function readCommandArgs(r: BufferReader): CommandArg[] {
+function readCommandArgs(r: BufferReader, depth = 0, budget = { remaining: 65536 }): CommandArg[] {
+  if (depth > 64) throw new DecodeError('E_LIMIT', 'Command nesting budget exceeded');
   const count = r.readUInt8();
+  if (count > budget.remaining) throw new DecodeError('E_LIMIT', 'Command argument budget exceeded');
+  budget.remaining -= count;
   const args: CommandArg[] = [];
   for (let i = 0; i < count; i++) {
     const type = r.readUInt8();
@@ -169,7 +174,7 @@ function readCommandArgs(r: BufferReader): CommandArg[] {
         break;
       }
       case CMD_TYPES.STRUCT:
-        args.push({ kind: 'struct', value: readCommandArgs(r) });
+        args.push({ kind: 'struct', value: readCommandArgs(r, depth + 1, budget) });
         break;
       case CMD_TYPES.VECTOR3i:
         args.push({ kind: 'vec3i', x: r.readInt32BE(), y: r.readInt32BE(), z: r.readInt32BE() });
@@ -193,7 +198,10 @@ function readCommandArgs(r: BufferReader): CommandArg[] {
  * @param w - Input value for the writeCommandArgs operation.
  * @param args - Input value for the writeCommandArgs operation.
  */
-function writeCommandArgs(w: BufferWriter, args: CommandArg[]): void {
+function writeCommandArgs(w: BufferWriter, args: CommandArg[], depth = 0, budget = { remaining: 65536 }): void {
+  if (depth > 64) throw new DecodeError('E_LIMIT', 'Command nesting budget exceeded');
+  if (args.length > budget.remaining) throw new DecodeError('E_LIMIT', 'Command argument budget exceeded');
+  budget.remaining -= args.length;
   if (args.length > 255) throw new RangeError(`Too many command args: ${args.length}`);
   w.writeUInt8(args.length);
   for (const arg of args) {
@@ -212,7 +220,7 @@ function writeCommandArgs(w: BufferWriter, args: CommandArg[]): void {
         break;
       case 'struct':
         w.writeUInt8(CMD_TYPES.STRUCT);
-        writeCommandArgs(w, arg.value);
+        writeCommandArgs(w, arg.value, depth + 1, budget);
         break;
       case 'vec3i':
         w.writeUInt8(CMD_TYPES.VECTOR3i);
@@ -226,165 +234,91 @@ function writeCommandArgs(w: BufferWriter, args: CommandArg[]): void {
         w.writeUInt8(CMD_TYPES.VECTOR4f);
         w.writeFloat32BE(arg.x); w.writeFloat32BE(arg.y); w.writeFloat32BE(arg.z); w.writeFloat32BE(arg.w);
         break;
+      default: throw new DecodeError('E_UNSUPPORTED', 'Unknown command argument kind');
     }
   }
 }
 
 // ── SAVED_REMOTES ─────────────────────────────────────────────────────────────
 
-/**
- * Describes the FleetRemotes data shape used by StarMade database object parsing.
- */
+/** Complete or explicitly recovered remote-control states. */
 export interface FleetRemotes {
   remotes: Map<string, boolean>;
-  /** @deprecated raw fallback bytes for unrecognized formats. Prefer remotes. */
+  format: 'network' | 'java';
+  complete: boolean;
+  diagnostics: DecodeDiagnostic[];
+  /** Detached original bytes for an incomplete recovery result. */
   raw?: Buffer;
 }
 
+/** Strict by default; recovery exposes an incomplete result and never hides resource-limit errors. */
+export interface FleetRemotesDecodeOptions { mode?: 'strict' | 'recover'; }
+
 /**
- * Decodes `FLEETS.SAVED_REMOTES` (VARBINARY 1024).
- *
- * Two serialization formats coexist in the StarMade codebase:
- *
- * **Network format** (Fleet.serialize DataOutput path, used when sending fleet
- * state over the wire):
- *   boolean hasRemotes
- *   if hasRemotes:
- *     short   count
- *     [count × (writeUTF(name), writeBoolean(active))]
- *
- * **DB format** (Fleet.serializeRemotes ObjectOutputStream path, used when
- * persisting SAVED_REMOTES to the HSQLDB):
- *   Java ObjectOutputStream header (AC ED 00 05) + serialized HashMap<String,Boolean>
- *   → parsed by reading the Java serialization stream manually (see below).
- *
- * Returns an empty map for null/empty input.
+ * Decodes network remotes or the exact JDK HashMap<String,Boolean> database stream.
+ * @param data Cell bytes; absent/empty input denotes no remotes.
+ * @param options Explicit recovery policy.
+ * @returns Complete states or an incomplete result carrying diagnostics and original bytes.
  */
-export function decodeFleetRemotes(data: Buffer | Uint8Array | null | undefined): FleetRemotes {
-  if (!data || data.length === 0) return { remotes: new Map() };
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-
-  // ── Java ObjectOutputStream format (AC ED magic) ──────────────────────────
-  if (buf[0] === 0xac && buf[1] === 0xed) {
-    return decodeJavaSerializedRemotes(buf);
-  }
-
-  // ── Network format ────────────────────────────────────────────────────────
+export function decodeFleetRemotes(data: Buffer | Uint8Array | null | undefined, options: FleetRemotesDecodeOptions = {}): FleetRemotes {
+  const mode = options.mode ?? 'strict';
+  if (mode !== 'strict' && mode !== 'recover') throw new DecodeError('E_RANGE', 'Invalid database parsing mode');
+  const format = data && data[0] === 0xac ? 'java' : 'network';
+  const result: FleetRemotes = { remotes: new Map(), format, complete: true, diagnostics: [] };
+  if (!data || data.length === 0) return result;
   try {
-    const r = BufferReader.from(buf);
-    const hasRemotes = r.readUInt8() !== 0;
-    if (!hasRemotes) return { remotes: new Map() };
-    const count = r.readInt16BE();
-    const remotes = new Map<string, boolean>();
-    for (let i = 0; i < count; i++) {
-      const name   = r.readJavaModifiedUTF();
-      const active = r.readUInt8() !== 0;
-      remotes.set(name, active);
-    }
-    return { remotes };
-  } catch {
-    return { remotes: new Map(), raw: buf };
-  }
-}
-
-/**
- * Encodes fleet remotes in the **network format** (suitable for the SAVED_REMOTES
- * DB column, replacing the Java ObjectOutputStream format with a portable one).
- */
-export function encodeFleetRemotes(remotes: Map<string, boolean>): Buffer {
-  const w = new BufferWriter();
-  if (remotes.size === 0) {
-    w.writeUInt8(0); // hasRemotes = false
-    return w.toBuffer();
-  }
-  w.writeUInt8(1); // hasRemotes = true
-  w.writeInt16BE(remotes.size);
-  for (const [name, active] of remotes) {
-    w.writeJavaModifiedUTF(name);
-    w.writeUInt8(active ? 1 : 0);
-  }
-  return w.toBuffer();
-}
-
-/**
- * Minimal Java ObjectSerialization stream parser for `HashMap<String, Boolean>`.
- *
- * Java serialization format (AC ED 00 05):
- *   - Stream header: AC ED (magic), 00 05 (version)
- *   - TC_OBJECT (73), classDesc, data…
- *
- * We use a heuristic scan rather than a full Java-deserializer: scan the stream
- * for TC_STRING (74) sequences to extract the key strings, and read the booleans
- * from the Boolean field wrappers. This is resilient to JVM version differences
- * in the serialization format.
- *
- * This approach works reliably for `HashMap<String, Boolean>` as written by
- * `ObjectOutputStream` in Java 8–21 without third-party dependencies.
- */
-function decodeJavaSerializedRemotes(buf: Buffer): FleetRemotes {
-  const remotes = new Map<string, boolean>();
-  // Extract all TC_STRING (0x74) + uint16-length + utf-8 content sequences.
-  // TC_BLOCKDATA, TC_REFERENCE, etc. appear between entries but do not affect
-  // the key/value ordering in a HashMap serialized stream.
-  const strings: string[] = [];
-  let i = 0;
-  while (i < buf.length - 2) {
-    if (buf[i] === 0x74) { // TC_STRING
-      const len = buf.readUInt16BE(i + 1);
-      if (i + 3 + len <= buf.length) {
-        strings.push(buf.toString('utf8', i + 3, i + 3 + len));
-        i += 3 + len;
-        continue;
-      }
-    }
-    i++;
-  }
-
-  // The first strings are class descriptor names ('java.util.HashMap', etc.).
-  // HashMap entries are key-value pairs of (String key, Boolean value).
-  // Booleans in Java serialization are stored as TC_OBJECT with a single
-  // byte field: 0x00 = false, 0x01 = true, encoded after the class descriptor.
-  // We look for the pattern: TC_OBJECT (0x73) TC_CLASSDESC (0x72) for java.lang.Boolean,
-  // OR the simpler inline-value pattern used in modern JVMs.
-  //
-  // Simpler robust approach: scan for boolean primitives inline with TC_STRING keys.
-  // In the serialized HashMap, each Entry is: key (TC_STRING), value (TC_OBJECT Boolean).
-  // We skip known class descriptor strings (contain '.') and pair the rest.
-  const entryStrings = strings.filter(s => !s.includes('.') && !s.includes('/') && s !== 'value');
-
-  // Extract boolean bytes following each TC_OBJECT (0x73) that represents a Boolean.
-  // Look for the byte sequence 0x73 0x72 "java.lang.Boolean" ... followed by value byte.
-  const booleans: boolean[] = [];
-  let j = 0;
-  while (j < buf.length) {
-    // Java Boolean serialization: TC_OBJECT(73) + ... boolean_value_field byte
-    // In practice, ObjectOutputStream writes Boolean as:
-    //   73 72 00 11 'java.lang.Boolean' ... (classDesc) then one byte for value
-    if (buf[j] === 0x73) {
-      // Look ahead for 'java.lang.Boolean' class descriptor
-      const ahead = buf.indexOf(Buffer.from('java.lang.Boolean'), j, 'utf8');
-      if (ahead !== -1 && ahead - j < 30) {
-        // The value field byte follows after the classDesc serialization block.
-        // Find 'value' fieldname, then the actual byte value follows.
-        const valueIdx = buf.indexOf(Buffer.from('value'), ahead);
-        if (valueIdx !== -1 && valueIdx - ahead < 60) {
-          const boolByte = buf[valueIdx + 5];
-          if (boolByte === 0x00 || boolByte === 0x01) {
-            booleans.push(boolByte === 0x01);
-            j = valueIdx + 6;
-            continue;
+    result.remotes = readDatabase(data, 'FLEETS.SAVED_REMOTES', r => {
+      let remotes: Map<string, boolean>;
+      if (format === 'java') remotes = readJavaBooleanMap(r);
+      else {
+        remotes = new Map();
+        const hasRemotes = r.readUInt8();
+        if (hasRemotes > 1) throw new DecodeError('E_FORMAT', 'Invalid remote presence flag');
+        if (hasRemotes) {
+          const count = r.readInt16BE();
+          if (count < 0) throw new DecodeError('E_FORMAT', 'Negative remote count');
+          for (let i = 0; i < count; i++) {
+            const name = r.readJavaModifiedUTF(), active = r.readUInt8();
+            if (active > 1) throw new DecodeError('E_FORMAT', 'Invalid remote boolean');
+            if (remotes.has(name)) throw new DecodeError('E_FORMAT', 'Duplicate remote key');
+            remotes.set(name, active === 1);
           }
         }
       }
+      readZeroPadding(r); return remotes;
+    });
+    return result;
+  } catch (error) {
+    // readDatabase normalizes decoder errors before this policy boundary.
+    const failure = error as DecodeError;
+    if (mode === 'strict' || failure.code === 'E_LIMIT') throw failure;
+    result.complete = false;
+    result.diagnostics.push({ code: failure.code, message: failure.message, path: failure.path, offset: failure.offset });
+    result.raw = Buffer.from(data);
+    return result;
+  }
+}
+
+/**
+ * Encodes remotes in the explicitly selected format.
+ * Network bytes are not a replacement for the Java SAVED_REMOTES database stream.
+ * @param remotes Non-null string/boolean map.
+ * @param format Network for the wire protocol; java for Fleet.deserializeRemotes.
+ */
+export function encodeFleetRemotes(remotes: Map<string, boolean>, format: 'network' | 'java' = 'network'): Buffer {
+  boundedInteger(remotes.size, 'remote count', 32767);
+  const w = new BufferWriter(256, MAX_DATABASE_BYTES);
+  if (format === 'java') writeJavaBooleanMap(w, remotes);
+  else {
+    if (format !== 'network') throw new DecodeError('E_RANGE', 'Invalid remote output format');
+    w.writeUInt8(remotes.size === 0 ? 0 : 1);
+    if (remotes.size > 0) {
+      w.writeInt16BE(remotes.size);
+      for (const [name, active] of remotes) {
+        if (typeof name !== 'string' || typeof active !== 'boolean') throw new DecodeError('E_RANGE', 'Remote entries must be string/boolean pairs');
+        w.writeJavaModifiedUTF(name); w.writeUInt8(active ? 1 : 0);
+      }
     }
-    j++;
   }
-
-  // Pair entry strings with booleans.
-  const len = Math.min(entryStrings.length, booleans.length);
-  for (let k = 0; k < len; k++) {
-    remotes.set(entryStrings[k], booleans[k]);
-  }
-
-  return { remotes };
+  return w.toBuffer();
 }

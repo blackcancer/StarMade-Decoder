@@ -10,14 +10,18 @@
  * @version 1.1.0
  */
 
-import { decodeFleetRemotes, encodeFleetRemotes } from './FleetDb.js';
+import { decodeFleetRemotes, encodeFleetRemotes, type FleetRemotesDecodeOptions } from './FleetDb.js';
+import { DecodeError, type DecodeDiagnostic } from '../core/DecodeError.js';
 
 /**
  * Represents the FleetRemotesObject model used by StarMade database object parsing.
  */
 export class FleetRemotesObject {
   readonly remotes: ReadonlyMap<string, boolean>;
-  /** @deprecated raw fallback bytes for unrecognized formats. Prefer remotes. */
+  readonly format: 'network' | 'java';
+  readonly complete: boolean;
+  readonly diagnostics: ReadonlyArray<DecodeDiagnostic>;
+  /** Detached bytes of an explicitly incomplete recovery result. */
   readonly raw?: Buffer;
 
   /**
@@ -26,9 +30,10 @@ export class FleetRemotesObject {
    * @param remotes - Input value for the constructor operation.
    * @param raw - Input value for the constructor operation.
    */
-  private constructor(remotes: Map<string, boolean>, raw?: Buffer) {
+  private constructor(remotes: Map<string, boolean>, format: 'network' | 'java' = 'java', complete = true, diagnostics: ReadonlyArray<DecodeDiagnostic> = [], raw?: Buffer) {
     this.remotes = new Map(remotes);
-    if (raw) this.raw = raw;
+    this.format = format; this.complete = complete; this.diagnostics = diagnostics;
+    if (raw) this.raw = Buffer.from(raw);
   }
 
   // ── Named constructors ─────────────────────────────────────────────────────
@@ -38,9 +43,9 @@ export class FleetRemotesObject {
    * Supports both the network format and Java ObjectOutputStream format (AC ED).
    * Returns an empty instance for null/empty input.
    */
-  static fromBytes(data: Buffer | Uint8Array | null | undefined): FleetRemotesObject {
-    const { remotes, raw } = decodeFleetRemotes(data);
-    return new FleetRemotesObject(remotes, raw);
+  static fromBytes(data: Buffer | Uint8Array | null | undefined, options: FleetRemotesDecodeOptions = {}): FleetRemotesObject {
+    const { remotes, format, complete, diagnostics, raw } = decodeFleetRemotes(data, options);
+    return new FleetRemotesObject(remotes, format, complete, diagnostics, raw);
   }
 
   /** Creates an empty FleetRemotesObject. */
@@ -57,9 +62,10 @@ export class FleetRemotesObject {
 
   /** Sets (or adds) a remote state. */
   withRemote(name: string, active: boolean): FleetRemotesObject {
+    this.requireComplete();
     const copy = new Map(this.remotes);
     copy.set(name, active);
-    return new FleetRemotesObject(copy);
+    return new FleetRemotesObject(copy, this.format);
   }
 
   /** Toggles a remote. Adds it as active if not present. */
@@ -70,9 +76,10 @@ export class FleetRemotesObject {
 
   /** Removes a remote. */
   withoutRemote(name: string): FleetRemotesObject {
+    this.requireComplete();
     const copy = new Map(this.remotes);
     copy.delete(name);
-    return new FleetRemotesObject(copy);
+    return new FleetRemotesObject(copy, this.format);
   }
 
   // ── Accessors ──────────────────────────────────────────────────────────────
@@ -108,11 +115,17 @@ export class FleetRemotesObject {
   // ── Serialization ──────────────────────────────────────────────────────────
 
   /**
-   * Encodes to the portable network format for FLEETS.SAVED_REMOTES.
-   * Always writes the DataOutput format — never ObjectOutputStream.
+   * Encodes in the original wire format; newly constructed values use Java DB format.
+   * Incomplete recovery results cannot be rewritten or edited.
    */
   toBytes(): Buffer {
-    return encodeFleetRemotes(new Map(this.remotes));
+    this.requireComplete();
+    return encodeFleetRemotes(new Map(this.remotes), this.format);
+  }
+
+  /** Refuses editing or serialization after any recovery omission. */
+  private requireComplete(): void {
+    if (!this.complete) throw new DecodeError('E_INCOMPLETE', 'Cannot edit or serialize incomplete remote states');
   }
 
   /**

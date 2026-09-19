@@ -258,8 +258,8 @@ describe('decodeTradeNodeItems / encodeTradeNodeItems', function () {
     assert.isNull(decodeTradeNodeItems(null));
   });
 
-  it('returns null for undersized input', function () {
-    assert.isNull(decodeTradeNodeItems(Buffer.alloc(4)));
+  it('rejects nonempty undersized input', function () {
+    assert.throws(() => decodeTradeNodeItems(Buffer.alloc(4)));
   });
 
   it('round-trips empty price list', function () {
@@ -300,8 +300,8 @@ describe('decodeSystemInfos / encodeSystemInfos', function () {
     assert.deepEqual(decodeSystemInfos(null), []);
   });
 
-  it('returns empty array for undersized buffer', function () {
-    assert.deepEqual(decodeSystemInfos(Buffer.alloc(100)), []);
+  it('rejects nonempty undersized buffer', function () {
+    assert.throws(() => decodeSystemInfos(Buffer.alloc(100)));
   });
 
   it('all-VOID buffer returns empty array (default)', function () {

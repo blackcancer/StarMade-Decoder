@@ -16,7 +16,7 @@
  *   short version (2 BE bytes; new uncompressed files use 0)
  *   root tag body:
  *     signed prType byte  (positive = named, negative = anonymous, 0 = FINISH)
- *     [if named && != FINISH]: readUTF() (uint16 len + UTF-8)
+ *     [if named && != FINISH]: readUTF() (uint16 len + modified UTF-8)
  *     [if != FINISH]: payload by type
  *
  * GZIP detection: magic 0x1F 0x8B → decompress and read without a version prefix.
@@ -45,6 +45,10 @@ export interface TagReadOptions {
   maxDepth?: number;
   maxNodes?: number;
   maxListLength?: number;
+  /** Shared remaining GZIP output bytes across nested files; plain input is not debited. */
+  sharedInflationBudget?: { remainingBytes: number };
+  /** Shared traversal allowance across nested files, including SERIALIZABLE items and FINISH. */
+  sharedNodeBudget?: { remainingNodes: number };
   /** Root-only API accepts legacy trailing bytes by default; TagDocument preserves them. */
   allowTrailingBytes?: boolean;
 }
@@ -93,14 +97,33 @@ export function readFrom(data: Buffer | Uint8Array, options: TagReadOptions = {}
 function parseRoot(data: Buffer | Uint8Array, options: TagReadOptions) {
   const maxInput = boundedInteger(options.maxInputBytes ?? 256 * 1024 * 1024, 'maxInputBytes');
   const maxInflated = boundedInteger(options.maxInflatedBytes ?? 256 * 1024 * 1024, 'maxInflatedBytes');
+  const sharedInflation = options.sharedInflationBudget;
+  const remainingInflation = sharedInflation
+    ? boundedInteger(sharedInflation.remainingBytes, 'sharedInflationBudget.remainingBytes') : maxInflated;
   const budget = tagBudget(options);
+  const sharedNodes = options.sharedNodeBudget;
+  if (sharedNodes) {
+    let nodesLeft = Math.min(budget.nodesLeft, boundedInteger(sharedNodes.remainingNodes, 'sharedNodeBudget.remainingNodes'));
+    Object.defineProperty(budget, 'nodesLeft', {
+      get: () => nodesLeft,
+      set: (value: number) => {
+        sharedNodes.remainingNodes -= nodesLeft - Math.max(0, value);
+        nodesLeft = value;
+      },
+    });
+  }
   if (data.length > maxInput) throw new DecodeError('E_LIMIT', 'Tag input byte budget exceeded');
   let buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const compressed = buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b;
   if (compressed) {
-    if (maxInflated === 0) throw new DecodeError('E_LIMIT', 'Tag inflation byte budget exceeded');
-    try { buf = gunzipSync(buf, { maxOutputLength: maxInflated }); }
-    catch (cause) { throw new DecodeError('E_FORMAT', 'Invalid or oversized GZIP Tag payload', { cause }); }
+    const maximumOutput = Math.min(maxInflated, remainingInflation);
+    if (maximumOutput === 0) throw new DecodeError('E_LIMIT', 'Tag inflation byte budget exceeded');
+    try { buf = gunzipSync(buf, { maxOutputLength: maximumOutput }); }
+    catch (cause) {
+      const exceeded = cause instanceof Error && 'code' in cause && cause.code === 'ERR_BUFFER_TOO_LARGE';
+      throw new DecodeError(exceeded ? 'E_LIMIT' : 'E_FORMAT', 'Invalid or oversized GZIP Tag payload', { cause });
+    }
+    if (sharedInflation) sharedInflation.remainingBytes -= buf.length;
   } else if (buf.length > maxInflated) {
     throw new DecodeError('E_LIMIT', 'Tag payload byte budget exceeded');
   }
@@ -141,7 +164,7 @@ export class TagDocument {
     this.trailing = Buffer.from(parsed.trailing);
     this.original = Buffer.from(data);
     this.options = { ...options };
-    this.canonical = writeTo(parsed.root, options).subarray(2);
+    this.canonical = writePayloadBytes(parsed.root, options, parsed.compressed);
   }
 
   /** @returns A defensive copy of the bytes following the root Tag. */
@@ -154,7 +177,7 @@ export class TagDocument {
    * @throws {Error} For an invalid tree or an exceeded output budget.
    */
   toBuffer(root: Tag = this.root): Buffer {
-    const payload = writeTo(root, this.options).subarray(2);
+    const payload = writePayloadBytes(root, this.options, this.compressed);
     if (payload.equals(this.canonical)) return Buffer.from(this.original);
     const maxOutput = this.options.maxInflatedBytes ?? 256 * 1024 * 1024;
     const size = payload.length + this.trailing.length + (this.compressed ? 0 : 2);
@@ -187,6 +210,7 @@ function _readTag(reader: BufferReader, budget: TagBudget, depth: number): Tag {
   const hasName = prType > 0;
 
   if (typeOrd === TagType.FINISH) {
+    _readPayload(reader, TagType.FINISH, budget, depth);
     return FINISH_TAG;
   }
 
@@ -274,6 +298,7 @@ function _readPayload(
       const children: Tag[] = [];
       // Read until FINISH
       while (true) {
+        if (children.length >= budget.maxListLength) throw new DecodeError('E_LIMIT', 'Tag STRUCT collection budget exceeded');
         const child = _readTag(reader, budget, depth + 1);
         children.push(child);
         if (child.type === TagType.FINISH) break;
@@ -288,7 +313,7 @@ function _readPayload(
         throw new Error(`No SerializableTagFactory registered for id: ${factoryId}. ` +
           `Call registerAllFactories() from src/serializable/Factories.ts before parsing.`);
       }
-      return { value: factory.create(reader) as import('../serializable/SerializableTagElement.js').SerializableTagElement };
+      return { value: reader.withCollectionBudget(budget, () => factory.create(reader)) };
     }
 
     case TagType.VECTOR4f:
@@ -338,6 +363,22 @@ export function writeTo(tag: Tag, options: TagReadOptions = {}): Buffer {
   if (maximum < 3) throw new DecodeError('E_LIMIT', 'Tag output budget is too small');
   const writer = new BufferWriter(Math.min(4096, maximum), maximum);
   writer.writeInt16BE(0); // version (Java default = 0)
+  _writeTag(writer, tag);
+  return writer.toBuffer();
+}
+
+/**
+ * Serializes the root body within the byte budget of its actual file envelope.
+ * @param tag - Root to serialize.
+ * @param options - Tree and byte limits.
+ * @param compressed - Whether the envelope has no uncompressed version prefix.
+ * @returns Root payload bytes, without a version prefix.
+ */
+function writePayloadBytes(tag: Tag, options: TagReadOptions, compressed: boolean): Buffer {
+  if (!compressed) return writeTo(tag, options).subarray(2);
+  validateWritableTree(tag, tagBudget(options));
+  const maximum = boundedInteger(options.maxInflatedBytes ?? 256 * 1024 * 1024, 'maxInflatedBytes');
+  const writer = new BufferWriter(Math.min(4096, maximum), maximum);
   _writeTag(writer, tag);
   return writer.toBuffer();
 }

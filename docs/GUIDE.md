@@ -726,7 +726,7 @@ if (fs.existsSync(tradingPath)) {
 
 ### ⚠️ GZIP files and `writeTo()`
 
-`readFrom()` decompresses GZIP files transparently, but `writeTo()` **always writes uncompressed**. This is correct for `.ent` files (the game reads both), but you should be aware that the output file will be larger than the original when the original was compressed.
+`readFrom()` decompresses GZIP files transparently. `writeTo()` produces canonical uncompressed bytes with version 0 and does not retain the original envelope or trailing bytes. This is a deliberate conversion, not a byte-preserving rewrite. Use `readTagDocument(input).toBuffer()` for unchanged byte preservation, and its documented edit API to retain the envelope while editing.
 
 ### ⚠️ The `FINISH_TAG` sentinel in STRUCT children
 

@@ -12,6 +12,7 @@ import type AdmZip from 'adm-zip';
 import { inflateRawSync } from 'node:zlib';
 import { DecodeError, boundedInteger, reportDecodeFailure } from '../core/DecodeError.js';
 import type { DecodeDiagnostic } from '../core/DecodeError.js';
+import type { TagReadOptions } from '../core/TagParser.js';
 import { parseSmd3, BLOCK_COUNT } from './Smd3Parser.js';
 import type { Smd3File, Smd3ParseOptions } from './Smd3Parser.js';
 
@@ -25,6 +26,8 @@ export interface BlueprintParseOptions {
   maxEntities?: number;
   maxDepth?: number;
   maxBlocks?: number;
+  /** Aggregate Tag nodes, FINISH markers and SERIALIZABLE items across all metadata. */
+  maxTagNodes?: number;
   segmentOptions?: Omit<Smd3ParseOptions, 'mode' | 'maxBlocks'>;
 }
 
@@ -57,7 +60,9 @@ export class BlueprintReadContext {
   readonly maxEntities: number;
   readonly maxDepth: number;
   readonly maxBlocks: number;
-  private bytes = 0;
+  /** Nested GZIP Tags share the same byte allowance as archive/folder entries. */
+  readonly tagOptions: TagReadOptions;
+  private readonly byteBudget: { remainingBytes: number };
   private blocks = 0;
   private entities = 0;
   private files = 0;
@@ -77,6 +82,11 @@ export class BlueprintReadContext {
     this.maxEntities = boundedInteger(options.maxEntities ?? 1024, 'maxEntities');
     this.maxDepth = boundedInteger(options.maxDepth ?? 64, 'maxDepth', 256);
     this.maxBlocks = boundedInteger(options.maxBlocks ?? 16 * 1024 * 1024, 'maxBlocks');
+    this.byteBudget = { remainingBytes: this.maxTotalBytes };
+    this.tagOptions = {
+      maxInflatedBytes: this.maxEntryBytes, sharedInflationBudget: this.byteBudget,
+      sharedNodeBudget: { remainingNodes: boundedInteger(options.maxTagNodes ?? 1_000_000, 'maxTagNodes') },
+    };
   }
 
   /**
@@ -95,8 +105,8 @@ export class BlueprintReadContext {
    */
   chargeBytes(size: number): void {
     boundedInteger(size, 'entry byte length');
-    if (size > this.maxEntryBytes || this.bytes + size > this.maxTotalBytes) throw new DecodeError('E_LIMIT', 'Blueprint byte budget exceeded');
-    this.bytes += size;
+    if (size > this.maxEntryBytes || size > this.byteBudget.remainingBytes) throw new DecodeError('E_LIMIT', 'Blueprint byte budget exceeded');
+    this.byteBudget.remainingBytes -= size;
   }
 
   /**
