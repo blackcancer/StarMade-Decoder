@@ -21,6 +21,8 @@
  * @version 1.1.0
  */
 
+import { DecodeError } from '../core/DecodeError.js';
+
 /** System grid side length (VoidSystem.SYSTEM_SIZE = 16). */
 export const SYSTEM_SIZE = 16;
 
@@ -138,13 +140,14 @@ export interface SectorInfo {
  * Decodes `SYSTEMS.INFOS` (VARBINARY 8192 bytes).
  *
  * Returns only non-VOID sectors by default (pass `includeVoid=true` for all).
- * Returns empty array for null/undersized input.
+ * Returns empty array for absent/empty input; malformed lengths throw.
  */
 export function decodeSystemInfos(
   data: Buffer | Uint8Array | null | undefined,
   options: { includeVoid?: boolean } = {},
 ): SectorInfo[] {
-  if (!data || data.length < SYSTEM_INFOS_SIZE) return [];
+  if (!data || data.length === 0) return [];
+  if (data.length !== SYSTEM_INFOS_SIZE) throw new DecodeError('E_FORMAT', 'Invalid SYSTEMS.INFOS byte size', { path: 'SYSTEMS.INFOS' });
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const results: SectorInfo[] = [];
 
@@ -214,13 +217,14 @@ export interface SystemResource {
  * Decodes `SYSTEMS.RESOURCES` (VARBINARY 19 bytes).
  *
  * Returns only resources with density > 0 by default.
- * Returns empty array for null/undersized input.
+ * Returns empty array for absent/empty input; malformed lengths throw.
  */
 export function decodeSystemResources(
   data: Buffer | Uint8Array | null | undefined,
   options: { includeAbsent?: boolean } = {},
 ): SystemResource[] {
-  if (!data || data.length < RESOURCE_COUNT) return [];
+  if (!data || data.length === 0) return [];
+  if (data.length !== RESOURCE_COUNT) throw new DecodeError('E_FORMAT', 'Invalid SYSTEMS.RESOURCES byte size', { path: 'SYSTEMS.RESOURCES' });
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const results: SystemResource[] = [];
   for (let i = 0; i < RESOURCE_COUNT; i++) {

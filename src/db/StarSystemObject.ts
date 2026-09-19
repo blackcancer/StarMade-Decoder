@@ -52,15 +52,15 @@ export class StarSystem {
 
   /**
    * Decodes both SYSTEMS.INFOS and SYSTEMS.RESOURCES bytes.
-   * Returns null if INFOS is null or undersized.
+   * Returns null for absent/empty INFOS; malformed cells throw.
    */
   static fromBytes(
     infos: Buffer | Uint8Array | null | undefined,
     resources: Buffer | Uint8Array | null | undefined,
     options: { includeVoid?: boolean } = {},
   ): StarSystem | null {
+    if (!infos || infos.length === 0) return null;
     const sectors = decodeSystemInfos(infos, options);
-    if (!infos || infos.length < SYSTEM_INFOS_SIZE) return null;
     const res = decodeSystemResources(resources, { includeAbsent: true });
     return new StarSystem(sectors, res);
   }

@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import AdmZip from 'adm-zip';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'decoder-consumer-'));
@@ -25,15 +26,23 @@ try {
   const consumer = path.join(temp, 'consumer'); fs.mkdirSync(consumer);
   fs.writeFileSync(path.join(consumer, 'package.json'), JSON.stringify({ name: 'decoder-smoke-consumer', private: true, type: 'module' }));
   npm(['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', path.join(temp, packed[0].filename)], consumer);
+  const fixture = new AdmZip();
+  fixture.addFile('Consumer/header.smbph', Buffer.alloc(36));
+  fs.writeFileSync(path.join(consumer, 'consumer.sment'), fixture.toBuffer());
   const script = `
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { Tags, writeTo, readFrom, BlockConfig, parseSment, emptySegment, emptySmd3File, writeSmd3, parseSmd3 } from 'starmade-decoder';
 assert.equal(readFrom(writeTo(Tags.string('name', '\\u0000\\ud83d\\ude80'))).getString(), '\\u0000\\ud83d\\ude80');
-assert.equal(typeof BlockConfig.fromXml, 'function');
-assert.equal(typeof parseSment, 'function');
+const config = BlockConfig.fromXml('<Config><Block type="5" name="Consumer Hull"><Hitpoints>100</Hitpoints><Mass>2</Mass></Block></Config>');
+assert.equal(config.getElementInfoById(5).identity.name, 'Consumer Hull');
+assert.equal(config.getElementInfoById(5).block.hp, 100);
+const blueprint = parseSment(fs.readFileSync('consumer.sment'));
+assert.equal(blueprint.root.name, 'Consumer');
+assert.equal(blueprint.complete, true);
 const seg = emptySegment(); seg.blocks[0].type = 5;
 assert.equal(parseSmd3(writeSmd3({...emptySmd3File(),segments:[seg]})).segments[0].blockCount, 1);
-console.log('Isolated production consumer imported XML/ZIP APIs and exercised Tags and SMD3.');
+console.log('Isolated production consumer parsed XML and ZIP fixtures and exercised Tags and SMD3.');
 `;
   fs.writeFileSync(path.join(consumer, 'smoke.mjs'), script);
   const env = { ...process.env }; delete env.NODE_PATH;

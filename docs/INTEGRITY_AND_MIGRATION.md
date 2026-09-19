@@ -181,3 +181,54 @@ modified saves and v7 blueprints inside StarMade remains an integration gate.
 Production dependency audits are performed in CI; a low-severity advisory in the
 optional development-server path of transitive `esbuild` remained in the audited
 development toolchain snapshot. It is not shipped as a production dependency.
+
+## Completion of the pre-PR audit
+
+The follow-up corrections and their evidence are mapped to A01–A10 in
+[AUDIT_RESOLUTION.md](AUDIT_RESOLUTION.md).
+
+Traversal budgets now include STRUCT terminators and items inside registered
+SERIALIZABLE collections. `maxListLength` includes the final FINISH child of a
+STRUCT. `sharedNodeBudget: { remainingNodes }` and
+`sharedInflationBudget: { remainingBytes }` let multiple Tag reads share an
+explicit allowance. These are mutable counters for a single operation, not
+configuration objects to reuse across unrelated reads.
+
+For blueprints, `maxTotalBytes` covers entry bytes plus decompressed nested GZIP
+Tag bytes; plain Tags are already included in the entry bytes. `maxEntryBytes`
+also bounds each nested inflation. `maxTagNodes` defaults to 1,000,000 nodes,
+FINISH markers and SERIALIZABLE items across all metadata sections and entities.
+An exceeded resource budget aborts even in recovery mode. ZIP paths are indexed
+once, with entity/depth limits enforced before building an oversized index.
+
+### Database cells
+
+Absent/empty input remains distinct from malformed nonempty input. Fleet
+commands, fixed system grids, sector item tails and trade payloads now reject
+invalid lengths or content instead of returning apparently valid empty values.
+Only zero trailing padding is accepted where a database format permits padding.
+Sector writes reject excess capacity instead of truncating items. Database cells
+and inflated trade payloads have a hard 16 MiB bound; command nesting is limited
+to 64 and total command arguments to 65,536. No partial command or trade result
+is returned as a valid object.
+
+The fleet remotes codec parses actual JDK `HashMap<String, Boolean>` streams,
+including shared object/class handles and Java modified UTF keys. It does not
+scan for string-like bytes or invent boolean values. Only the standard HashMap
+and Boolean descriptors, non-null keys/values, at most 32,767 entries and keys
+encodable in 65,535 modified-UTF bytes are supported. Other schemas, unsupported
+tokens, invalid handles, duplicate keys and truncated streams fail explicitly.
+This codec never loads or instantiates arbitrary Java classes.
+
+`encodeFleetRemotes(states)` retains its network-format default. Use
+`encodeFleetRemotes(states, 'java')` for the database stream consumed by
+`Fleet.deserializeRemotes`; the network format is **not** a substitute for that
+stream. `FleetRemotesObject.fromBytes()` preserves its input format when edited
+and serialized. New values created with `.from()` or `.empty()` use Java format.
+
+To inspect a corrupt remotes cell, explicitly use
+`FleetRemotesObject.fromBytes(bytes, { mode: 'recover' })`. It returns
+`complete: false`, diagnostics with the column/offset, and detached original
+`raw` bytes. Such an object cannot be edited or serialized; a failed decode can
+no longer silently replace existing remote states with an empty map. Budget
+exhaustion remains an exception in recovery mode.

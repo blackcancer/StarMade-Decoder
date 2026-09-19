@@ -16,7 +16,7 @@
     "samples:fetch-starmadedock": "node scripts/fetch-starmadedock-samples.mjs",
     "clean": "rimraf dist coverage",
     "prepublishOnly": "npm run build && npm run docs:check && npm run coverage:check",
-    "test:interop": "node scripts/check-java-interop.mjs",
+    "test:interop": "node scripts/check-java-interop.mjs && node scripts/check-database-interop.mjs && node scripts/check-geometry-interop.mjs",
     "test:package": "node scripts/check-package-consumer.mjs",
     "coverage:verify": "c8 check-coverage --per-file=false --lines 100 --branches 100 --statements 100 --functions 70 && node scripts/check-coverage.mjs"
   },

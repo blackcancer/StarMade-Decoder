@@ -808,17 +808,61 @@ export function parseSment(data: Buffer | Uint8Array, options: BlueprintParseOpt
   const rootName = _findRootName(entries);
   if (!rootName) throw new Error('Unable to find the root folder in the .sment file');
 
-  const root = _parseEntity(zip, entries, rootName, 0, ZERO_OFFSET, ZERO_OFFSET, context);
+  const index = _indexEntityEntries(entries, rootName, context);
+  const root = _parseEntity(zip, index, rootName, 0, ZERO_OFFSET, ZERO_OFFSET, context);
   return new BlueprintArchive(root, context.diagnostics);
 }
 
 // ── Recursive Entity Parser ───────────────────────────────────────────────────
 
+/** Direct resources and child paths belonging to one exact entity path. */
+interface EntityEntryIndex {
+  segments: AdmZip.IZipEntry[];
+  children: Set<string>;
+}
+
+/**
+ * Indexes archive paths once, descending only through direct ATTACHED_N folders.
+ * @param entries - Validated ZIP inventory in its existing entry order.
+ * @param rootName - Exact root folder containing the blueprint header.
+ * @param context - Limits checked before allocating indexed child entities.
+ * @returns Direct segment resources and children for each discovered entity.
+ */
+function _indexEntityEntries(entries: AdmZip.IZipEntry[], rootName: string,
+  context: BlueprintReadContext): Map<string, EntityEntryIndex> {
+  const root: EntityEntryIndex = { segments: [], children: new Set() };
+  const index = new Map<string, EntityEntryIndex>([[rootName, root]]);
+  const prefix = `${rootName}/`;
+  for (const entry of entries) {
+    const name = entry.entryName;
+    if (!name.startsWith(prefix)) continue;
+    const parts = name.slice(prefix.length).split('/');
+    let entityPath = rootName, entity = root, component = 0;
+    while (component < parts.length - 1 && /^ATTACHED_\d+$/.test(parts[component])) {
+      entityPath += `/${parts[component++]}`;
+      let child = index.get(entityPath);
+      if (!child) {
+        if (component > context.maxDepth || index.size >= context.maxEntities) {
+          throw new DecodeError('E_LIMIT', 'Blueprint entity/depth budget exceeded', { path: entityPath });
+        }
+        child = { segments: [], children: new Set() };
+        index.set(entityPath, child);
+      }
+      entity.children.add(entityPath);
+      entity = child;
+    }
+    if (parts.length === component + 2 && parts[component] === 'DATA' && /\.smd[0-3]$/.test(parts[component + 1])) {
+      entity.segments.push(entry);
+    }
+  }
+  return index;
+}
+
 /**
  * Parses Entity for StarMade blueprint and segment file parsing.
  *
  * @param zip - Input value for the _parseEntity operation.
- * @param allEntries - Input value for the _parseEntity operation.
+ * @param index - Direct resources and children indexed by exact entity path.
  * @param entityPath - Input value for the _parseEntity operation.
  * @param depth - Input value for the _parseEntity operation.
  * @param offset - Input value for the _parseEntity operation.
@@ -827,7 +871,7 @@ export function parseSment(data: Buffer | Uint8Array, options: BlueprintParseOpt
  */
 function _parseEntity(
   zip: AdmZip,
-  allEntries: AdmZip.IZipEntry[],
+  index: Map<string, EntityEntryIndex>,
   entityPath: string,
   depth: number,
   offset: BlueprintChildOffset,
@@ -836,6 +880,7 @@ function _parseEntity(
 ): BlueprintEntity {
   context.enterEntity(depth);
   const name = entityPath.substring(entityPath.lastIndexOf('/') + 1);
+  const inventory = index.get(entityPath)!;
 
   // Header
   const header = context.attempt(`${entityPath}/header.smbph`, () => {
@@ -844,42 +889,30 @@ function _parseEntity(
     return parseSmbph(bytes);
   }, _emptyHeader());
   const meta = context.attempt(`${entityPath}/meta.smbpm`,
-    () => _parseMetaBuffer(_readEntry(zip, `${entityPath}/meta.smbpm`, context)), null);
+    () => _parseMetaBuffer(_readEntry(zip, `${entityPath}/meta.smbpm`, context), context), null);
   const logic = context.attempt(`${entityPath}/logic.smbpl`,
     () => _parseLogicBuffer(_readEntry(zip, `${entityPath}/logic.smbpl`, context)), null);
 
   // Include legacy resources so unsupported data cannot be silently discarded.
   const segments: Smd3File[] = [];
-  const dataPrefix = `${entityPath}/DATA/`;
-  for (const entry of allEntries) {
-    if (entry.entryName.startsWith(dataPrefix) && !entry.entryName.slice(dataPrefix.length).includes('/') && /\.smd[0-3]$/.test(entry.entryName)) {
-      const file = context.attempt(entry.entryName, () => {
-        if (!entry.entryName.endsWith('.smd3')) {
-          throw new DecodeError('E_UNSUPPORTED', 'Unsupported legacy segment resource; explicit migration is required');
-        }
-        return context.readSegments(context.readZipEntry(entry), entry.entryName);
-      }, null);
-      if (file) segments.push(file);
-    }
+  for (const entry of inventory.segments) {
+    const file = context.attempt(entry.entryName, () => {
+      if (!entry.entryName.endsWith('.smd3')) {
+        throw new DecodeError('E_UNSUPPORTED', 'Unsupported legacy segment resource; explicit migration is required');
+      }
+      return context.readSegments(context.readZipEntry(entry), entry.entryName);
+    }, null);
+    if (file) segments.push(file);
   }
 
-  // ATTACHED_N children: prefix membership is checked BEFORE slicing.
+  // Children are indexed under their exact parent before recursive parsing.
   const children: SmentEntity[] = [];
   {
     const childOffsets = _readChildOffsets(meta);
-    const childPaths = new Set<string>();
-    for (const entry of allEntries) {
-      if (!entry.entryName.startsWith(`${entityPath}/`)) continue;
-      const rel = entry.entryName.slice(entityPath.length + 1);
-      const parts = rel.split('/');
-      if (/^ATTACHED_\d+$/.test(parts[0]) && parts.length > 1) {
-        childPaths.add(`${entityPath}/${parts[0]}`);
-      }
-    }
-    for (const childPath of [...childPaths].sort()) {
+    for (const childPath of [...inventory.children].sort()) {
       const childName = childPath.substring(childPath.lastIndexOf('/') + 1);
       const childOffset = childOffsets.get(childName) ?? ZERO_OFFSET;
-      children.push(_parseEntity(zip, allEntries, childPath, depth + 1, childOffset, _addOffset(worldOffset, childOffset), context));
+      children.push(_parseEntity(zip, index, childPath, depth + 1, childOffset, _addOffset(worldOffset, childOffset), context));
     }
   }
 
@@ -1121,14 +1154,15 @@ const ZERO_OFFSET: BlueprintChildOffset = Object.freeze({ x: 0, y: 0, z: 0 });
  * Parses MetaBuffer for StarMade blueprint and segment file parsing.
  *
  * @param metaBuffer - Input value for the _parseMetaBuffer operation.
+ * @param context - Shared entry and nested Tag inflation budgets.
  * @returns The computed StarMade-Decoder value.
  */
-function _parseMetaBuffer(metaBuffer: Buffer | null): BlueprintMeta | null {
+function _parseMetaBuffer(metaBuffer: Buffer | null, context: BlueprintReadContext): BlueprintMeta | null {
   if (!metaBuffer) {
     return null;
   }
 
-  return parseSmbpm(metaBuffer);
+  return parseSmbpm(metaBuffer, context.tagOptions);
 }
 
 /**

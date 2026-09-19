@@ -7,9 +7,18 @@
  * @author InitSysRev
  * @version 1.5.0
  */
+import { DecodeError } from './DecodeError.js';
+
+/** Shared limits for collections nested inside opaque SERIALIZABLE payloads. */
+export interface CollectionReadBudget {
+  maxListLength: number;
+  nodesLeft: number;
+}
+
 /** Transactional big-endian primitive and Java-string reader with bounded collections. */
 export class BufferReader {
   private _offset = 0;
+  private collectionBudget?: CollectionReadBudget;
 
   /** @param buf Backing bytes; callers must not mutate them while reading. */
   private constructor(private readonly buf: Buffer) {}
@@ -151,14 +160,50 @@ export class BufferReader {
    * @throws {RangeError} If the count exceeds either bound or is negative.
    */
   readCount(minimumItemBytes = 0, maximum = 1_000_000): number {
-    if (!Number.isSafeInteger(minimumItemBytes) || minimumItemBytes < 0 ||
-        !Number.isSafeInteger(maximum) || maximum < 0) throw new RangeError('Invalid collection bounds');
     this._check(4);
     const count = this.buf.readInt32BE(this._offset);
-    if (count < 0 || count > maximum || count * minimumItemBytes > this.remaining() - 4) {
+    this.validateCollectionCount(count, minimumItemBytes, maximum, this.remaining() - 4);
+    this._offset += 4;
+    return count;
+  }
+
+  /**
+   * Applies a shared collection budget while invoking a SERIALIZABLE factory.
+   * @param budget - Mutable counters shared by the complete Tag read.
+   * @param read - Factory operation to execute within these limits.
+   * @returns The factory's result.
+   */
+  withCollectionBudget<T>(budget: CollectionReadBudget, read: () => T): T {
+    const previous = this.collectionBudget;
+    this.collectionBudget = budget;
+    try { return read(); }
+    finally { this.collectionBudget = previous; }
+  }
+
+  /**
+   * Validates and charges a count already consumed as part of a legacy header.
+   * @param count - Declared number of items.
+   * @param minimumItemBytes - Smallest serialized item width.
+   * @param maximum - Largest supported count.
+   * @param available - Remaining payload bytes, excluding a pending count prefix.
+   * @returns The unchanged count, after charging the shared budget.
+   * @throws {RangeError} For malformed counts or insufficient bytes.
+   * @throws {DecodeError} When the shared collection budget is exhausted.
+   */
+  validateCollectionCount(count: number, minimumItemBytes = 0, maximum = 1_000_000,
+    available = this.remaining()): number {
+    if (!Number.isSafeInteger(minimumItemBytes) || minimumItemBytes < 0 ||
+        !Number.isSafeInteger(maximum) || maximum < 0) throw new RangeError('Invalid collection bounds');
+    if (!Number.isSafeInteger(count) || count < 0 || count > maximum || count * minimumItemBytes > available) {
       throw new RangeError(`Invalid collection count ${count} at offset ${this.offset}`);
     }
-    this._offset += 4;
+    const budget = this.collectionBudget;
+    if (budget) {
+      if (count > budget.maxListLength || count > budget.nodesLeft) {
+        throw new DecodeError('E_LIMIT', 'SERIALIZABLE collection budget exceeded', { offset: this.offset });
+      }
+      budget.nodesLeft -= count;
+    }
     return count;
   }
 

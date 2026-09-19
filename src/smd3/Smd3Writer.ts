@@ -83,7 +83,7 @@ export function writeSmd3(file: Smd3File, segVersion = VERSION_4BYTE): Buffer {
   const cells = new Set<number>();
   let region: string | undefined;
   const records = file.segments.map(seg => {
-    if (seg.version < 6 || seg.version > 7) throw new DecodeError('E_UNSUPPORTED', 'Writing pre-v6 segments requires game-dependent migration');
+    if (seg.version !== 6 && seg.version !== 7) throw new DecodeError('E_UNSUPPORTED', 'Writing requires source segment version 6 or 7; other versions require game-dependent migration');
     for (const value of [seg.x, seg.y, seg.z]) {
       if (!Number.isInteger(value) || value < -0x80000000 || value > 0x7fffffff || value % 32 !== 0) {
         throw new DecodeError('E_RANGE', 'Segment coordinates must be aligned int32 block coordinates');

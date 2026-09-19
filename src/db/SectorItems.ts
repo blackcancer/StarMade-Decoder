@@ -5,7 +5,7 @@
  *
  * SECTORS_ITEMS.ITEMS (VARBINARY ~5 KB)
  *   Written by SectorItemTable.getItemBinaryString() via DataOutputStream.
- *   Each FreeItem entry is exactly 14 bytes (big-endian):
+ *   Each FreeItem entry is exactly 22 bytes (big-endian):
  *     short  blockType  (2)
  *     int    count      (4)
  *     float  posX       (4)  — local position in sector
@@ -20,7 +20,8 @@
  * @version 1.1.0
  */
 
-import { BufferReader } from '../core/BufferReader.js';
+import { DecodeError } from '../core/DecodeError.js';
+import { readDatabase, readZeroPadding } from './DatabaseValidation.js';
 import { BufferWriter } from '../core/BufferWriter.js';
 
 /** Byte size of a single FreeItem entry on disk. */
@@ -55,9 +56,8 @@ export interface FreeItem {
  */
 export function decodeSectorItems(data: Buffer | Uint8Array | null | undefined): FreeItem[] {
   if (!data || data.length === 0) return [];
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  return readDatabase(data, 'SECTORS_ITEMS.ITEMS', r => {
   const items: FreeItem[] = [];
-  const r = BufferReader.from(buf);
   while (r.remaining() >= FREE_ITEM_BYTE_SIZE) {
     const blockType = r.readInt16BE();
     // Zero blockType with zero count = padding sentinel — skip
@@ -69,17 +69,20 @@ export function decodeSectorItems(data: Buffer | Uint8Array | null | undefined):
     if (blockType === 0 && count === 0) continue;
     items.push({ blockType, count, posX, posY, posZ, metaId });
   }
+  readZeroPadding(r);
   return items;
+  });
 }
 
 /**
  * Encodes a list of FreeItems into VARBINARY bytes for `SECTORS_ITEMS.ITEMS`.
  *
- * Trims to `MAX_ITEMS_PER_SECTOR` entries if needed (matching Java behaviour).
+ * Rejects values exceeding `MAX_ITEMS_PER_SECTOR` rather than truncating them.
  * Does NOT pad to the full column size — the DB driver handles that.
  */
 export function encodeSectorItems(items: FreeItem[]): Buffer {
-  const limited = items.slice(0, MAX_ITEMS_PER_SECTOR);
+  if (items.length > MAX_ITEMS_PER_SECTOR) throw new DecodeError('E_LIMIT', 'Sector item capacity exceeded');
+  const limited = items;
   const w = new BufferWriter(limited.length * FREE_ITEM_BYTE_SIZE);
   for (const item of limited) {
     w.writeInt16BE(item.blockType);

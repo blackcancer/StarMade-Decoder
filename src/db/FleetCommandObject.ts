@@ -52,7 +52,7 @@ export class FleetCommandObject {
 
   /**
    * Decodes FLEETS.COMMAND bytes into a FleetCommandObject.
-   * Returns null for null / empty / malformed input.
+   * Returns null for absent/empty input; malformed data throws with column/offset context.
    */
   static fromBytes(data: Buffer | Uint8Array | null | undefined): FleetCommandObject | null {
     const raw = decodeFleetCommand(data);
