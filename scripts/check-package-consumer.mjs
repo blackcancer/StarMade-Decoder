@@ -34,12 +34,29 @@ try {
   const script = `
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { Tags, writeTo, readFrom, BlockConfig, parseSment, emptySegment, emptySmd3File, writeSmd3, parseSmd3,
+import { Tags, writeTo, readFrom, BlockConfig, BlockDefinition, BlockState, Segment, BlockVolume,
+  Inventory, ItemStack, ManagerContainer, parseSment, emptySegment, emptySmd3File, writeSmd3, parseSmd3,
   Smd3Document, readBlueprintDocument, readBlueprintFolderDocument, writeSment, writeBlueprintFolder } from 'starmade-decoder';
 assert.equal(readFrom(writeTo(Tags.string('name', '\\u0000\\ud83d\\ude80'))).getString(), '\\u0000\\ud83d\\ude80');
 const config = BlockConfig.fromXml('<Config><Block type="5" name="Consumer Hull"><Hitpoints>100</Hitpoints><Mass>2</Mass></Block></Config>');
 assert.equal(config.getElementInfoById(5).identity.name, 'Consumer Hull');
 assert.equal(config.getElementInfoById(5).block.hp, 100);
+const catalogue = BlockConfig.fromBlocks([BlockDefinition.create({id: 9, name: 'Consumer Custom', hp: 250})]);
+const reloadedCatalogue = BlockConfig.fromXml(catalogue.toXml(), new Map([['CUSTOM_BLOCK_9', 9]]));
+assert.equal(reloadedCatalogue.getById(9).hp, 250);
+assert.match(catalogue.toBlockTypesProperties(), /=9/);
+const segment = new Segment(); segment.set(1, 2, 3, BlockState.create(9));
+const volume = BlockVolume.fromFiles([{...emptySmd3File(), segments: [segment.toData()]}], {config: catalogue});
+assert.equal(volume.blockAt({x: 1, y: 2, z: 3}).definition.name, 'Consumer Custom');
+assert.equal(segment.toPackedWords()[1 + 32 * 2 + 1024 * 3], BlockState.create(9).toWord());
+const first = {x: 1, y: 2, z: 3}, second = {x: -32, y: 4, z: 5};
+const manager = ManagerContainer.EMPTY
+  .withInventoryAt(first, new Inventory(new Map(), 1).add(9, 4))
+  .withInventoryAt(second, Inventory.EMPTY.set(new ItemStack(7, 5, 8)));
+const persisted = ManagerContainer.fromTag(readFrom(writeTo(manager.toTag())));
+assert.equal(persisted.inventoryEntries.length, 2);
+assert.equal(persisted.getInventoryAt(first).countOf(9), 4);
+assert.equal(persisted.getInventoryAt(second).countOf(5), 8);
 const blueprint = parseSment(fs.readFileSync('consumer.sment'));
 assert.equal(blueprint.root.name, 'Consumer');
 assert.equal(blueprint.complete, true);
@@ -59,13 +76,19 @@ assert.equal(folder.root.header.totalBlockCount, 1);
 assert.deepEqual(folder.files.get('Consumer-folder/notes.bin'), Buffer.from([1, 2, 3]));
 const regionBytes = writeSmd3({...emptySmd3File(),segments:[seg]});
 assert.deepEqual(new Smd3Document(regionBytes).toBuffer(), regionBytes);
-console.log('Isolated production consumer exercised XML, Tags, SMD3 and complete ZIP/folder writers.');
+const model = folder.model(catalogue), node = model.nodes()[0];
+node.blocks.set({x: -257, y: 0, z: 0}, BlockState.create(9));
+assert.equal(node.blocks.blockCount, 2);
+assert.equal(readBlueprintDocument(folder.toBuffer()).blocks().get({x: -257, y: 0, z: 0}).type, 9);
+console.log('Isolated production consumer exercised format classes, position-indexed inventories, XML, Tags, SMD3 and ZIP/folder writers.');
 `;
   fs.writeFileSync(path.join(consumer, 'smoke.mjs'), script);
   const env = { ...process.env }; delete env.NODE_PATH;
   execFileSync(process.execPath, ['smoke.mjs'], { cwd: consumer, env, stdio: 'inherit', timeout: 30000 });
   fs.writeFileSync(path.join(consumer, 'smoke.ts'), `import { Tags, writeTo, readFrom, type BlockData, type Smd3ParseOptions,
-    readBlueprintDocument, writeBlueprintFolder, type BlueprintFileMap, type BlueprintWriteOptions } from 'starmade-decoder';
+    readBlueprintDocument, writeBlueprintFolder, type BlueprintFileMap, type BlueprintWriteOptions,
+    BlockState, Segment, BlockVolume, BlueprintModel, BlockDefinition, Inventory, ItemStack, InventoryLocation,
+    type BlockDefinitionOptions, type InventoryCapacity, type InventoryReadOptions } from 'starmade-decoder';
 const options: Smd3ParseOptions = { mode: 'strict' };
 const block: BlockData = {type:1, hp:127, active:true, orientation:0, extra:63};
 readFrom(writeTo(Tags.int('value', block.type))); void options;
@@ -76,6 +99,18 @@ function exportBlueprint(bytes: Buffer): BlueprintFileMap {
   return document.files;
 }
 void exportBlueprint;
+const definitionOptions: BlockDefinitionOptions = {id: 9, name: 'Typed custom', hp: 250};
+const definition = BlockDefinition.create(definitionOptions);
+const state: BlockData = BlockState.create(definition.id);
+const segment = new Segment(); segment.set(0, 0, 0, state);
+// Structural input expected by renderer consumers, with no rendering calculations in the SDK.
+const rendererInput: {x: number; y: number; z: number; blocks: readonly {type: number; hp: number; active: boolean; orientation: number}[]} = segment.toData();
+const capacity: InventoryCapacity = {maximum: 50, volumeOf: () => 2};
+const readOptions: InventoryReadOptions = {maxSlots: 12};
+const inventory = Inventory.fromTag(Inventory.EMPTY.set(new ItemStack(0, 9, 3)).toTag(), readOptions);
+inventory.assertCapacity(capacity);
+new InventoryLocation(3, {x: 0, y: 0, z: 0}, inventory);
+void rendererInput; void BlockVolume; void BlueprintModel;
 `);
   fs.writeFileSync(path.join(consumer, 'tsconfig.json'), JSON.stringify({ compilerOptions: {
     target: 'ES2023', module: 'NodeNext', moduleResolution: 'NodeNext', noEmit: true,

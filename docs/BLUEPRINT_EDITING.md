@@ -133,7 +133,7 @@ The contracts were checked against local `StarMade-Open` commit
 `FolderZipper`, `SegmentDataFileUtils`, `SegmentBufferManager`, `SegmentHeader`,
 `SegmentData.updateBBAdd` and `SegmentBuffer.updateBB`.
 
-`test/blueprint-document.test.ts` checks complete Sobek and Firestorm archive
+`test/smd3/BlueprintDocument.test.ts` checks complete Sobek and Firestorm archive
 identity, every Warehouse folder resource, edit/revert behavior, attachment
 updates, component envelopes, limits and invalid edits. The ZIP, folder and SMD3
 modules have additional byte-layout and injected-filesystem-failure regressions.

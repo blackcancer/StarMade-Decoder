@@ -10,27 +10,18 @@
 /**
  * Inventory — inventory of a StarMade entity.
  *
- * Port of Inventory.fromTagStructure() Java.
- *
- * Structure Tag (version >= 1) :
- *   STRUCT [
- *     [0] STRUCT slots   [STRUCT [INT slot, FINISH]...]
- *     [1] STRUCT types   [STRUCT [SHORT type, FINISH]...]
- *     [2] STRUCT values  [STRUCT [INT count, FINISH]... or STRUCT metadata...]
- *     FINISH
- *   ]
- *
- * Chaque ItemStack :
- *   - slot  : int (index de slot)
- *   - type  : short (block type ID)
- *   - count : int (quantity)
- *   - meta  : optionnel (ID, type, orientation, subId)
+ * Real inv1 data contains LIST<INT> slots, LIST<SHORT> types and STRUCT values.
+ * Stash/factory envelopes and opaque metadata survive edits. The obsolete SDK's
+ * anonymous tuple encoding is available only through explicit legacy methods.
  */
 
 import { Tag } from '../../core/Tag.js';
 import { Tags } from '../../core/TagBuilder.js';
 import { TagType } from '../../core/TagType.js';
 import { FINISH_TAG } from '../../core/Tag.js';
+import { boundedInteger, DecodeError } from '../../core/DecodeError.js';
+import { copyInventoryTag, readInventoryWire, writeInventoryWire } from './InventoryWire.js';
+import { writeTo } from '../../core/TagParser.js';
 
 // ── ItemStack ─────────────────────────────────────────────────────────────────
 
@@ -42,12 +33,30 @@ export interface ItemMeta {
   type: number;
   orientation: number;
   subId: number;
+  /** Opaque metadata payload; its contents are not an item quantity. */
+  payload?: Tag;
+}
+
+/** One multislot contains distinct regular types belonging to the same inventory group. */
+export interface ItemGroup { name: string; items: { type: number; count: number }[]; }
+
+/** Optional caller constraint; the file itself does not encode a universal inventory volume limit. */
+export interface InventoryCapacity { maximum: number; volumeOf: (type: number) => number; }
+/** Optional occupied-slot bound retained by every immutable edit after reading. */
+export interface InventoryReadOptions { maxSlots?: number; }
+/** JSON-safe item projection; opaque payloads contain complete encoded Tags, never truncated previews. */
+export interface ItemStackJSON {
+  slot: number; type: number; count: number;
+  meta?: Omit<ItemMeta, 'payload'> & { payloadTagBase64?: string };
+  group?: ItemGroup;
 }
 
 /**
  * Represents the ItemStack model used by high-level entity component modelling.
  */
 export class ItemStack {
+  private readonly _meta?: ItemMeta;
+  private readonly _group?: ItemGroup;
   /**
    * Creates a ItemStack instance.
    *
@@ -63,8 +72,59 @@ export class ItemStack {
     /** Quantity */
     readonly count: number,
     /** Optional metadata (orientation, subtype...) */
-    readonly meta?: ItemMeta,
-  ) {}
+    meta?: ItemMeta,
+    group?: ItemGroup,
+  ) {
+    boundedInteger(slot, 'inventory slot', 0x7fffffff);
+    boundedInteger(count, 'item count', 0x7fffffff);
+    if (!Number.isInteger(type) || type < -32768 || type > 32767) throw new DecodeError('E_RANGE', 'Item type must be a signed short');
+    if (meta?.payload) {
+      if (type >= 0 || type === -32768 || type !== meta.type || count !== 1) throw new DecodeError('E_FORMAT', 'A special metadata item has quantity one');
+      boundedInteger(meta.id, 'metadata id', 0x7fffffff);
+      if (!Number.isInteger(meta.subId) || meta.subId < -32768 || meta.subId > 32767) throw new DecodeError('E_RANGE', 'Metadata subtype must be a signed short');
+    }
+    if (group) {
+      if (type !== -32768 || meta || typeof group.name !== 'string' || group.items.length === 0) throw new DecodeError('E_FORMAT', 'Invalid multislot container');
+      const types = new Set<number>(); let total = 0;
+      for (const item of group.items) {
+        boundedInteger(item.type, 'multislot type', 32767); boundedInteger(item.count, 'multislot count', 0x7fffffff);
+        if (!item.type || !item.count || types.has(item.type)) throw new DecodeError('E_FORMAT', 'Multislot members require unique positive types and counts');
+        types.add(item.type); total = Math.min(0x7fffffff, total + item.count);
+      }
+      if (count !== total) throw new DecodeError('E_FORMAT', 'Multislot aggregate differs from its members');
+    }
+    this._meta = meta ? { ...meta, ...(meta.payload ? { payload: copyInventoryTag(meta.payload) } : {}) } : undefined;
+    this._group = group ? structuredClone(group) : undefined;
+    Object.defineProperty(this, '_meta', { enumerable: false });
+    Object.defineProperty(this, '_group', { enumerable: false });
+    Object.freeze(this);
+  }
+
+  /** Detached metadata, including its opaque payload, so callers cannot mutate a stored stack. */
+  get meta(): ItemMeta | undefined {
+    return this._meta ? { ...this._meta, ...(this._meta.payload ? { payload: copyInventoryTag(this._meta.payload) } : {}) } : undefined;
+  }
+  /** Detached multislot membership; the containing slot's count is not one constituent's count. */
+  get group(): ItemGroup | undefined { return this._group ? structuredClone(this._group) : undefined; }
+  /** Moves the same complete stack to another slot without sharing mutable metadata. */
+  withSlot(slot: number): ItemStack { return new ItemStack(slot, this.type, this.count, this.meta, this.group); }
+  /** Creates one metadata object without inventing an orientation or treating payload bytes as quantity. */
+  static special(slot: number, meta: Omit<ItemMeta, 'orientation'> & { payload: Tag }): ItemStack {
+    return new ItemStack(slot, meta.type, 1, { ...meta, orientation: 0 });
+  }
+  /** Creates a grouped slot; one remaining member becomes a regular stack as in the game format. */
+  static grouped(slot: number, name: string, items: ItemGroup['items']): ItemStack {
+    const stack = new ItemStack(slot, -32768, items.reduce((sum, item) => Math.min(0x7fffffff, sum + item.count), 0), undefined, { name, items });
+    return items.length === 1 ? new ItemStack(slot, items[0].type, items[0].count) : stack;
+  }
+  /** Detached JSON projection; opaque Tags are represented as exact base64 binary envelopes. */
+  toJSON(): ItemStackJSON {
+    const meta = this.meta, group = this.group;
+    return { slot: this.slot, type: this.type, count: this.count,
+      ...(meta ? { meta: { id: meta.id, type: meta.type, orientation: meta.orientation, subId: meta.subId,
+        ...(meta.payload ? { payloadTagBase64: writeTo(meta.payload).toString('base64') } : {}) } } : {}),
+      ...(group ? { group } : {}) };
+  }
 
   /**
    * Returns a copy updated with Count.
@@ -73,7 +133,8 @@ export class ItemStack {
    * @returns The computed StarMade-Decoder value.
    */
   withCount(count: number): ItemStack {
-    return new ItemStack(this.slot, this.type, count, this.meta);
+    if (this._group && count !== this.count) throw new DecodeError('E_FORMAT', 'Edit multislot members instead of its aggregate count');
+    return new ItemStack(this.slot, this.type, count, this.meta, this.group);
   }
 
   /**
@@ -83,7 +144,8 @@ export class ItemStack {
    * @returns The computed StarMade-Decoder value.
    */
   withType(type: number): ItemStack {
-    return new ItemStack(this.slot, type, this.count, this.meta);
+    if (this._group && type !== this.type) throw new DecodeError('E_FORMAT', 'Edit multislot members instead of its container type');
+    return new ItemStack(this.slot, type, this.count, this.meta, this.group);
   }
 
   /**
@@ -92,7 +154,7 @@ export class ItemStack {
    * @returns The computed StarMade-Decoder value.
    */
   toString(): string {
-    return `ItemStack(slot=${this.slot}, type=${this.type}, count=${this.count}${this.meta ? ', meta='+JSON.stringify(this.meta) : ''})`;
+    return `ItemStack(slot=${this.slot}, type=${this.type}, count=${this.count}${this._meta ? ', meta='+JSON.stringify({ id: this._meta.id, type: this._meta.type, subId: this._meta.subId }) : ''})`;
   }
 }
 
@@ -113,9 +175,14 @@ export class Inventory {
    * @param slots - Input value for the constructor operation.
    * @param maxSlots - Input value for the constructor operation.
    */
-  constructor(slots: Map<number, ItemStack>, maxSlots = 36) {
-    this._slots   = slots;
+  constructor(slots: ReadonlyMap<number, ItemStack>, maxSlots = Infinity, private readonly template?: Buffer) {
+    if (maxSlots !== Infinity) boundedInteger(maxSlots, 'maxSlots', 0x7fffffff);
+    if (slots.size > maxSlots) throw new DecodeError('E_LIMIT', 'Inventory exceeds the explicit slot policy');
+    this._slots   = new Map(slots);
+    for (const [slot, item] of this._slots) if (slot !== item.slot) throw new DecodeError('E_FORMAT', 'Inventory map key differs from the item slot');
     this.maxSlots = maxSlots;
+    this.template = template ? Buffer.from(template) : undefined;
+    Object.defineProperty(this, 'template', { enumerable: false });
   }
 
   static EMPTY = new Inventory(new Map());
@@ -126,7 +193,15 @@ export class Inventory {
    * @param tag - Input value for the fromTag operation.
    * @returns The computed StarMade-Decoder value.
    */
-  static fromTag(tag: Tag): Inventory {
+  static fromTag(tag: Tag, options: InventoryReadOptions = {}): Inventory {
+    const wire = readInventoryWire(tag, options.maxSlots);
+    if (wire) return new Inventory(new Map(wire.items.map(item => [item.slot,
+      new ItemStack(item.slot, item.type, item.count, item.meta, item.group)])), options.maxSlots, wire.template);
+    throw new DecodeError('E_UNSUPPORTED', 'Unrecognized inventory format; old SDK tuples require fromLegacyTag');
+  }
+
+  /** Explicit compatibility reader for anonymous old-SDK tuples, including their historical lossy fallbacks. */
+  static fromLegacyTag(tag: Tag): Inventory {
     const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
 
     const readList = (t: Tag | undefined): Tag[] => {
@@ -193,7 +268,13 @@ export class Inventory {
    * @returns The computed StarMade-Decoder value.
    */
   toTag(): Tag {
+    return writeInventoryWire(this.items, this.template);
+  }
+
+  /** Explicit obsolete SDK tuple writer; this representation is not a current game inventory. */
+  toLegacyTag(): Tag {
     const items = [...this._slots.values()].sort((a, b) => a.slot - b.slot);
+    if (items.some(item => item.group || item.meta?.payload)) throw new DecodeError('E_UNSUPPORTED', 'Legacy inventory tuples cannot represent grouped or opaque metadata items');
 
     // Each list is a STRUCT containing direct Tags (INT/SHORT/INT|STRUCT)
     const slotTags: Tag[]  = [...items.map(i => Tags.int(null, i.slot)),   FINISH_TAG];
@@ -248,7 +329,7 @@ export class Inventory {
    */
   get size(): number                         { return this._slots.size; }
   /**
-   * Reports whether isFull is true for the current value.
+   * Reports whether the caller's occupied-slot limit has been reached; no game capacity is inferred.
    *
    * @returns The computed StarMade-Decoder value.
    */
@@ -256,12 +337,13 @@ export class Inventory {
 
   /** All items of a given block type. */
   byType(type: number): ItemStack[] {
-    return [...this._slots.values()].filter(i => i.type === type);
+    return [...this._slots.values()].filter(i => i.type === type || i.group?.items.some(item => item.type === type));
   }
 
   /** Total for one block type. */
   countOf(type: number): number {
-    return this.byType(type).reduce((s, i) => s + i.count, 0);
+    const result = this.byType(type).reduce((s, i) => s + (i.group && i.type !== type ? i.group.items.find(item => item.type === type)!.count : i.count), 0);
+    return boundedInteger(result, 'aggregate item count');
   }
 
   // ── Immutable updates ──────────────────────────────────────────────
@@ -273,9 +355,10 @@ export class Inventory {
    * @returns The computed StarMade-Decoder value.
    */
   set(item: ItemStack): Inventory {
+    if (item.count === 0) return this.remove(item.slot);
     const m = new Map(this._slots);
     m.set(item.slot, item);
-    return new Inventory(m, this.maxSlots);
+    return new Inventory(m, this.maxSlots, this.template);
   }
 
   /**
@@ -287,7 +370,7 @@ export class Inventory {
   remove(slot: number): Inventory {
     const m = new Map(this._slots);
     m.delete(slot);
-    return new Inventory(m, this.maxSlots);
+    return new Inventory(m, this.maxSlots, this.template);
   }
 
   /**
@@ -295,7 +378,98 @@ export class Inventory {
    *
    * @returns The computed StarMade-Decoder value.
    */
-  clear(): Inventory { return new Inventory(new Map(), this.maxSlots); }
+  clear(): Inventory { return new Inventory(new Map(), this.maxSlots, this.template); }
+
+  /** Replaces only item contents while retaining this inventory's stash/factory metadata envelope. */
+  withContents(inventory: Inventory): Inventory {
+    return new Inventory(new Map(inventory.items.map(item => [item.slot, item])), this.maxSlots, this.template);
+  }
+
+  /** Adds regular items into a compatible stack or the first unused slot, without overflow. */
+  add(type: number, count: number, slot?: number): Inventory {
+    boundedInteger(type, 'item type', 32767); boundedInteger(count, 'item count', 0x7fffffff);
+    if (!type || !count) throw new DecodeError('E_RANGE', 'Adding items requires a positive type and quantity');
+    if (slot === undefined) {
+      slot = this.items.find(item => item.type === type && !item.meta && !item.group && item.count <= 0x7fffffff - count)?.slot;
+      if (slot === undefined) { slot = 0; while (this.has(slot)) slot++; }
+    }
+    const existing = this.get(slot);
+    if (existing && (existing.type !== type || existing.meta || existing.group)) throw new DecodeError('E_FORMAT', 'Destination slot contains incompatible items');
+    return this.set(new ItemStack(slot, type, (existing?.count ?? 0) + count));
+  }
+
+  /** Splits a regular stack into an unused slot; failure leaves the original inventory unchanged. */
+  split(sourceSlot: number, destinationSlot: number, count: number): Inventory {
+    const source = this.requireItem(sourceSlot);
+    if (this.has(destinationSlot) || source.meta || source.group) throw new DecodeError('E_FORMAT', 'Split needs a regular stack and an empty destination');
+    Inventory.checkAmount(count, source.count);
+    const result = count === source.count ? this.remove(sourceSlot) : this.set(source.withCount(source.count - count));
+    return result.set(new ItemStack(destinationSlot, source.type, count));
+  }
+
+  /** Merges two regular stacks of the same type with signed-int overflow checks. */
+  merge(sourceSlot: number, destinationSlot: number): Inventory {
+    const source = this.requireItem(sourceSlot), destination = this.requireItem(destinationSlot);
+    if (sourceSlot === destinationSlot || source.type !== destination.type || source.meta || destination.meta || source.group || destination.group) {
+      throw new DecodeError('E_FORMAT', 'Merge requires distinct compatible regular stacks');
+    }
+    return this.remove(sourceSlot).set(destination.withCount(source.count + destination.count));
+  }
+
+  /** Transfers atomically between two inventories; special/grouped stacks can only move in full. */
+  transferTo(target: Inventory, sourceSlot: number, destinationSlot: number, amount?: number,
+    capacity?: InventoryCapacity): { source: Inventory; target: Inventory } {
+    if (target === this) throw new DecodeError('E_FORMAT', 'Use split or merge within one inventory');
+    const item = this.requireItem(sourceSlot), count = amount ?? item.count;
+    Inventory.checkAmount(count, item.count);
+    if ((item.meta || item.group) && count !== item.count) throw new DecodeError('E_FORMAT', 'Special/grouped stacks must be moved as a whole');
+    const destination = target.get(destinationSlot);
+    let updated: Inventory;
+    if (destination) {
+      if (item.meta || item.group || destination.meta || destination.group || item.type !== destination.type) throw new DecodeError('E_FORMAT', 'Incompatible transfer destination');
+      updated = target.set(destination.withCount(destination.count + count));
+    } else updated = target.set(count === item.count ? item.withSlot(destinationSlot) : new ItemStack(destinationSlot, item.type, count));
+    if (capacity) updated.assertCapacity(capacity);
+    return { source: count === item.count ? this.remove(sourceSlot) : this.set(item.withCount(item.count - count)), target: updated };
+  }
+
+  /** Computes volume using an explicit catalogue policy, including each multislot constituent. */
+  usedVolume(volumeOf: (type: number) => number): number {
+    let volume = 0;
+    for (const item of this.items) for (const part of item.group?.items ?? [item]) {
+      const unit = volumeOf(part.type);
+      if (!Number.isFinite(unit) || unit < 0) throw new DecodeError('E_RANGE', 'Item volume must be finite and nonnegative');
+      volume += unit * part.count;
+      if (!Number.isFinite(volume)) throw new DecodeError('E_RANGE', 'Inventory volume overflow');
+    }
+    return volume;
+  }
+
+  /** Applies a caller-supplied capacity; the SDK does not invent server/game capacity rules. */
+  assertCapacity(capacity: InventoryCapacity): this {
+    if (!Number.isFinite(capacity.maximum) || capacity.maximum < 0) throw new DecodeError('E_RANGE', 'Capacity must be finite and nonnegative');
+    if (this.usedVolume(capacity.volumeOf) > capacity.maximum) throw new DecodeError('E_LIMIT', 'Inventory volume exceeds capacity');
+    return this;
+  }
+
+  /** JSON-safe item projection; null means no caller-supplied occupied-slot limit, not game capacity. */
+  toJSON(): { items: ItemStackJSON[]; maxSlots: number | null } {
+    return { items: this.items.map(item => item.toJSON()), maxSlots: this.maxSlots === Infinity ? null : this.maxSlots };
+  }
+
+  /** Requires an occupied source slot before an immutable transaction. */
+  private requireItem(slot: number): ItemStack {
+    boundedInteger(slot, 'inventory slot', 0x7fffffff);
+    const item = this.get(slot);
+    if (!item) throw new DecodeError('E_RANGE', 'Source inventory slot is empty');
+    return item;
+  }
+
+  /** Requires a positive amount that fits the source stack. */
+  private static checkAmount(count: number, maximum: number): void {
+    boundedInteger(count, 'transfer amount', maximum);
+    if (!count) throw new DecodeError('E_RANGE', 'Transfer amount must be positive');
+  }
 
   /**
    * Builds the diagnostic string representation for this value.

@@ -1,6 +1,8 @@
 # Getting Started with StarMade-Decoder
 
-> **1.5.0 integrity update:** [Read the migration contract](INTEGRITY_AND_MIGRATION.md) for strict parsing, v7 LZ4, TagDocument, geometry context and changed error handling. Older examples using `writeTo` serialize only the root Tag, not its complete file envelope.
+> **1.7.0 format classes:** Start with [the class guide](FORMAT_MODELS.md) for block/catalogue editing, blueprint grids, inventories and configurable limits.
+
+> **Earlier integrity update:** [Read the migration contract](INTEGRITY_AND_MIGRATION.md) for strict parsing, v7 LZ4, TagDocument, geometry context and changed error handling. Older examples using `writeTo` serialize only the root Tag, not its complete file envelope.
 
 This guide walks you through everything you need to read, edit, and write StarMade save files — no prior knowledge of the file formats required.
 
@@ -26,7 +28,7 @@ This guide walks you through everything you need to read, edit, and write StarMa
 
 ## 1. What is StarMade-Decoder?
 
-StarMade-Decoder is a TypeScript SDK that reads, edits, and writes every binary file format used by the StarMade game server. It is a faithful port of the Java `org.schema.schine.resource.tag.Tag` format used internally by the game engine.
+StarMade-Decoder is a TypeScript SDK that reads, edits, and writes the supported StarMade save and blueprint formats. It is a faithful port of the Java `org.schema.schine.resource.tag.Tag` format used internally by the game engine.
 
 With this SDK you can:
 - Read player data, ships, stations, factions, catalog, and trading routes from a live or archived server world.

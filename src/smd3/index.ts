@@ -127,3 +127,12 @@ export { Smd3Document } from './Smd3Document.js';
 export { BlueprintDocument, readBlueprintDocument, readBlueprintFolderDocument,
   writeSment, writeBlueprintFolder } from './BlueprintDocument.js';
 export type { BlueprintFileMap, BlueprintWriteOptions } from './BlueprintDocument.js';
+
+export { BlockState } from './BlockState.js';
+export { PlacedBlock } from './PlacedBlock.js';
+export { Segment } from './Segment.js';
+export { BlockVolume } from './BlockVolume.js';
+export type { BlockVolumeOptions } from './BlockVolume.js';
+export { validateBlockPosition, segmentOriginOf, localPositionOf, regionCoordinatesOf, blockPositionKey } from './BlockCoordinates.js';
+export { BlueprintModel, BlueprintNode } from './BlueprintModel.js';
+export type { BlueprintModelOptions } from './BlueprintModel.js';

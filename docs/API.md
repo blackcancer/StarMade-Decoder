@@ -633,21 +633,61 @@ Hit point state for ships and stations.
 
 ### `Inventory`
 
-Slot-indexed block inventory.
+Slot-indexed inventory with immutable edits. `fromTag` reads the game's `inv1`
+lists and supported stash/factory envelopes; `toTag` retains the original
+envelope, wrapper fields and opaque item metadata when editing its contents.
 
-- `Inventory.EMPTY` — empty inventory singleton.
-- `Inventory.fromTag(tag)` / `inventory.toTag()`.
+- `Inventory.EMPTY` — empty inventory with no caller-supplied slot limit.
+- `new Inventory(slots, maxSlots?)` — constructs from a `ReadonlyMap<number, ItemStack>`; each map key must equal its item's slot.
+- `Inventory.fromTag(tag, { maxSlots }?)` / `inventory.toTag()` — reads and writes the game representation.
+- `Inventory.fromLegacyTag(tag)` / `inventory.toLegacyTag()` — explicit compatibility with obsolete anonymous SDK tuples. These tuples are not the current game representation; the legacy reader retains its historical fallbacks, and the writer rejects grouped items and opaque metadata payloads.
 - `inventory.get(slot)` — `ItemStack | undefined`.
-- `inventory.set(item)` — immutable update: adds or replaces a slot.
+- `inventory.has(slot)` — whether the slot is occupied.
+- `inventory.set(item)` — adds or replaces a slot; a zero-count stack removes it.
 - `inventory.remove(slot)` — immutable remove.
-- `inventory.clear()` — returns an empty inventory.
+- `inventory.clear()` — empties contents while retaining the envelope and slot policy.
+- `inventory.withContents(other)` — replaces contents while retaining this inventory's envelope and slot policy.
 - `inventory.items` — all `ItemStack[]`.
-- `inventory.size`, `inventory.maxSlots`, `inventory.isFull`.
-- `inventory.byType(blockType)` — `ItemStack[]` of a given type.
-- `inventory.countOf(blockType)` — total quantity of a block type.
+- `inventory.size`, `inventory.maxSlots`, `inventory.isFull` — occupied-slot count and caller policy.
+- `inventory.byType(blockType)` — matching stacks, including grouped slots containing that type.
+- `inventory.countOf(blockType)` — total quantity, counting the matching members of grouped slots.
+- `inventory.add(type, count, slot?)` — adds regular items to a compatible stack or, without a slot, the first unused slot when no compatible stack has room.
+- `inventory.split(sourceSlot, destinationSlot, count)` — splits a regular stack into an empty slot.
+- `inventory.merge(sourceSlot, destinationSlot)` — merges distinct regular stacks of the same type.
+- `inventory.transferTo(target, sourceSlot, destinationSlot, amount?, capacity?)` — returns `{ source, target }` as new inventories; omitting `amount` moves the entire stack. Metadata and grouped stacks must move whole into an empty slot. Within one inventory, use `split` or `merge`.
+- `inventory.usedVolume(volumeOf)` — computes volume from an explicit `(type: number) => number` policy, including grouped constituents.
+- `inventory.assertCapacity({ maximum, volumeOf })` — checks a caller-supplied volume limit and returns the same inventory; `transferTo` can apply this policy to its resulting target.
+- `inventory.toJSON()` — `{ items: ItemStackJSON[], maxSlots: number | null }`; `null` denotes the absence of a caller-supplied slot limit.
 
-**`ItemStack` fields:** `slot`, `type` (block ID), `count`, `meta?: ItemMeta`.
-**`ItemMeta` fields:** `id`, `type`, `orientation`, `subId`.
+`maxSlots` defaults to `Infinity` and limits the **number of occupied slots**,
+not the largest slot index or the game's storage volume. Inventory edits retain
+an explicit limit; this caller policy is not serialized and must be supplied
+again when reading. The SDK does not infer universal game/server
+capacity rules; provide `InventoryCapacity` when a volume limit is required.
+Invalid quantities, incompatible destinations and signed-int overflow fail
+without changing either original inventory.
+
+### `ItemStack`
+
+- `new ItemStack(slot, type, count, meta?, group?)` — creates an immutable stack. Slots and counts are nonnegative signed-int32 values; `type` is a signed short.
+- `ItemStack.special(slot, { id, type, subId, payload })` — creates one special metadata item. Its negative type excludes the multislot marker `-32768`; quantity is always one. The opaque `payload: Tag` is not a count, and `orientation` is a compatibility field initialized to zero.
+- `ItemStack.grouped(slot, name, items)` — creates a multislot from `{ type, count }[]` with distinct positive types and counts. A single member is returned as a regular stack.
+- `item.withSlot(slot)`, `item.withCount(count)`, `item.withType(type)` — immutable edits. Group type/count cannot be changed independently of its members; special-item constraints remain enforced.
+- `item.toJSON()` — detached `ItemStackJSON`; opaque metadata is represented by a complete encoded Tag in `meta.payloadTagBase64`.
+
+**Fields:** `slot`, `type`, `count`, `meta?: ItemMeta`, `group?: ItemGroup`.
+`ItemMeta` contains `id`, `type`, `orientation`, `subId`, and optional `payload`.
+`ItemGroup` contains `name` and `items: Array<{ type, count }>`; its container
+uses type `-32768`. Metadata, grouped members and their Tag payloads are copied
+defensively on input and access.
+
+### `InventoryLocation`
+
+`new InventoryLocation(kind, position, inventory)` identifies storage by its
+entity-local block position. Fields are `kind: number`, a detached immutable
+`position: Readonly<BlockPosition>`, `inventory: Inventory`, and `key: string`.
+Coordinates are signed-int32 values; the stable position key does not include
+the kind. Multiple inventories may share the same kind.
 
 ### `PowerState`
 
@@ -673,18 +713,23 @@ Thrust and dampener configuration for ships.
 Container for all module state (power, shields, inventories, texts, slot assignments).
 
 - `ManagerContainer.EMPTY` — empty singleton.
-- `ManagerContainer.fromTag(tag)` / `mc.toTag(name?)`.
-- `mc.mainInventory`, `mc.capsuleInventory`, `mc.microInventory`, `mc.macroInventory` — convenience inventory accessors.
-- `mc.getInventory(type)` — inventory by type index (0–3).
+- `ManagerContainer.fromTag(tag)` / `mc.toTag()`.
+- `mc.inventoryEntries` — the complete position-indexed collection as `readonly InventoryLocation[]`; malformed entries and duplicate positions fail explicitly.
+- `mc.getInventoryAt(position)` — the inventory at one block position, or `undefined`.
+- `mc.withInventoryAt(position, inventory, kind?)` — inserts or replaces one location, retaining existing wrapper metadata. Omitted `kind` preserves the existing kind or defaults a new entry to stash kind `3`.
+- `mc.withoutInventoryAt(position)` — removes exactly one location.
+- `mc.getInventory(kind = 0)` — compatibility lookup by kind; returns `Inventory.EMPTY` when absent and throws when several locations share that kind.
+- `mc.mainInventory`, `mc.capsuleInventory`, `mc.microInventory`, `mc.macroInventory` — legacy aliases for kinds `0`, `1`, `2`, `3`, with the same ambiguity checks. Their names do not define game storage semantics: kind `1` is a credits converter and kind `3` is a stash.
+- `mc.inventories` — detached legacy `ReadonlyMap<number, Inventory>` keyed by kind; it cannot represent every location when kinds repeat. Use `inventoryEntries` for complete enumeration.
 - `mc.relevantElementCountMap` — block count ECM from index [7], or `null`.
-- **Immutable updates (return new `ManagerContainer`):**
-  - `withInventory(type, inventory)` — replaces an inventory by type.
-  - `withPower(powerState)` — updates the reactor power state.
-  - `withTexts(texts)` — replaces text blocks.
-  - `withSlotAssignment(sa)` — replaces slot assignments.
-  - `withPullPermission(perm)` — changes pull permission.
-- **Fields:** `inventories: ReadonlyMap<number, Inventory>`, `initialShields: number`, `powerState: PowerState`, `texts: TextBlocks`, `slotAssignment: SlotAssignment`, `pullPermission: PullPermission`.
+- `mc.withInventory(kind, inventory)` — compatibility update by kind; rejects ambiguous kinds. If the kind is absent, creates an entry at the origin only when that position is free; otherwise use `withInventoryAt` with an explicit position.
+- `mc.withPower(powerState)`, `mc.withInitialShields(value)`, `mc.withTexts(texts)`, `mc.withSlotAssignment(sa)`, `mc.withPullPermission(perm)` — immutable field updates.
+- **Other fields:** `initialShields: number`, `powerState: PowerState`, `texts: TextBlocks`, `slotAssignment: SlotAssignment`, `pullPermission: PullPermission`.
 - **`PullPermission` enum:** `ALL = 0`, `SELF = 1`, `NONE = 2`.
+
+Manager updates are immutable. Replacing an existing inventory changes
+its contents while retaining that location's stash/factory envelope and other
+manager fields.
 
 ### `SpawnPoint`
 
@@ -784,10 +829,13 @@ Loads and edits `BlockConfig.xml`. Provides typed access to raw block definition
 and StarMade-Open-inspired `BlockElementInfo` views.
 
 **Parse:**
+
 - `BlockConfig.load(config)` — reads the vanilla file from `data/config/` and merges any custom override from `customBlockConfig/BlockConfigImport.xml` when present.
 - `BlockConfig.fromXml(xmlString, blockTypes?)` — parses directly from XML string.
+- `BlockConfig.fromBlocks(iterable)` — constructs from `BlockDefinition` values without I/O. Rejects invalid IDs, duplicate IDs, duplicate normalized type names, and numeric XML type names that disagree with their IDs. Type-name comparisons trim whitespace and ignore case.
 
 **Read:**
+
 - `bc.getById(id)` — `BlockDefinition | undefined`.
 - `bc.getByName(name)` — case-insensitive, `BlockDefinition | undefined`.
 - `bc.getByTypeName(typeName)` — BlockTypes XML key lookup, `BlockDefinition | undefined`.
@@ -797,6 +845,7 @@ and StarMade-Open-inspired `BlockElementInfo` views.
 - `bc[Symbol.iterator]()` — iterates `BlockDefinition` values.
 
 **Element information:**
+
 - `definition.toElementInfo(config?)` — returns one domain-grouped `BlockElementInfo`.
 - `bc.getElementInfoById(id)` — element information by numeric block ID.
 - `bc.getElementInfoByName(name)` — element information by display name.
@@ -810,11 +859,48 @@ the shape of StarMade-Open `ElementInformation` while keeping the raw
 `BlockDefinition` available as `info.block`.
 
 **Mutate (return new `BlockConfig`):**
+
 - `bc.set(definition)` — adds or replaces a block definition.
 - `bc.delete(id)` — removes a block definition.
 
 **Serialize:**
+
+- `bc.toXml()` — returns XML in memory, retaining each `xmlTypeName` and extension data. Symbolic names require the corresponding BlockTypes mapping when reading.
+- `bc.toBlockTypesProperties()` — returns a deterministic Java Properties mapping from every XML type name to its numeric ID, with escaped keys where necessary. Export it alongside `toXml()` for newly introduced types.
 - `bc.saveCustom(config, vanilla)` — writes **only changed or added** definitions to `customBlockConfig/BlockConfigImport.xml`. Never modifies `data/config/BlockConfig.xml`.
+- `bc.saveAll(config)` — writes all definitions to the same custom import path. These filesystem helpers retain the numeric-ID import format.
+
+### `BlockDefinition`
+
+`BlockDefinition.create(options: BlockDefinitionOptions)` requires `id` and
+`name`; all other persisted fields are optional. Creation accepts IDs `1..4094`
+and a nonempty name. Defaults include `xmlTypeName: CUSTOM_BLOCK_<id>`, icon `0`,
+100 HP, mass and volume `0.1`, price `100`, and six zero texture IDs. Partial
+`metadata` merges with defaults, including partial `effectArmor` values.
+
+`definition.with(overrides: BlockDefinitionUpdate)` returns an independent copy
+and accepts every persisted field, including `id`, `icon`, `xmlTypeName`,
+`textureIds`, `slabIds`, `styleIds`, `computerReference`, and `extraProperties`.
+Partial metadata merges with existing metadata; unmodified fields remain intact.
+Input arrays and objects are detached and frozen.
+
+```ts
+const original = BlockDefinition.create({ id: 2000, name: 'Custom hull' });
+const clone = original.with({
+  id: 2001, name: 'Custom light hull', xmlTypeName: 'CUSTOM_LIGHT_HULL',
+  icon: 12, textureIds: [1, 2, 3, 4, 5, 6], mass: 0.05,
+  metadata: { effectArmor: { heat: 2 } },
+});
+const blocks = BlockConfig.fromBlocks([original, clone]);
+const xml = blocks.toXml();
+const properties = blocks.toBlockTypesProperties();
+```
+
+`extraProperties` exposes unknown block XML elements and attributes using
+`@_attributeName` keys. Nested extension values retain their original strings,
+including numeric-looking text and whitespace. Reading, editing and exporting
+also preserves unknown attributes and children on known fields. This preserves
+extension data semantically; XML formatting is not a byte-for-byte contract.
 
 **`BlockDefinition` key fields:**
 
@@ -822,6 +908,8 @@ the shape of StarMade-Open `ElementInformation` while keeping the raw
 |-------|------|-------------|
 | `id` | `number` | Numeric block ID |
 | `name` | `string` | Display name |
+| `xmlTypeName` | `string` | XML/BlockTypes identity |
+| `icon` | `number` | Build icon index |
 | `hp` | `number` | Hit points |
 | `mass` | `number` | Mass in tonnes |
 | `volume` | `number` | Volume in m³ |
@@ -835,9 +923,11 @@ the shape of StarMade-Open `ElementInformation` while keeping the raw
 | `textureIds` | `readonly number[]` | Texture IDs in StarMade face order |
 | `animated` | `boolean` | Raw XML animation flag |
 | `blockStyle` | `number` | StarMade block style ID |
+| `slabIds`, `styleIds` | `readonly number[]` | Variant block IDs |
+| `computerReference` | `number` | Controller block ID; `0` means none |
 | `metadata` | `BlockDefinitionMetadata` | Less common parsed BlockConfig tags |
+| `extraProperties` | `Readonly<Record<string, unknown>>` | Preserved unknown XML fields |
 
-- `definition.with(overrides)` — returns an immutable copy with modified fields.
 - `definition.style` — resolved `BlockStyleDescriptor`.
 - `definition.resourceInjectionInfo` — resolved `ResourceInjectionDescriptor`.
 - `definition.defaultOrientation` — StarMade-Open default orientation rule.
@@ -880,6 +970,34 @@ Reads `FactionConfig.xml` (faction activity and scoring parameters).
 
 ## Blueprint and segment API
 
+### Block and hierarchy classes
+
+See [format classes](FORMAT_MODELS.md) for examples, ownership, limits and migration.
+
+| Class | Main API |
+| --- | --- |
+| `BlockState` | `new BlockState(data)`, `create(type, fields?)`, `fromWord(word)`, `with(fields)`, `toWord()`, `toJSON()`, `fullHitpoints(definition)`, `withFullHitpoints(value, definition)` |
+| `PlacedBlock` | Immutable `position`, `state`, optional `definition`; native `localPosition`, `segmentOrigin`, `toJSON()` |
+| `Segment` | `new Segment(origin?)`, detached `fromData(data)`, live `attach(data)`, `get(x,y,z)`, `set(x,y,z,data)`, `setTimestamp(bigint)`, `entries(config?, includeAir?)`, `toData()`, `toPackedWords()`, `toJSON()` |
+| `BlockVolume` | Live `new BlockVolume(files?, options?)`, detached `fromFiles(files, options?)`, `refresh()`, `segmentAt(position)`, `get(position)`, `blockAt(position)`, `set(position, data)`, `remove(position)`, `entries(includeAir?)`, `countsByType()`, `toFiles()` |
+| `BlueprintModel` | `new BlueprintModel(archive, options?)`, `nodes()`, `find(fullPath)`, `blockCount`, `toJSON()` |
+| `BlueprintNode` | `path`, `parentPath`, `entity`, `blocks`, `toJSON()`; each entity retains its own grid |
+
+`Segment` exposes `x/y/z`, `version`, `lastChanged` and content-derived `blockCount`.
+`BlockVolume` exposes `segments`, `segmentCount` and `blockCount`. State/position
+snapshots are immutable; live editors retain cached counts and indices. Refresh
+or recreate them after raw edits or edits through another view of the same data.
+
+`BlockVolumeOptions` accepts `config`, `maxSegments` and `regionCoordinates` for
+empty source files. `BlueprintModelOptions` accepts `config`, `maxEntities`,
+`maxDepth` and aggregate `maxSegments`. Native addressing helpers are
+`validateBlockPosition`, `segmentOriginOf`, `localPositionOf`,
+`regionCoordinatesOf` and `blockPositionKey`; no rendered transforms are computed.
+
+`BlueprintDocument.blocks(entity?, config?)` creates a live entity grid retaining
+original empty-region filenames. `.model(config?)` exposes a bounded hierarchy
+using the document's limits. Edits flow into the existing document writers.
+
 ### `.smd3` segment files
 
 ```ts
@@ -887,16 +1005,16 @@ import { parseSmd3, writeSmd3, emptySegment, emptySmd3File, getBlock, posToIndex
 ```
 
 - `parseSmd3(data)` — parses a `.smd3` file into `Smd3File`.
-- `writeSmd3(file, segVersion?)` — encodes to `Buffer`. Default format: version 7 (4-byte blocks). Accepts any `Smd3File` including files originally in version 6.
+- `writeSmd3(file, segVersion?)` — encodes a validated, complete region to `Buffer`; defaults to version 7 with four-byte block words and raw LZ4. Version 6 data can be migrated; incomplete recovery results and unsupported historical migrations are rejected.
 - `emptySegment(x?, y?, z?)` — creates an empty `SegmentData` at the given coordinates.
 - `emptySmd3File()` — creates an empty `Smd3File` with no segments.
 - `getBlock(segment, x, y, z)` — `BlockData` at local coordinates within a segment.
 - `posToIndex(x, y, z)` — converts local `(x, y, z)` to a flat block array index.
 - `indexToPos(index)` — inverse of `posToIndex`.
 
-**`Smd3File` fields:** `version`, `segments: SegmentData[]`.
-**`SegmentData` fields:** `version`, `x, y, z` (absolute segment coords), `lastChanged: bigint`, `blockCount`, `blocks: BlockData[]` (length `BLOCK_COUNT = 32768`).
-**`BlockData` fields:** `type: number`, `hp: number`, `active: boolean`, `orientation: number`.
+**`Smd3File` fields:** `headerVersion: number`, `segments: SegmentData[]`, `usedSlots: number`, optional `complete: boolean` and `diagnostics: DecodeDiagnostic[]`. Parsed files include completeness and diagnostics; the region header version is distinct from each segment's version.
+**`SegmentData` fields:** `version`, `x, y, z` (entity block coordinates aligned to 32), `lastChanged: bigint`, `blockCount`, `blocks: BlockData[]` (length `BLOCK_COUNT = 32768`). Writers recalculate derived block counts.
+**`BlockData` fields:** `type: number` (`0` is air; v7 supports `0..8191`), `hp: number` (stored `0..127`), `active: boolean`, `orientation: number` (`0..31`), and optional `extra: number` (`0..63`, reserved bits 26–31). Missing `extra` means zero; decoding and writing preserve these bits.
 
 **Constants:** `CHUNK_DIM = 32`, `BLOCK_COUNT = 32768`, `VERSION_4BYTE = 7`, `DATA_AVAILABLE`, `DATA_EMPTY`, `DATA_SINGLE`, `DATA_BITMAP`, `DATA_SINGLE_SIDE_EDGE`.
 

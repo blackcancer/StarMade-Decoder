@@ -18,6 +18,7 @@ export { HpState }                            from './HpState.js';
 export { TextBlocks }                         from './TextBlocks.js';
 export { SlotAssignment }                     from './SlotAssignment.js';
 export { Inventory, ItemStack }               from './Inventory.js';
-export type { ItemMeta }                      from './Inventory.js';
+export type { ItemMeta, ItemGroup, InventoryCapacity, InventoryReadOptions, ItemStackJSON } from './Inventory.js';
+export { InventoryLocation }                  from './InventoryLocation.js';
 export { PowerState, ThrustConfig }           from './PowerAndThrust.js';
 export { ManagerContainer, PullPermission }   from './ManagerContainer.js';

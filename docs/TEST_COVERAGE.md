@@ -15,8 +15,17 @@ separately and is not claimed to be 100%.
 
 The CI matrix runs the same gates on Node 20, 22 and 24. Reports include HTML,
 JSON, a JSON summary and LCOV. Registry-backed package tests and independent
-Java/LZ4 checks remain separate requirements. The publication preflight also
+Python binary-reference/LZ4 checks remain separate requirements. The publication preflight also
 runs the exact coverage gate.
+
+## Test layout
+
+Test suites mirror the production directory hierarchy: `test/config`, `test/core`,
+`test/db`, `test/smd3`, `test/objects/components`, and the other matching `src`
+directories. Root `index.*.test.ts` suites exercise cross-module contracts exported
+by `src/index.ts`. Shared fixtures and test helpers remain under `test/fixtures`
+and `test/helpers`. `npm run source:check` and CI enforce this layout as well as
+the absence of Java sources and binaries.
 
 ## Added contracts
 

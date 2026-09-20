@@ -23,6 +23,10 @@ import { BlueprintReadContext } from './BlueprintReadContext.js';
 import type { BlueprintParseOptions } from './BlueprintReadContext.js';
 import { BlueprintZip, createBlueprintZip } from './BlueprintZip.js';
 import { readBlueprintFiles, writeBlueprintFiles } from './BlueprintFiles.js';
+import type { BlockConfig } from '../config/BlockConfig.js';
+import type { BlockPosition } from '../objects/ElementPosition.js';
+import { BlockVolume } from './BlockVolume.js';
+import { BlueprintModel } from './BlueprintModel.js';
 
 /** Files use ZIP paths including the blueprint root; null represents a directory. */
 export type BlueprintFileMap = ReadonlyMap<string, Buffer | null>;
@@ -77,9 +81,11 @@ function checkName(name: string, child: boolean): void {
 }
 
 /** Uses Java arithmetic shifts, including negative region coordinates. */
-function regionKey(file: Smd3File): string {
+function regionKey(file: Smd3File, sourcePath = ''): string {
   const s = file.segments[0];
-  return s ? [s.x, s.y, s.z].map(v => ((v >> 5) + 8) >> 4).join('.') : '0.0.0';
+  const coordinates = /\.(-?\d+)\.(-?\d+)\.(-?\d+)\.smd3$/.exec(sourcePath);
+  return s ? [s.x, s.y, s.z].map(v => ((v >> 5) + 8) >> 4).join('.')
+    : coordinates ? coordinates.slice(1).map(Number).join('.') : '0.0.0';
 }
 
 /** A document owns original bytes and exposes an editable complete blueprint tree. */
@@ -177,6 +183,27 @@ export class BlueprintDocument {
 
   /** Provides the editable root; offsets and aggregate counters are derived views. */
   get root(): BlueprintEntity { return this.archive.root; }
+
+  /** Opens a live block grid, retaining source region names, empty allocations and document bytes. */
+  blocks(entity: SmentEntity = this.root, config?: Pick<BlockConfig, 'getById'>): BlockVolume {
+    const located = locate(this.archive, this.options, (candidate, p) => this.byEntity.get(candidate) ?? this.sources.get(p))
+      .find(item => item.entity === entity);
+    if (!located) throw new DecodeError('E_RANGE', 'Entity does not belong to this blueprint document');
+    const regionCoordinates = new Map<Smd3File, BlockPosition>();
+    for (const [file, source] of located.source?.regions ?? []) {
+      const [x, y, z] = regionKey(file, source.path).split('.').map(Number);
+      regionCoordinates.set(file, { x, y, z });
+    }
+    return new BlockVolume(entity.segments, { config, regionCoordinates,
+      maxSegments: Math.floor((this.options.maxBlocks ?? 16 * 1024 * 1024) / BLOCK_COUNT) });
+  }
+
+  /** Bounded hierarchy with instance-scoped block definitions and per-entity live grids. */
+  model(config?: Pick<BlockConfig, 'getById'>): BlueprintModel {
+    return new BlueprintModel(this.archive, { config, maxEntities: this.options.maxEntities,
+      maxDepth: this.options.maxDepth, maxSegments: Math.floor((this.options.maxBlocks ?? 16 * 1024 * 1024) / BLOCK_COUNT) },
+    entity => this.blocks(entity, config));
+  }
 
   /** Returns detached current file contents, including unknown files and empty directories. */
   get files(): Map<string, Buffer | null> { return this.toFiles(); }
@@ -299,7 +326,7 @@ function renderEntities(located: LocatedEntity[], entries: Map<string, Buffer | 
     const regionEntries = new Map<string, Buffer>();
     let changed = !source || entity.segments.length !== source.regions.size;
     for (const file of entity.segments) {
-      const original = source?.regions.get(file) ?? (source && [...source.regions].find(([before]) => regionKey(before) === regionKey(file))?.[1]);
+      const original = source?.regions.get(file) ?? (source && [...source.regions].find(([before, original]) => regionKey(before, original.path) === regionKey(file))?.[1]);
       const name = original ? original.path.slice(source!.path.length + 1) : `DATA/${entity.name}.${regionKey(file)}.smd3`;
       const key = `${p}/${name}`;
       if (regionEntries.has(key)) throw new DecodeError('E_FORMAT', 'Duplicate blueprint region filename', { path: key });

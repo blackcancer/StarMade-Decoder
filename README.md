@@ -4,8 +4,8 @@ TypeScript SDK for reading, inspecting, and rewriting **StarMade** save files an
 
 The SDK implements the Java `org.schema.schine.resource.tag.Tag` binary format and higher-level helpers for entities, blueprints and configuration files.
 
-`main` contains the **1.6.0 blueprint-writing candidate**, including complete `.sment` and
-blueprint-folder writers, the completed audit corrections and exact coverage checks. [Unreleased in the changelog](CHANGELOG.md#unreleased)
+`main` contains the **1.7.0 format-class candidate**, including bounded block/blueprint models,
+editable block definitions, position-indexed inventories and complete archive/folder writers. [Unreleased in the changelog](CHANGELOG.md#unreleased)
 records implemented changes awaiting a versioned release. Pushing these changes to
 GitHub does not publish an npm package.
 
@@ -20,7 +20,10 @@ GitHub does not publish an npm package.
   `BlueprintDocument`, preserving unchanged archives byte-for-byte
 - Preserve SMD3 sector layouts with `Smd3Document`; update only changed records
 - Parse StarMade blueprint formats (`.sment`, `.smd3`, `.smtpl`, `.smbph`, `.smbpl`, `.smbpm`, `.smbmm`)
-- Use typed domain objects for ships, stations, players, factions, catalogs, trading, inventories, and serializable payloads
+- Work with immutable block states, indexed segment grids and bounded blueprint hierarchies
+- Create/edit block definitions and export matching XML/type mappings while preserving unknown fields
+- Read/write position-indexed inventories, opaque metadata items and multislot groups with caller-defined limits
+- Use typed domain objects for ships, stations, players, factions, catalogs, trading, and serializable payloads
 - Load StarMade configuration files, inspect BlockConfig element information, and save custom overrides safely
 - Read and write HSQLDB binary columns for fleet commands/remotes, sector items,
   trade prices and system data, including Java fleet-remotes object streams
@@ -102,6 +105,7 @@ console.log(blocks.getElementInfoByTypeName('CARGO_SPACE')?.render.defaultOrient
 ## Documentation
 
 - [Getting started guide](docs/GUIDE.md) — file system overview, first steps, common pitfalls
+- [Format classes](docs/FORMAT_MODELS.md) — ownership, limits, block/catalogue and inventory examples
 - [API reference](docs/API.md) — complete method and field documentation
 - [Examples](docs/EXAMPLES.md) — ready-to-run code snippets
 - [Changelog](CHANGELOG.md) — implemented changes and earlier versions
@@ -158,7 +162,7 @@ src/
   config/        StarMade config loaders and immutable editors
   db/            HSQLDB binary codecs, business objects and auxiliary save files
   smd3/          blueprint and segment parsers/writers
-test/            round-trip, parser, writer, config, and retrocompat tests
+test/            mirrors src/ directories; cross-module contracts use index.* suites
 scripts/         coverage gates, package checks, Python/LZ4 oracles and sample helpers
 ```
 
@@ -168,6 +172,7 @@ scripts/         coverage gates, package checks, Python/LZ4 oracles and sample h
 npm run build
 npm run source:check
 npm run docs:check
+npm run source:check
 npm run coverage:check
 node scripts/test-coverage-gate.mjs
 npm run test:interop   # Requires Python 3
@@ -194,13 +199,16 @@ STARMADE_TEST_DIR=/srv/StarMade npm run coverage:check
 Once these installation tests are enabled, missing required configuration or
 auxiliary files fail the run. Installation files are read only.
 
-The local 1.6.0 qualification on **2026-09-19** passed **1,186 tests with zero
-pending and zero failing**. All **102 production modules** reached
-**29,175/29,175 lines** and **6,905/6,905 branches**, with the exact blocking gate
-and no coverage exclusions. The installed-package check and independent Java/LZ4
-oracles also passed. See [blueprint qualification](docs/BLUEPRINT_EDITING.md#reference-and-qualification)
-for tested contracts and limitations. The earlier audit evidence remains in
-[the dated audit report](docs/AUDIT_RESOLUTION.md#qualification).
+The local **1.7.0 qualification on 2026-09-20** passed **1,233 tests, zero
+pending and zero failing**, including the installation checks. Every one of the
+**110 production modules** reached **30,246/30,246 lines** and **7,599/7,599
+branches**, with no exclusions and exact blocking checks. Function coverage is
+reported separately: 1,934/1,972 (98.07%). Build, source/layout guards, JSDoc,
+installed-package runtime/types, independent Python binary/LZ4 checks and the
+production dependency audit passed. All 1,516 definitions from the local game
+catalogue also survived an in-memory XML/type-map export/reparse unchanged.
+See [format-class qualification](docs/FORMAT_MODELS.md#reference-and-qualification)
+for scope and limits; earlier results remain in the dated audit/blueprint reports.
 
 ## Exact coverage acceptance
 

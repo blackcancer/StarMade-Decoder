@@ -377,7 +377,7 @@ custom.saveCustom(config, vanilla);
 
 ```bash
 npm run samples:fetch-starmadedock
-npm test -- test/retrocompat.test.ts
+npm test -- test/smd3/retrocompat.test.ts
 ```
 
 The fetcher honors `STARMADEDOCK_MAX_BYTES` to cap downloaded files.

@@ -2,18 +2,65 @@
 
 ## Unreleased
 
-The changes below describe completed development awaiting a versioned release,
-not outstanding tasks. The package version is now the 1.6.0 candidate.
-No npm release or in-game import qualification is implied.
+The changes below are implemented in the **1.7.0 candidate**, awaiting a versioned
+release. This is a format SDK: validation, in-memory edits, explicit serialization
+and adapters between formats. Rendering, administration workflows and database
+engine operations belong to the consuming projects. No npm publication or game
+runtime qualification is implied.
+
+### Format classes
+
+- Add immutable `BlockState` and `PlacedBlock`, validated `Segment`, indexed
+  `BlockVolume` and bounded `BlueprintModel`/`BlueprintNode` classes. Expose native
+  stored coordinates, packed words, sparse JSON and instance-scoped catalogue
+  resolution; retain attachment identities without computing rendered transforms.
+- Connect `BlueprintDocument.blocks()` and `.model()` to existing lossless archive
+  and folder writers, including original identities of empty region files.
+- Add `BlockDefinition.create()` and complete immutable edits; export catalogues
+  with matching XML/properties mappings, preserving unknown XML attributes and
+  subtrees. Reject conflicting IDs/type names and detach nested mutable inputs.
+- Correct actual inventory Tags (`inv1`, stash/factory wrappers, typed slot/type
+  lists, opaque metadata payloads and multislot groups). Preserve unknown fields
+  and wrappers during edits; address manager inventories by block position.
+- Add explicit slot and volume constraints, immutable add/split/merge/transfer
+  operations and JSON projections. No game capacity or server policy is inferred.
+
+### Compatibility
+
+- `Inventory.fromTag()`/`.toTag()` now enforce actual wire layouts. Previous SDK
+  anonymous tuple layouts require explicit `fromLegacyTag()`/`toLegacyTag()`.
+- Inventory slot limits are caller-defined (unbounded by default); there is no
+  hardcoded 36-slot assumption. Limits are not persisted as game capacities.
+- Manager kind aliases are deprecated; ambiguous same-kind lookups fail instead
+  of silently selecting an inventory. Use `inventoryEntries`, `getInventoryAt`,
+  `withInventoryAt` and `withoutInventoryAt` for complete position-based access.
+- Test directories now mirror `src`, with a blocking layout check. The exact
+  all-source/per-file 100% line and branch coverage requirement is unchanged.
 
 ### Source publication boundary
 
-- Remove Java test sources and replace executable Java harnesses with independent
-  Python binary oracles and captured reference vectors; no JDK is required.
-- Reject Java sources and binaries in project files, nested archives and the npm
-  package. CI evidence no longer includes a copy of the source tree.
-- Keep StarMade-Open as an external, read-only reference. Historical JDK results
-  below describe earlier runs, not the current Python validation mechanism.
+- Remove Java test sources; current interoperability checks use independent Python
+  binary oracles and captured JDK vectors. No JDK is required to run them.
+- Reject Java sources/binaries in project files, nested archives and npm packages;
+  CI evidence no longer archives the source tree. StarMade-Open remains external
+  and read only. The published main history and affected CI artifacts were cleaned.
+
+### Qualification — 2026-09-20
+
+- 1,233 tests passed with zero pending/failing, including `/srv/StarMade` checks.
+- All 110 production modules passed exact 100% lines (30,246/30,246) and branches
+  (7,599/7,599), without exclusions or skipped entries.
+- Build, JSDoc, source/test-layout guards, negative coverage checks, installed
+  package runtime/types, Python binary/LZ4 interoperability and production audit
+  passed. All 1,516 installed catalogue definitions survived export/reparse.
+
+See [format classes](docs/FORMAT_MODELS.md) for ownership, examples, migration and
+measured qualification; [coverage requirements](docs/TEST_COVERAGE.md) for gates.
+
+## 1.6.0 — blueprint-writing candidate (2026-09-19)
+
+The following completed changes and measurements describe the earlier candidate.
+The JDK runs below predate removal of the local Java harness sources.
 
 ### Added — complete blueprint writing
 
@@ -27,7 +74,7 @@ No npm release or in-game import qualification is implied.
   Tags and manager/thrust Tag envelopes and extensions.
 - Stage folder writes with explicit overwrite, rollback and retained-backup errors;
   reject incomplete models, unsafe paths, unsupported formats and resource excesses.
-- Add an independent JDK blueprint oracle and production-package writer checks.
+- Add independent blueprint wire validation and production-package writer checks.
 
 See [blueprint editing](docs/BLUEPRINT_EDITING.md) for guarantees and limits.
 
@@ -61,7 +108,7 @@ See [blueprint editing](docs/BLUEPRINT_EDITING.md) for guarantees and limits.
 - On 2026-09-19, `STARMADE_TEST_DIR=/srv/StarMade npm run coverage:check` passed
   **1,096 tests, zero pending and zero failing**, with **27,980/27,980 lines** and
   **6,288/6,288 branches** covered across **98 production modules**. These are measured
-  results for the implementation merged as `04d77af`, not permanent coverage claims.
+  results for the earlier audit implementation, not permanent coverage claims.
 - CI passed on Node.js 20, 22 and 24; the Node.js 22 job also passed JDK and LZ4 checks.
 
 See [audit resolution](docs/AUDIT_RESOLUTION.md) for the A01–A10 evidence,
@@ -305,8 +352,8 @@ Also added `FactionManager.fromBuffer()` and `Catalog.fromBuffer()` which were m
 
 ### Coverage
 - **640 tests passing**, 4 pending (conditional integration tests)
-- 97 new unit tests across `test/javaModifiedUtf.test.ts`, `test/db.test.ts`,
-  `test/db-objects.test.ts`, and additions to `test/writers.test.ts`
+- 97 new unit tests across `test/core/modified-utf.test.ts`, `test/db/db.test.ts`,
+  `test/db/db-objects.test.ts`, and additions to `test/smd3/writers.test.ts`
 
 ---
 
@@ -318,7 +365,7 @@ Also added `FactionManager.fromBuffer()` and `Catalog.fromBuffer()` which were m
   3-byte surrogate sequences, matching `DataInputStream.readUTF()` on the wire.
 - **`BufferWriter.writeJavaModifiedUTF()`** — encodes Java Modified UTF-8 (inverse of the above),
   matching `DataOutputStream.writeUTF()` used by the StarMade TCP admin protocol and fleet command serialization.
-- **14 new unit tests** in `test/javaModifiedUtf.test.ts` covering round-trips (ASCII, NUL,
+- **14 new unit tests** in `test/core/modified-utf.test.ts` covering round-trips (ASCII, NUL,
   accents, emoji/surrogate pairs), error paths (truncated sequences, invalid leading bytes,
   size limit), and consistency with the standard `readJavaUTF` / `writeJavaUTF` on ASCII input.
 

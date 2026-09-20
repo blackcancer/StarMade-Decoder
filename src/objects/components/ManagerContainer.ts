@@ -15,7 +15,7 @@
  *
  * Tag structure ("container"):
  *   STRUCT "container" [
- *     [0]  STRUCT inventories       ← inventories (type→Inventory)
+ *     [0]  STRUCT inventories       ← inventories (kind, position, payload)
  *     [1]  INT    "shipMan0"         ← distance tag (unused)
  *     [2]  STRUCT|BYTE powerTag      ← PowerState for PowerManagerInterface
  *     [3]  DOUBLE|STRUCT shieldTag   ← initialShields or ShieldLocalAddOn
@@ -41,6 +41,11 @@ import { Tags } from '../../core/TagBuilder.js';
 import { TagType } from '../../core/TagType.js';
 import { FINISH_TAG } from '../../core/Tag.js';
 import { Inventory } from './Inventory.js';
+import { InventoryLocation } from './InventoryLocation.js';
+import { copyInventoryTag } from './InventoryWire.js';
+import { DecodeError, boundedInteger } from '../../core/DecodeError.js';
+import type { BlockPosition } from '../ElementPosition.js';
+import { validateBlockPosition, blockPositionKey } from '../../smd3/BlockCoordinates.js';
 import { TextBlocks } from './TextBlocks.js';
 import { SlotAssignment } from './SlotAssignment.js';
 import { PowerState } from './PowerAndThrust.js';
@@ -79,6 +84,8 @@ export enum PullPermission {
  * Represents the ManagerContainer model used by high-level entity component modelling.
  */
 export class ManagerContainer {
+  private readonly inventoryByKind: ReadonlyMap<number, Inventory>;
+  private locations?: ReadonlyMap<string, InventoryLocation>;
   /**
    * Creates a ManagerContainer instance.
    *
@@ -91,8 +98,8 @@ export class ManagerContainer {
    * @param _children - Input value for the constructor operation.
    */
   constructor(
-    /** Inventories by type (0=main, 1=capsule, 2=micro, 3=macro). */
-    readonly inventories: ReadonlyMap<number, Inventory>,
+    /** Legacy kind-keyed view; use inventoryEntries for all positions (kind 3=stash, 1=credits converter). */
+    inventories: ReadonlyMap<number, Inventory>,
     /** Initial shield value. */
     readonly initialShields: number,
     /** Initial power state for the newer reactor system. */
@@ -106,8 +113,16 @@ export class ManagerContainer {
     /** Internal StarMade-Open container slots preserved for faithful round-trip serialization. */
     private readonly _children: Tag[],
   ) {
+    this.inventoryByKind = new Map(inventories);
+    this._children = [..._children];
+    if (this._children[0]?.type === TagType.STRUCT) this._children[0] = copyInventoryTag(this._children[0]);
+    Object.defineProperty(this, 'inventoryByKind', { enumerable: false });
+    Object.defineProperty(this, 'locations', { enumerable: false, writable: true });
     Object.defineProperty(this, '_children', { enumerable: false });
   }
+
+  /** Detached legacy kind-keyed view; inventoryEntries is the complete collection keyed by position. */
+  get inventories(): ReadonlyMap<number, Inventory> { return new Map(this.inventoryByKind); }
 
   static EMPTY = new ManagerContainer(
     new Map(), 0, PowerState.EMPTY, TextBlocks.EMPTY, SlotAssignment.EMPTY,
@@ -176,35 +191,98 @@ export class ManagerContainer {
   // ── Accessors ─────────────────────────────────────────────────────────────────
 
   /**
-   * Returns Inventory.
+   * Returns an unambiguous legacy kind match.
+   * @deprecated Use getInventoryAt(position) to address the complete collection.
    *
    * @param type - Input value for the getInventory operation.
    * @returns The computed StarMade-Decoder value.
    */
   getInventory(type = 0): Inventory {
-    return this.inventories.get(type) ?? Inventory.EMPTY;
+    if (this.inventoryTags().filter(tag => tag.type === TagType.STRUCT && tag.getStruct()[0]?.value === type).length > 1) {
+      throw new DecodeError('E_FORMAT', 'Several inventories share this kind; use getInventoryAt(position)');
+    }
+    return this.inventoryByKind.get(type) ?? Inventory.EMPTY;
+  }
+
+  /** Complete position-indexed inventories; malformed or duplicate positions fail explicitly. */
+  get inventoryEntries(): readonly InventoryLocation[] {
+    return [...this.inventoryLocations().values()];
+  }
+
+  /** Builds the immutable position index once; repeated lookups are constant time. */
+  private inventoryLocations(): ReadonlyMap<string, InventoryLocation> {
+    if (this.locations) return this.locations;
+    const locations = new Map<string, InventoryLocation>();
+    for (const tag of this.inventoryTags()) {
+      if (tag.type !== TagType.STRUCT) throw new DecodeError('E_FORMAT', 'Invalid inventory entry');
+      const parts = tag.getStruct();
+      if (parts[0]?.type !== TagType.INT || parts[1]?.type !== TagType.VECTOR3i || parts[2]?.type !== TagType.STRUCT) {
+        throw new DecodeError('E_FORMAT', 'Inventory entries require kind, block position and inventory payload');
+      }
+      const entry = new InventoryLocation(parts[0].getInt(), parts[1].getVector3i(), Inventory.fromTag(parts[2]));
+      if (locations.has(entry.key)) throw new DecodeError('E_FORMAT', 'Duplicate inventory block position');
+      locations.set(entry.key, entry);
+    }
+    this.locations = locations;
+    return locations;
+  }
+
+  /** Looks up an inventory by its actual block position, without conflating inventories of one kind. */
+  getInventoryAt(position: BlockPosition): Inventory | undefined {
+    validateBlockPosition(position);
+    const key = blockPositionKey(position);
+    return this.inventoryLocations().get(key)?.inventory;
+  }
+
+  /** Edits one location and preserves its wrapper metadata; new inventories default to stash kind 3. */
+  withInventoryAt(position: BlockPosition, inventory: Inventory, kind?: number): ManagerContainer {
+    validateBlockPosition(position);
+    const entries = this.inventoryEntries, key = blockPositionKey(position), index = entries.findIndex(entry => entry.key === key);
+    const tags = this.inventoryTags(), old = index < 0 ? undefined : tags[index];
+    const parts = old ? old.getStruct().filter(tag => tag.type !== TagType.FINISH) : [];
+    const targetKind = kind ?? (index < 0 ? 3 : entries[index].kind);
+    boundedInteger(targetKind, 'inventory kind', 0x7fffffff);
+    parts[0] = Tags.int(parts[0]?.name ?? null, targetKind);
+    parts[1] = Tags.vector3i(parts[1]?.name ?? null, position.x, position.y, position.z);
+    parts[2] = index < 0 ? inventory.toTag() : entries[index].inventory.withContents(inventory).toTag();
+    const replacement = Tags.struct(old?.name ?? null, parts);
+    if (index < 0) tags.push(replacement); else tags[index] = replacement;
+    return this.replaceInventoryTags(tags);
+  }
+
+  /** Removes exactly one position, leaving other inventories and manager fields intact. */
+  withoutInventoryAt(position: BlockPosition): ManagerContainer {
+    validateBlockPosition(position);
+    const index = this.inventoryEntries.findIndex(entry => entry.key === blockPositionKey(position));
+    if (index < 0) return this;
+    const tags = this.inventoryTags(); tags.splice(index, 1);
+    return this.replaceInventoryTags(tags);
   }
 
   /**
-   * Handles the mainInventory operation used by high-level entity component modelling.
+   * Legacy kind alias.
+   * @deprecated Use getInventoryAt(position); kinds are not unique inventory identities.
    *
    * @returns The computed StarMade-Decoder value.
    */
   get mainInventory():     Inventory { return this.getInventory(0); }
   /**
-   * Handles the capsuleInventory operation used by high-level entity component modelling.
+   * Legacy kind alias.
+   * @deprecated Use getInventoryAt(position); kinds are not unique inventory identities.
    *
    * @returns The computed StarMade-Decoder value.
    */
   get capsuleInventory():  Inventory { return this.getInventory(1); }
   /**
-   * Handles the microInventory operation used by high-level entity component modelling.
+   * Legacy kind alias.
+   * @deprecated Use getInventoryAt(position); kinds are not unique inventory identities.
    *
    * @returns The computed StarMade-Decoder value.
    */
   get microInventory():    Inventory { return this.getInventory(2); }
   /**
-   * Handles the macroInventory operation used by high-level entity component modelling.
+   * Legacy kind alias.
+   * @deprecated Use getInventoryAt(position); kinds are not unique inventory identities.
    *
    * @returns The computed StarMade-Decoder value.
    */
@@ -312,10 +390,37 @@ export class ManagerContainer {
    * @returns The computed StarMade-Decoder value.
    */
   withInventory(type: number, inventory: Inventory): ManagerContainer {
-    const m = new Map(this.inventories);
-    m.set(type, inventory);
-    return new ManagerContainer(m, this.initialShields, this.powerState,
-      this.texts, this.slotAssignment, this.pullPermission, this._children);
+    boundedInteger(type, 'inventory kind', 0x7fffffff);
+    const tags = this.inventoryTags(), indices = tags.flatMap((tag, index) =>
+      tag.type === TagType.STRUCT && tag.getStruct()[0]?.value === type ? [index] : []);
+    if (indices.length > 1) throw new DecodeError('E_FORMAT', 'Several inventories share this kind; use withInventoryAt(position)');
+    if (!indices.length) {
+      if (this.getInventoryAt({ x: 0, y: 0, z: 0 })) throw new DecodeError('E_FORMAT', 'Origin inventory already exists; specify a free position');
+      return this.withInventoryAt({ x: 0, y: 0, z: 0 }, inventory, type);
+    }
+    const index = indices[0], old = tags[index], parts = old.getStruct().filter(tag => tag.type !== TagType.FINISH);
+    parts[2] = parts[2]?.type === TagType.STRUCT ? Inventory.fromTag(parts[2]).withContents(inventory).toTag() : inventory.toTag();
+    tags[index] = Tags.struct(old.name, parts);
+    return this.replaceInventoryTags(tags);
+  }
+
+  /** Reads entry tags while retaining their original names and extension fields. */
+  private inventoryTags(): Tag[] {
+    return this._children[0]?.type === TagType.STRUCT
+      ? this._children[0].getStruct().filter(tag => tag.type !== TagType.FINISH) : [];
+  }
+
+  /** Updates both serialized state and the deprecated kind-keyed compatibility view. */
+  private replaceInventoryTags(tags: Tag[]): ManagerContainer {
+    const children = [...this._children]; children[0] = Tags.struct(children[0]?.name ?? null, tags);
+    const inventories = new Map<number, Inventory>();
+    for (const tag of tags) {
+      if (tag.type !== TagType.STRUCT) continue;
+      const parts = tag.getStruct();
+      if (parts[0]?.type === TagType.INT && parts[2]?.type === TagType.STRUCT) inventories.set(parts[0].getInt(), Inventory.fromTag(parts[2]));
+    }
+    return new ManagerContainer(inventories, this.initialShields, this.powerState,
+      this.texts, this.slotAssignment, this.pullPermission, children);
   }
 
   /**
@@ -453,6 +558,7 @@ export class ManagerContainer {
   toTag(): Tag {
     // Rebuild from raw children while replacing the known fields
     const children = [...this._children];
+    if (children[0]?.type === TagType.STRUCT) children[0] = copyInventoryTag(children[0]);
 
     // Helper that replaces or inserts a field at a fixed index
     const setAt = (idx: number, t: Tag) => {

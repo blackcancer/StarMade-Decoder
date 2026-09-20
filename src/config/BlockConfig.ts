@@ -539,6 +539,55 @@ const DEFAULT_BLOCK_METADATA: BlockDefinitionMetadata = Object.freeze({
   lodActivationAnimationStyle: 0,
 });
 
+/** Persisted constructor fields, excluding computed views and methods. */
+export type BlockDefinitionFields = Pick<BlockDefinition,
+  'id' | 'name' | 'icon' | 'hp' | 'mass' | 'volume' | 'price' | 'description' | 'armor' |
+  'isPlacable' | 'inShop' | 'hasOrientation' | 'canActivate' | 'isDeprecated' | 'blockStyle' |
+  'slabIds' | 'styleIds' | 'computerReference' | 'xmlTypeName' | 'textureIds' | 'transparent' |
+  'animated' | 'individualSides' | 'sideTexturesPointToOrientation' | 'hasActivationTexture' |
+  'lightSource' | 'lightSourceColor' | 'lodShape' | 'lodShapeActive' | 'lodShapeStyle' |
+  'drawOnlyInBuildMode' | 'extendedTexture' | 'resourceInjection' | 'chamberRoot' |
+  'reactorChamberSpecific' | 'lodCollisionPhysical' | 'slab' | 'drawLogicConnection' |
+  'logicBlock' | 'logicSignaledByRail' | 'logicBlockButton' | 'metadata' | 'extraProperties'>;
+
+/** Partial metadata edits merge with existing fields, including individual armor effects. */
+export type BlockDefinitionMetadataInput = Omit<Partial<BlockDefinitionMetadata>, 'effectArmor'> & {
+  effectArmor?: Partial<BlockEffectArmor>;
+};
+
+/** Named updates cover every persisted block field. */
+export type BlockDefinitionUpdate = Omit<Partial<BlockDefinitionFields>, 'metadata'> & {
+  metadata?: BlockDefinitionMetadataInput;
+};
+
+/** Creation requires an explicit numeric identity and display name. */
+export type BlockDefinitionOptions = BlockDefinitionUpdate & { id: number; name: string };
+
+/**
+ * Detaches and freezes XML-compatible arrays/objects without changing scalar values.
+ * @param value - Acyclic configuration value.
+ * @returns Deep immutable snapshot.
+ */
+function immutableSnapshot<T>(value: T): T {
+  if (Array.isArray(value)) return Object.freeze(value.map(immutableSnapshot)) as T;
+  if (value !== null && typeof value === 'object') {
+    return Object.freeze(Object.fromEntries(Object.entries(value).map(([key, child]) => [key, immutableSnapshot(child)]))) as T;
+  }
+  return value;
+}
+
+/**
+ * Unwraps an XML text node while retaining its attributes separately for writing.
+ * @param value - Parser value, possibly carrying a #text member.
+ * @returns Scalar text when the XML node has explicit attributes.
+ */
+function xmlText(value: any): any {
+  return value !== null && typeof value === 'object' && '#text' in value ? value['#text'] : value;
+}
+
+/** Raw XML and its original known-field projection, retained across immutable edits. */
+const BLOCK_XML_SOURCE = new WeakMap<BlockDefinition, { raw: Record<string, unknown>; known: Record<string, unknown> }>();
+
 /**
  * Immutable parsed BlockConfig block definition.
  *
@@ -591,6 +640,7 @@ export class BlockDefinition {
    * @param logicSignaledByRail - Input value for the constructor operation.
    * @param logicBlockButton - Input value for the constructor operation.
    * @param metadata - Input value for the constructor operation.
+   * @param extraProperties - Unknown XML elements and attributes, using @_ attribute keys.
    */
   constructor(
     /** Numeric block ID from the XML "type" attribute. */
@@ -677,7 +727,29 @@ export class BlockDefinition {
     readonly logicBlockButton: boolean = false,
     /** Additional parsed BlockConfig tags that do not yet deserve top-level fields. */
     readonly metadata: BlockDefinitionMetadata = DEFAULT_BLOCK_METADATA,
-  ) {}
+    /** Unknown XML fields, retained recursively without numeric/text normalization. */
+    readonly extraProperties: Readonly<Record<string, unknown>> = {},
+  ) {
+    this.slabIds = immutableSnapshot(slabIds);
+    this.styleIds = immutableSnapshot(styleIds);
+    this.textureIds = immutableSnapshot(textureIds);
+    this.lightSourceColor = immutableSnapshot(lightSourceColor);
+    this.metadata = immutableSnapshot(metadata);
+    this.extraProperties = immutableSnapshot(extraProperties);
+    Object.freeze(this);
+  }
+
+  /**
+   * Creates a block with named fields and merged metadata defaults.
+   * @param options - Numeric ID and name, plus optional persisted fields.
+   * @returns Detached block definition suitable for immutable edits and exports.
+   */
+  static create(options: BlockDefinitionOptions): BlockDefinition {
+    if (!Number.isInteger(options.id) || options.id < 1 || options.id >= 4095) throw new RangeError('Block id must be an integer in [1, 4094]');
+    if (typeof options.name !== 'string' || options.name.trim() === '') throw new TypeError('Block name must be a non-empty string');
+    return new BlockDefinition(options.id, options.name, 0, 100, 0.1, 0.1, 100, '', 0,
+      true, true, false, false, false, 0, [], [], 0, `CUSTOM_BLOCK_${options.id}`, [0, 0, 0, 0, 0, 0]).with(options);
+  }
 
   /** StarMade-Open BlockStyle descriptor for this block style ID. */
   get style(): BlockStyleDescriptor {
@@ -764,29 +836,13 @@ export class BlockDefinition {
   }
 
   /** Returns an immutable variant with one or more modified properties. */
-  with(overrides: Partial<{
-    name: string; hp: number; mass: number; volume: number;
-    price: number; description: string; armor: number;
-    isPlacable: boolean; inShop: boolean; hasOrientation: boolean;
-    canActivate: boolean; isDeprecated: boolean; blockStyle: number;
-    textureIds: readonly number[]; transparent: boolean; animated: boolean;
-    individualSides: number; sideTexturesPointToOrientation: boolean;
-    hasActivationTexture: boolean; lightSource: boolean;
-    lightSourceColor: readonly [number, number, number, number];
-    lodShape: string; lodShapeActive: string; lodShapeStyle: number;
-    drawOnlyInBuildMode: boolean; extendedTexture: boolean;
-    resourceInjection: number; chamberRoot: number;
-    reactorChamberSpecific: boolean; lodCollisionPhysical: boolean;
-    slab: number; drawLogicConnection: boolean; logicBlock: boolean;
-    logicSignaledByRail: boolean; logicBlockButton: boolean;
-    metadata: BlockDefinitionMetadata;
-  }>): BlockDefinition {
+  with(overrides: BlockDefinitionUpdate): BlockDefinition {
     const chamberRoot = overrides.chamberRoot ?? this.chamberRoot;
 
-    return new BlockDefinition(
-      this.id,
+    const updated = new BlockDefinition(
+      overrides.id ?? this.id,
       overrides.name         ?? this.name,
-      this.icon,
+      overrides.icon ?? this.icon,
       overrides.hp           ?? this.hp,
       overrides.mass         ?? this.mass,
       overrides.volume       ?? this.volume,
@@ -799,10 +855,10 @@ export class BlockDefinition {
       overrides.canActivate  ?? this.canActivate,
       overrides.isDeprecated ?? this.isDeprecated,
       overrides.blockStyle   ?? this.blockStyle,
-      this.slabIds,
-      this.styleIds,
-      this.computerReference,
-      this.xmlTypeName,
+      overrides.slabIds ?? this.slabIds,
+      overrides.styleIds ?? this.styleIds,
+      overrides.computerReference ?? this.computerReference,
+      overrides.xmlTypeName ?? this.xmlTypeName,
       overrides.textureIds ?? this.textureIds,
       overrides.transparent ?? this.transparent,
       overrides.animated ?? this.animated,
@@ -818,15 +874,19 @@ export class BlockDefinition {
       overrides.extendedTexture ?? this.extendedTexture,
       overrides.resourceInjection ?? this.resourceInjection,
       chamberRoot,
-      overrides.reactorChamberSpecific ?? (chamberRoot !== 0),
+      overrides.reactorChamberSpecific ?? (overrides.chamberRoot === undefined ? this.reactorChamberSpecific : chamberRoot !== 0),
       overrides.lodCollisionPhysical ?? this.lodCollisionPhysical,
       overrides.slab ?? this.slab,
       overrides.drawLogicConnection ?? this.drawLogicConnection,
       overrides.logicBlock ?? this.logicBlock,
       overrides.logicSignaledByRail ?? this.logicSignaledByRail,
       overrides.logicBlockButton ?? this.logicBlockButton,
-      overrides.metadata ?? this.metadata,
+      { ...this.metadata, ...overrides.metadata, effectArmor: { ...this.metadata.effectArmor, ...overrides.metadata?.effectArmor } },
+      overrides.extraProperties ?? this.extraProperties,
     );
+    const source = BLOCK_XML_SOURCE.get(this);
+    if (source) BLOCK_XML_SOURCE.set(updated, source);
+    return updated;
   }
 
   /**
@@ -852,6 +912,15 @@ const XML_PARSER = new XMLParser({
   isArray: (name) => ['Block'].includes(name),
 });
 
+/** Extension nodes retain lexical strings and intentional text whitespace. */
+const XML_EXTENSION_PARSER = new XMLParser({
+  ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false,
+  trimValues: false, isArray: (name) => name === 'Block',
+});
+
+/** Compact output avoids injecting whitespace into unknown mixed-content nodes. */
+const XML_EXTENSION_BUILDER = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: false });
+
 /**
  * Defines XML_BUILDER for StarMade configuration loading, editing, and metadata enrichment.
  */
@@ -871,7 +940,7 @@ const XML_BUILDER = new XMLBuilder({
 function normalizeElementValues(value: unknown): readonly string[] {
   if (value === undefined || value === null || value === '') return [];
   if (Array.isArray(value)) return value.flatMap((item) => normalizeElementValues(item));
-  return [String(value)].filter((item) => item.length > 0);
+  return [String(xmlText(value))].filter((item) => item.length > 0);
 }
 
 /**
@@ -919,7 +988,7 @@ function parseIngredientList(value: unknown): readonly BlockIngredient[] {
  */
 function parseBraceIntArray(value: unknown): readonly number[] {
   if (value === undefined || value === null) return [];
-  const text = String(value).replace(/[{}]/g, '').trim();
+  const text = String(xmlText(value)).replace(/[{}]/g, '').trim();
   if (!text) return [];
 
   return text.split(',').map((part) => parseInt(part.trim(), 10)).filter((part) => Number.isFinite(part));
@@ -935,7 +1004,7 @@ function parseCollisionShape(value: unknown): BlockCollisionShape | null {
   if (value === undefined || value === null || typeof value !== 'object') return null;
   const raw = value as { StyleId?: unknown; '@_slab'?: unknown; '@_type'?: unknown };
   const slab = parseInt(String(raw['@_slab'] ?? 0), 10);
-  const styleId = parseInt(String(raw.StyleId ?? 0), 10);
+  const styleId = parseInt(String(xmlText(raw.StyleId) ?? 0), 10);
 
   return {
     type: String(raw['@_type'] ?? ''),
@@ -956,9 +1025,9 @@ function parseEffectArmor(value: unknown): BlockEffectArmor {
   }
 
   const raw = value as { Heat?: unknown; Kinetic?: unknown; EM?: unknown };
-  const heat = parseFloat(String(raw.Heat ?? 0));
-  const kinetic = parseFloat(String(raw.Kinetic ?? 0));
-  const em = parseFloat(String(raw.EM ?? 0));
+  const heat = parseFloat(String(xmlText(raw.Heat) ?? 0));
+  const kinetic = parseFloat(String(xmlText(raw.Kinetic) ?? 0));
+  const em = parseFloat(String(xmlText(raw.EM) ?? 0));
 
   return {
     heat: Number.isFinite(heat) ? heat : 0,
@@ -1359,6 +1428,141 @@ function createBlockElementInfo(block: BlockDefinition, config?: BlockConfig): B
   };
 }
 
+/**
+ * Projects every persisted field into its explicit XML schema key.
+ * @param b - Block to serialize.
+ * @param namedTypes - Preserve symbolic type names for paired mapping exports.
+ * @returns Known XML fields, independently of extension data.
+ */
+function blockFieldsToXml(b: BlockDefinition, namedTypes: boolean): Record<string, unknown> {
+  return {
+  '@_type':              namedTypes ? b.xmlTypeName : b.id,
+  '@_name':              b.name,
+  '@_icon':              b.icon,
+  '@_textureId':         b.textureIds.join(', '),
+  Hitpoints:             b.hp,
+  Mass:                  b.mass,
+  Volume:                b.volume,
+  Price:                 b.price,
+  Description:           b.description,
+  ArmorValue:            b.armor,
+  Placable:              b.isPlacable,
+  InShop:                b.inShop,
+  Orientation:           b.hasOrientation,
+  CanActivate:           b.canActivate,
+  Deprecated:            b.isDeprecated,
+  BlockStyle:            b.blockStyle,
+  Slab:                  b.slab,
+  Transparency:          b.transparent,
+  Animated:              b.animated,
+  IndividualSides:       b.individualSides,
+  SideTexturesPointToOrientation: b.sideTexturesPointToOrientation,
+  HasActivationTexture:  b.hasActivationTexture,
+  DrawLogicConnection:   b.drawLogicConnection,
+  LogicBlock:            b.logicBlock,
+  LogicSignaledByRail:   b.logicSignaledByRail,
+  LogicBlockButton:      b.logicBlockButton,
+  LightSource:           b.lightSource,
+  LightSourceColor:      b.lightSourceColor.join(','),
+  LodShape:              b.lodShape,
+  LodShapeSwitchStyleActive: b.lodShapeActive,
+  LodShapeFromFar:       b.lodShapeStyle,
+  LodActivationAnimationStyle: b.metadata.lodActivationAnimationStyle,
+  OnlyDrawnInBuildMode:  b.drawOnlyInBuildMode,
+  ExtendedTexture4x4:    b.extendedTexture,
+  ResourceInjection:     b.resourceInjection,
+  ChamberRoot:           b.chamberRoot,
+  LodCollisionPhysical:  b.lodCollisionPhysical,
+  FullName:              b.metadata.fullName,
+  OldHitpoints:          b.metadata.oldHitpoints,
+  LowHpSetting:          b.metadata.lowHpSetting,
+  StructureHPContribution: b.metadata.structureHpContribution,
+  ExplosionAbsorbtion:   b.metadata.explosionAbsorption,
+  BlockResourceType:     b.metadata.blockResourceType,
+  BasicResourceFactory:  b.metadata.basicResourceFactory,
+  ProducedInFactory:     b.metadata.producedInFactory,
+  FactoryBakeTime:       b.metadata.factoryBakeTime,
+  InRecipe:              b.metadata.inRecipe,
+  Physical:              b.metadata.physical,
+  CubeCubeCollision:     b.metadata.cubeCubeCollision,
+  UseDetailedCollisionForAstronautMode: b.metadata.useDetailedCollisionForAstronautMode,
+  CollisionDefault:      collisionShapeToXml(b.metadata.collisionDefault),
+  DetailedCollisionForAstronautMode: collisionShapeToXml(b.metadata.detailedCollisionForAstronautMode),
+  Door:                  b.metadata.door,
+  Beacon:                b.metadata.beacon,
+  Enterable:             b.metadata.enterable,
+  SensorInput:           b.metadata.sensorInput,
+  SystemBlock:           b.metadata.systemBlock,
+  SourceReference:       b.metadata.sourceReference,
+  InventoryGroup:        b.metadata.inventoryGroup,
+  ControlledBy:          elementsToXml(b.metadata.controlledBy),
+  Controlling:           elementsToXml(b.metadata.controlling),
+  Consistence:           ingredientsToXml(b.metadata.consistence),
+  CubatomConsistence:    ingredientsToXml(b.metadata.cubatomConsistence),
+  RecipeBuyResource:     elementsToXml(b.metadata.recipeBuyResources),
+  WildcardIds:           b.metadata.wildcardIds.join(', '),
+  MainCombinationController: b.metadata.mainCombinationController,
+  SupportCombinationController: b.metadata.supportCombinationController,
+  EffectCombinationController: b.metadata.effectCombinationController,
+  EffectArmor:           effectArmorToXml(b.metadata.effectArmor),
+  GeneralChamber:        b.metadata.generalChamber,
+  ChamberParent:         b.metadata.chamberParent,
+  ChamberChildren:       braceIntArrayToXml(b.metadata.chamberChildren),
+  ChamberPrerequisites:  braceIntArrayToXml(b.metadata.chamberPrerequisites),
+  ChamberMutuallyExclusive: braceIntArrayToXml(b.metadata.chamberMutuallyExclusive),
+  ChamberUpgradesTo:     b.metadata.chamberUpgradesTo,
+  ChamberAppliesTo:      b.metadata.chamberAppliesTo,
+  ChamberCapacity:       b.metadata.chamberCapacity,
+  ChamberPermission:     b.metadata.chamberPermission,
+  ChamberConfigGroups:   elementsToXml(b.metadata.chamberConfigGroups),
+  ReactorHp:             b.metadata.reactorHp,
+  ReactorGeneralIconIndex: b.metadata.reactorGeneralIconIndex,
+  SlabIds:               b.slabIds.join(', '),
+  StyleIds:              b.styleIds.join(', '),
+  BlockComputerReference: b.computerReference,
+  };
+}
+
+/**
+ * Merges an edited known XML value while retaining unknown children and attributes.
+ * @param previous - Original raw XML subtree.
+ * @param current - Explicit new known-field projection.
+ * @returns XML value with unchanged extension data.
+ */
+function mergeXmlValue(previous: any, current: any): any {
+  if (current === undefined) return undefined;
+  if (Array.isArray(current)) {
+    const oldValues = Array.isArray(previous) ? previous : previous === undefined ? [] : [previous];
+    return current.map((value, index) => mergeXmlValue(oldValues[index], value));
+  }
+  if (current !== null && typeof current === 'object') {
+    const output = previous !== null && typeof previous === 'object' && !Array.isArray(previous) ? { ...previous } : {};
+    for (const [key, value] of Object.entries(current)) output[key] = mergeXmlValue(output[key], value);
+    return output;
+  }
+  if (previous !== null && typeof previous === 'object' && !Array.isArray(previous)) return { ...previous, '#text': current };
+  return current;
+}
+
+/**
+ * Serializes known fields and extension snapshots without normalizing unknown data.
+ * @param block - Original or edited immutable model.
+ * @param namedTypes - Preserve type names for paired XML/properties exports.
+ * @returns XML builder input.
+ */
+function blockToXml(block: BlockDefinition, namedTypes: boolean): Record<string, unknown> {
+  const known = blockFieldsToXml(block, namedTypes), source = BLOCK_XML_SOURCE.get(block);
+  const result: Record<string, unknown> = { ...block.extraProperties, ...known };
+  if (source) {
+    for (const [key, value] of Object.entries(known)) {
+      if (JSON.stringify(value) === JSON.stringify(source.known[key])) {
+        if (Object.hasOwn(source.raw, key)) result[key] = source.raw[key]; else delete result[key];
+      } else result[key] = mergeXmlValue(source.raw[key], value);
+    }
+  }
+  return result;
+}
+
 // ── BlockConfig ────────────────────────────────────────────────────────────────
 
 /**
@@ -1419,6 +1623,23 @@ export class BlockConfig {
    */
   static fromXml(xml: string, blockTypes = new Map<string, number>()): BlockConfig {
     return new BlockConfig([...BlockConfig._parseXml(xml, blockTypes).values()]);
+  }
+
+  /**
+   * Indexes explicit models and rejects identities that would overwrite one another.
+   * @param blocks - Existing or newly created block definitions.
+   * @returns Configuration with independent collection storage.
+   */
+  static fromBlocks(blocks: Iterable<BlockDefinition>): BlockConfig {
+    const values = [...blocks], ids = new Set<number>(), types = new Set<string>();
+    for (const block of values) {
+      const type = normalizeTypeName(block.xmlTypeName);
+      if (!Number.isSafeInteger(block.id) || block.id < 1 || block.id >= 4095 || !type) throw new RangeError('Block id and XML type name must be valid');
+      if (/^\d+$/.test(type) && Number(type) !== block.id) throw new Error('Numeric XML type name conflicts with block id');
+      if (ids.has(block.id) || types.has(type)) throw new Error('Duplicate block id or XML type name');
+      ids.add(block.id); types.add(type);
+    }
+    return new BlockConfig(values);
   }
 
   // ── Accessors ─────────────────────────────────────────────────────────────────
@@ -1522,6 +1743,28 @@ export class BlockConfig {
   // ── Writing ───────────────────────────────────────────────────────────────
 
   /**
+   * Serializes all blocks in memory, retaining symbolic type names and extensions.
+   * @returns XML to use with toBlockTypesProperties for newly named block IDs.
+   */
+  toXml(): string {
+    BlockConfig.fromBlocks(this);
+    return BlockConfig._toXml(this.all, true);
+  }
+
+  /**
+   * Exports every XML type name as a Java Properties mapping to its numeric ID.
+   * @returns Deterministic property records, escaping non-portable key characters.
+   */
+  toBlockTypesProperties(): string {
+    BlockConfig.fromBlocks(this);
+    return this.all.sort((left, right) => left.id - right.id).map(block => {
+      const key = block.xmlTypeName.replace(/[^A-Za-z0-9_.-]/g,
+        character => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`);
+      return `${key}=${block.id}\n`;
+    }).join('');
+  }
+
+  /**
    * Writes only blocks that differ from vanilla into customBlockConfig.
    *
    * @param config - StarMade tool configuration with resolved custom paths.
@@ -1575,7 +1818,7 @@ export class BlockConfig {
       if (!t || t.startsWith('#')) continue;
       const eq = t.indexOf('=');
       if (eq < 0) continue;
-      const name = t.slice(0, eq).trim();
+      const name = t.slice(0, eq).trim().replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
       const id   = parseInt(t.slice(eq + 1).trim(), 10);
       if (name && !isNaN(id)) map.set(name, id);
     }
@@ -1603,7 +1846,7 @@ export class BlockConfig {
   private static _parseXml(xml: string, typeIds: Map<string, number>): Map<number, BlockDefinition> {
     const result = XML_PARSER.parse(xml);
     const blocks = new Map<number, BlockDefinition>();
-    BlockConfig._walkNode(result, typeIds, blocks);
+    BlockConfig._walkNode(result, typeIds, blocks, XML_EXTENSION_PARSER.parse(xml));
     return blocks;
   }
 
@@ -1613,10 +1856,10 @@ export class BlockConfig {
    * The numeric ID is resolved through BlockTypes.properties (typeIds).
    * In BlockConfigImport.xml, @_type may also be a direct integer ID.
    */
-  private static _walkNode(node: any, typeIds: Map<string, number>, blocks: Map<number, BlockDefinition>): void {
+  private static _walkNode(node: any, typeIds: Map<string, number>, blocks: Map<number, BlockDefinition>, rawNode: any = node): void {
     if (node === null || typeof node !== 'object') return;
     if (Array.isArray(node)) {
-      for (const item of node) BlockConfig._walkNode(item, typeIds, blocks);
+      for (const [index, item] of node.entries()) BlockConfig._walkNode(item, typeIds, blocks, rawNode[index]);
       return;
     }
 
@@ -1626,20 +1869,21 @@ export class BlockConfig {
     if (rawType !== undefined && rawName !== undefined) {
       let id: number;
       const parsed = parseInt(String(rawType), 10);
-      if (!isNaN(parsed) && parsed > 0) {
+      if (/^\d+$/.test(String(rawType)) && parsed > 0) {
         id = parsed; // custom import using a direct numeric ID
       } else {
         id = typeIds.get(String(rawType)) ?? 0;
       }
 
       if (id > 0) {
-        const block = BlockConfig._nodeToBlock(id, String(rawType), node);
+        const block = BlockConfig._nodeToBlock(id, String(rawType), node, rawNode);
         if (block) blocks.set(id, block);
       }
+      return; // A block's extension children are not additional block definitions.
     }
 
     for (const key of Object.keys(node)) {
-      if (!key.startsWith('@_')) BlockConfig._walkNode(node[key], typeIds, blocks);
+      if (!key.startsWith('@_')) BlockConfig._walkNode(node[key], typeIds, blocks, rawNode[key]);
     }
   }
 
@@ -1651,26 +1895,26 @@ export class BlockConfig {
    * @param node - Input value for the _nodeToBlock operation.
    * @returns The computed StarMade-Decoder value.
    */
-  private static _nodeToBlock(id: number, typeName: string, node: any): BlockDefinition | null {
-    const g   = (key: string, def: any = '') => node[key] ?? def;
+  private static _nodeToBlock(id: number, typeName: string, node: any, rawNode: any = node): BlockDefinition | null {
+    const g   = (key: string, def: any = '') => xmlText(node[key]) ?? def;
     const gb  = (key: string, def = false): boolean => {
-      const v = node[key];
+      const v = xmlText(node[key]);
       if (v === undefined) return def;
       return v === true || String(v).toLowerCase() === 'true';
     };
     const gn  = (key: string, def = 0): number => {
-      const v = node[key];
+      const v = xmlText(node[key]);
       if (v === undefined) return def;
       const n = typeof v === 'number' ? v : parseFloat(String(v));
       return Number.isFinite(n) ? n : def;
     };
     const gArr = (key: string): number[] => {
-      const v = node[key];
+      const v = xmlText(node[key]);
       if (!v || String(v).trim() === '') return [];
       return String(v).split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
     };
     const gFloatArr4 = (key: string, def: readonly [number, number, number, number]): [number, number, number, number] => {
-      const v = node[key];
+      const v = xmlText(node[key]);
       if (!v || String(v).trim() === '') return [...def] as [number, number, number, number];
       const values = String(v).split(',').map(s => parseFloat(s.trim())).filter(n => Number.isFinite(n));
       return [
@@ -1729,7 +1973,7 @@ export class BlockConfig {
       lodActivationAnimationStyle: gn('LodActivationAnimationStyle', 0),
     };
 
-    return new BlockDefinition(
+    const block = new BlockDefinition(
       id,
       String(node['@_name'] ?? ''),
       gn('@_icon'),
@@ -1773,6 +2017,12 @@ export class BlockConfig {
       gb('LogicBlockButton', false),
       metadata,
     );
+    const known = blockFieldsToXml(block, true);
+    const extensions = Object.fromEntries(Object.entries(rawNode).filter(([key, value]) =>
+      !Object.hasOwn(known, key) && (key !== '#text' || String(value).trim() !== '')));
+    const extended = block.with({ extraProperties: extensions });
+    BLOCK_XML_SOURCE.set(extended, { raw: immutableSnapshot(rawNode), known });
+    return extended;
   }
 
   // ── Serialization XML ─────────────────────────────────────────────────────
@@ -1783,104 +2033,19 @@ export class BlockConfig {
    * @param blocks - Input value for the _toXml operation.
    * @returns The computed StarMade-Decoder value.
    */
-  private static _toXml(blocks: BlockDefinition[]): string {
+  private static _toXml(blocks: BlockDefinition[], namedTypes = false): string {
     const xmlObj = {
       Config: {
         Element: {
           General: {
             Custom: {
-              Block: blocks.map(b => ({
-                '@_type':              b.id,
-                '@_name':              b.name,
-                '@_icon':              b.icon,
-                '@_textureId':         b.textureIds.join(', '),
-                Hitpoints:             b.hp,
-                Mass:                  b.mass,
-                Volume:                b.volume,
-                Price:                 b.price,
-                Description:           b.description,
-                ArmorValue:            b.armor,
-                Placable:              b.isPlacable,
-                InShop:                b.inShop,
-                Orientation:           b.hasOrientation,
-                CanActivate:           b.canActivate,
-                Deprecated:            b.isDeprecated,
-                BlockStyle:            b.blockStyle,
-                Slab:                  b.slab,
-                Transparency:          b.transparent,
-                Animated:              b.animated,
-                IndividualSides:       b.individualSides,
-                SideTexturesPointToOrientation: b.sideTexturesPointToOrientation,
-                HasActivationTexture:  b.hasActivationTexture,
-                DrawLogicConnection:   b.drawLogicConnection,
-                LogicBlock:            b.logicBlock,
-                LogicSignaledByRail:   b.logicSignaledByRail,
-                LogicBlockButton:      b.logicBlockButton,
-                LightSource:           b.lightSource,
-                LightSourceColor:      b.lightSourceColor.join(','),
-                LodShape:              b.lodShape,
-                LodShapeSwitchStyleActive: b.lodShapeActive,
-                LodShapeFromFar:       b.lodShapeStyle,
-                LodActivationAnimationStyle: b.metadata.lodActivationAnimationStyle,
-                OnlyDrawnInBuildMode:  b.drawOnlyInBuildMode,
-                ExtendedTexture4x4:    b.extendedTexture,
-                ResourceInjection:     b.resourceInjection,
-                ChamberRoot:           b.chamberRoot,
-                LodCollisionPhysical:  b.lodCollisionPhysical,
-                FullName:              b.metadata.fullName,
-                OldHitpoints:          b.metadata.oldHitpoints,
-                LowHpSetting:          b.metadata.lowHpSetting,
-                StructureHPContribution: b.metadata.structureHpContribution,
-                ExplosionAbsorbtion:   b.metadata.explosionAbsorption,
-                BlockResourceType:     b.metadata.blockResourceType,
-                BasicResourceFactory:  b.metadata.basicResourceFactory,
-                ProducedInFactory:     b.metadata.producedInFactory,
-                FactoryBakeTime:       b.metadata.factoryBakeTime,
-                InRecipe:              b.metadata.inRecipe,
-                Physical:              b.metadata.physical,
-                CubeCubeCollision:     b.metadata.cubeCubeCollision,
-                UseDetailedCollisionForAstronautMode: b.metadata.useDetailedCollisionForAstronautMode,
-                CollisionDefault:      collisionShapeToXml(b.metadata.collisionDefault),
-                DetailedCollisionForAstronautMode: collisionShapeToXml(b.metadata.detailedCollisionForAstronautMode),
-                Door:                  b.metadata.door,
-                Beacon:                b.metadata.beacon,
-                Enterable:             b.metadata.enterable,
-                SensorInput:           b.metadata.sensorInput,
-                SystemBlock:           b.metadata.systemBlock,
-                SourceReference:       b.metadata.sourceReference,
-                InventoryGroup:        b.metadata.inventoryGroup,
-                ControlledBy:          elementsToXml(b.metadata.controlledBy),
-                Controlling:           elementsToXml(b.metadata.controlling),
-                Consistence:           ingredientsToXml(b.metadata.consistence),
-                CubatomConsistence:    ingredientsToXml(b.metadata.cubatomConsistence),
-                RecipeBuyResource:     elementsToXml(b.metadata.recipeBuyResources),
-                WildcardIds:           b.metadata.wildcardIds.join(', '),
-                MainCombinationController: b.metadata.mainCombinationController,
-                SupportCombinationController: b.metadata.supportCombinationController,
-                EffectCombinationController: b.metadata.effectCombinationController,
-                EffectArmor:           effectArmorToXml(b.metadata.effectArmor),
-                GeneralChamber:        b.metadata.generalChamber,
-                ChamberParent:         b.metadata.chamberParent,
-                ChamberChildren:       braceIntArrayToXml(b.metadata.chamberChildren),
-                ChamberPrerequisites:  braceIntArrayToXml(b.metadata.chamberPrerequisites),
-                ChamberMutuallyExclusive: braceIntArrayToXml(b.metadata.chamberMutuallyExclusive),
-                ChamberUpgradesTo:     b.metadata.chamberUpgradesTo,
-                ChamberAppliesTo:      b.metadata.chamberAppliesTo,
-                ChamberCapacity:       b.metadata.chamberCapacity,
-                ChamberPermission:     b.metadata.chamberPermission,
-                ChamberConfigGroups:   elementsToXml(b.metadata.chamberConfigGroups),
-                ReactorHp:             b.metadata.reactorHp,
-                ReactorGeneralIconIndex: b.metadata.reactorGeneralIconIndex,
-                SlabIds:               b.slabIds.join(', '),
-                StyleIds:              b.styleIds.join(', '),
-                BlockComputerReference: b.computerReference,
-              })),
+              Block: blocks.map(b => blockToXml(b, namedTypes)),
             },
           },
         },
       },
     };
-    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + XML_BUILDER.build(xmlObj);
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + (namedTypes ? XML_EXTENSION_BUILDER : XML_BUILDER).build(xmlObj);
   }
 
   /**

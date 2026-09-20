@@ -37,6 +37,7 @@ jobs:
         run: |
           python scripts/check-source-boundary.py
           python scripts/test-source-boundary.py
+          node scripts/check-test-layout.mjs
       - name: Record validation environment
         run: |
           mkdir -p validation
