@@ -1,9 +1,5 @@
 # Changelog
 
-## Unreleased
-
-No outstanding changes recorded after 2.0.0.
-
 ## 2.0.0 — 2026-09-20
 
 ### Complete format class layer
@@ -264,7 +260,7 @@ validated by launching the game and is not published to npm by the correction wo
 ### Coverage
 
 - Historical validation at this development stage: **681 tests passing**, 0 pending.
-  Current qualification is recorded in `Unreleased` above.
+  Current qualification is recorded in [the V2 report](docs/V2_QUALIFICATION.md).
 - `npm run docs:check` passes
 
 ---
