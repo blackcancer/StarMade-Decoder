@@ -1,133 +1,69 @@
-/**
- * @fileoverview Sim Parser
- *
- * Parses or writes StarMade blueprint and segment binary formats.
- *
- * @author InitSysRev
- * @version 1.0.0
- */
-
-/**
- * SimParser — parser for .sim files (simulation state).
- *
- * A .sim is simply a standard binary Tag file.
- * It is parsed with readFrom(), then semantic fields are extracted.
- *
- * Structure Java (SimulationManager.toTagStructure) :
- *   STRUCT "SimulationState" [
- *     BYTE    version
- *     STRUCT  simulationGroups
- *     LONG    lastUpdate
- *     FINISH
- *   ]
- */
-
-import { readFrom } from '../core/TagParser.js';
-import { TagType } from '../core/TagType.js';
+/** @fileoverview Strict simulation DTOs backed by the immutable, envelope-preserving domain model. */
 import type { Tag } from '../core/Tag.js';
+import type { TagReadOptions } from '../core/TagParser.js';
 import type { Vector3i } from '../types/Vectors.js';
-import { SimulationGroup as SimulationGroupObject, SimulationState } from '../objects/Simulation.js';
+import { DecodeError } from '../core/DecodeError.js';
+import { tagModelOptions } from '../core/TagModel.js';
+import { SimulationGroup, SimulationState } from '../objects/Simulation.js';
 
-/**
- * Describes the SimGroup data shape used by StarMade blueprint and segment file parsing.
- */
+/** Editable group projection; raw preserves source-only fields when semantic fields are changed. */
 export interface SimGroup {
-  version: number;
-  type: number;
-  members: string[];
-  startTime: bigint;
-  startSector: Vector3i | null;
-  programId: number;
-  /** @deprecated raw fallback tag for unknown group fields. Prefer the typed fields above. */
-  raw: Tag;
+  version: number; type: number; members: string[]; startTime: bigint;
+  startSector: Vector3i; programId: number;
+  metadata?: Tag;
+  /** Original group tree, including metadata and extensions. */
+  raw?: Tag;
 }
 
-/**
- * Describes the SimFile data shape used by StarMade blueprint and segment file parsing.
- */
+/** Simulation projection; parsed DTO fields and the simulation accessor always describe one state. */
 export interface SimFile {
-  version: number;
-  groups: SimGroup[];
+  version: number; groups: SimGroup[];
+  uniqueGroups?: bigint;
+  /** @deprecated Alias for uniqueGroups, the group-ID generator; not a timestamp. */
   lastUpdate?: bigint;
-  /** High-level simulation state, when the root tag is parseable. */
+  /** Parsed files expose a live immutable snapshot of current DTO edits; assigning a model resets that projection. */
   simulation?: SimulationState | null;
-  /** @deprecated raw fallback tag for unknown fields. Prefer simulation/version/groups/lastUpdate. */
-  rootTag: Tag;
+  /** Detached source-preserving tree; use typed fields or simulation.with(...) to edit parsed files. */
+  rootTag?: Tag;
 }
 
-/**
- * Parses Sim for StarMade blueprint and segment file parsing.
- *
- * @param data - Input value for the parseSim operation.
- * @returns The computed StarMade-Decoder value.
- */
-export function parseSim(data: Buffer | Uint8Array): SimFile {
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-  const root = readFrom(buf);
+/** Takes a detached DTO snapshot of every modeled group field, including raw extensions. */
+function project(group: SimulationGroup): SimGroup {
+  return { version: group.version, type: group.type, members: group.members, startTime: group.startTime,
+    startSector: group.startSector, programId: group.programId, metadata: group.metadata, raw: group.toTag() };
+}
 
-  const result: SimFile = { version: 0, groups: [], simulation: null, rootTag: root };
-
-  if (root.type !== TagType.STRUCT) return result;
-
-  try {
-    const simulation = SimulationState.fromTag(root);
-    const rootChildren = root.getStruct().filter(t => t.type !== TagType.FINISH);
-    const rawGroups = rootChildren[1]?.type === TagType.STRUCT
-      ? rootChildren[1].getStruct().filter(t => t.type !== TagType.FINISH)
-      : [];
-    result.simulation = simulation;
-    result.version = simulation.version;
-    result.lastUpdate = simulation.lastUpdate;
-    result.groups = simulation.groups.map((group, index) => ({
-      version: group.version,
-      type: group.type,
-      members: [...group.members],
-      startTime: group.startTime,
-      startSector: group.startSector,
-      programId: group.programId,
-      raw: rawGroups[index] ?? group.toTag(),
-    }));
-    return result;
-  } catch {
-    result.simulation = null;
+/** Builds a strict domain state from DTO edits, preserving raw group fields and an optional source envelope. */
+export function simulationFromFields(file: SimFile, source?: SimulationState, options: TagReadOptions = {}): SimulationState {
+  if (file.uniqueGroups !== undefined && file.lastUpdate !== undefined && file.uniqueGroups !== file.lastUpdate) {
+    throw new DecodeError('E_FORMAT', 'Conflicting uniqueGroups and legacy lastUpdate values');
   }
+  const groups = file.groups.map(group => {
+    const original = group.raw ? SimulationGroup.fromTag(group.raw, options)
+      : new SimulationGroup(group.version, group.type, group.members, group.startTime, group.startSector, group.programId, group.metadata, options);
+    return original.with({ version: group.version, type: group.type, members: group.members, startTime: group.startTime,
+      startSector: group.startSector, programId: group.programId, metadata: group.metadata ?? original.metadata });
+  });
+  const baseline = source ?? (file.rootTag ? SimulationState.fromTag(file.rootTag, options) : new SimulationState(0, [], 0n, options));
+  return baseline.with({ version: file.version, groups, uniqueGroups: file.uniqueGroups ?? file.lastUpdate ?? 0n });
+}
 
-  const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
-
-  if (s[0]?.type === TagType.BYTE)  result.version    = s[0].getByte();
-  if (s[2]?.type === TagType.LONG)  result.lastUpdate = s[2].getLong();
-
-  // [1] Simulation group STRUCT
-  if (s[1]?.type === TagType.STRUCT) {
-    for (const g of s[1].getStruct().filter(t => t.type !== TagType.FINISH)) {
-      if (g.type === TagType.STRUCT) {
-        try {
-          const group = SimulationGroupObject.fromTag(g);
-          result.groups.push({
-            version: group.version,
-            type: group.type,
-            members: [...group.members],
-            startTime: group.startTime,
-            startSector: group.startSector,
-            programId: group.programId,
-            raw: g,
-          });
-          continue;
-        } catch {
-          // Fall through to a default typed shell preserving the raw tag.
-        }
-      }
-      result.groups.push({
-        version: 0,
-        type: 0,
-        members: [],
-        startTime: 0n,
-        startSector: null,
-        programId: 0,
-        raw: g,
-      });
-    }
-  }
-
+/** Parses strictly with caller-selected limits, retaining compression/version/trailing bytes and detached DTO data. */
+export function parseSim(data: Buffer | Uint8Array, options: TagReadOptions = {}): SimFile {
+  let source = SimulationState.fromBuffer(data, options);
+  const local = tagModelOptions(options);
+  const result: SimFile = { version: source.version, groups: source.groups.map(project), uniqueGroups: source.uniqueGroups };
+  Object.defineProperties(result, {
+    lastUpdate: { enumerable: true, get: () => result.uniqueGroups, set: (value: bigint) => { result.uniqueGroups = value; } },
+    simulation: {
+      enumerable: true,
+      get: () => simulationFromFields(result, source, local),
+      set: (value: SimulationState) => {
+        if (!(value instanceof SimulationState)) throw new DecodeError('E_FORMAT', 'Simulation snapshot must be a SimulationState');
+        source = value; result.version = value.version; result.groups = value.groups.map(project); result.uniqueGroups = value.uniqueGroups;
+      },
+    },
+    rootTag: { enumerable: true, get: () => simulationFromFields(result, source, local).toTag() },
+  });
   return result;
 }

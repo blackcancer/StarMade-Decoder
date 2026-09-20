@@ -1,40 +1,15 @@
-/**
- * @fileoverview SimWriter
- *
- * Encoder for .sim files (simulation state).
- * A .sim is a standard binary Tag file — writeTo() is sufficient.
- *
- * Java source: SimulationManager.toTagStructure()
- *
- * @author InitSysRev
- * @version 1.1.0
- */
-
-import { writeTo } from '../core/TagParser.js';
-import { SimulationGroup as SimulationGroupObject, SimulationState } from '../objects/Simulation.js';
-import type { SimFile } from './SimParser.js';
+/** @fileoverview Strict simulation writer retaining the source envelope and all unedited metadata. */
+import type { TagReadOptions } from '../core/TagParser.js';
+import { readTagDocument } from '../core/TagParser.js';
+import { simulationFromFields, type SimFile } from './SimParser.js';
 
 /**
- * Encodes a .sim file back to binary.
- * Prefers the high-level SimulationState / SimGroup data and keeps rootTag only
- * as a lossless fallback for unknown or untouched payloads.
+ * Writes a parsed DTO or explicit immutable simulation snapshot; bare DTOs use their semantic fields.
+ * Parsed DTO edits and its live simulation accessor share one state, so nested edits are never ignored.
+ * An optional explicit output budget validates the entire result, including the original envelope.
  */
-export function writeSim(file: SimFile): Buffer {
-  if (file.simulation) {
-    return writeTo(file.simulation.toTag());
-  }
-
-  if (file.groups.length > 0 || file.lastUpdate !== undefined) {
-    const groups = file.groups.map(group => new SimulationGroupObject(
-      group.version,
-      group.type,
-      [...group.members],
-      group.startTime,
-      group.startSector,
-      group.programId,
-    ));
-    return writeTo(new SimulationState(file.version, groups, file.lastUpdate ?? 0n).toTag());
-  }
-
-  return writeTo(file.rootTag);
+export function writeSim(file: SimFile, options?: TagReadOptions): Buffer {
+  const state = file.simulation ?? simulationFromFields(file, undefined, options);
+  const result = state.toBuffer();
+  return options ? readTagDocument(result, options).toBuffer() : result;
 }

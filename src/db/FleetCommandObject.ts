@@ -28,7 +28,10 @@ export class FleetCommandObject {
   readonly fleetDbId: bigint;
   readonly commandOrdinal: number;
   readonly commandType: FleetCommandType | undefined;
-  readonly args: ReadonlyArray<CommandArg>;
+  readonly #args: CommandArg[];
+
+  /** Detached argument tree, including nested structs and byte arrays. */
+  get args(): ReadonlyArray<CommandArg> { return structuredClone(this.#args); }
 
   /**
    * Creates a FleetCommandObject instance.
@@ -45,7 +48,11 @@ export class FleetCommandObject {
     this.fleetDbId      = fleetDbId;
     this.commandOrdinal = commandOrdinal;
     this.commandType    = FLEET_COMMAND_TYPES[commandOrdinal] as FleetCommandType | undefined;
-    this.args           = Object.freeze([...args]);
+    // Reuse the wire codec's integer, UTF, nesting, argument-count and byte budgets.
+    encodeFleetCommand({ fleetDbId, commandOrdinal, commandType: this.commandType, args }, 0);
+    validateCommandValues(args);
+    this.#args = structuredClone(args);
+    Object.freeze(this);
   }
 
   // ── Named constructors ─────────────────────────────────────────────────────
@@ -86,7 +93,7 @@ export class FleetCommandObject {
    * @returns The computed StarMade-Decoder value.
    */
   withFleetDbId(id: bigint): FleetCommandObject {
-    return new FleetCommandObject(id, this.commandOrdinal, [...this.args]);
+    return new FleetCommandObject(id, this.commandOrdinal, [...this.#args]);
   }
 
   /**
@@ -116,13 +123,13 @@ export class FleetCommandObject {
 
   /** First string argument, if any (convenience for ACTIVATE_REMOTE name). */
   get firstStringArg(): string | undefined {
-    const a = this.args.find(a => a.kind === 'string');
+    const a = this.#args.find(a => a.kind === 'string');
     return a?.kind === 'string' ? a.value : undefined;
   }
 
   /** First vec3i argument, if any (convenience for MOVE_FLEET / PATROL_FLEET target). */
   get firstVec3iArg(): { x: number; y: number; z: number } | undefined {
-    const a = this.args.find(a => a.kind === 'vec3i');
+    const a = this.#args.find(a => a.kind === 'vec3i');
     return a?.kind === 'vec3i' ? { x: a.x, y: a.y, z: a.z } : undefined;
   }
 
@@ -134,9 +141,22 @@ export class FleetCommandObject {
    */
   toBytes(padTo = 1024): Buffer {
     return encodeFleetCommand(
-      { fleetDbId: this.fleetDbId, commandOrdinal: this.commandOrdinal, commandType: this.commandType, args: [...this.args] },
+      { fleetDbId: this.fleetDbId, commandOrdinal: this.commandOrdinal, commandType: this.commandType, args: [...this.#args] },
       padTo,
     );
+  }
+
+  /** JSON projection with decimal long values and detached byte arrays. Nonfinite floats remain explicit strings. */
+  toJSON(): { fleetDbId: string; commandOrdinal: number; commandType: FleetCommandType | undefined; args: unknown[] } {
+    return {
+      fleetDbId: this.fleetDbId.toString(), commandOrdinal: this.commandOrdinal, commandType: this.commandType,
+      args: JSON.parse(JSON.stringify(this.#args, (_key, value: unknown) => {
+        if (typeof value === 'bigint') return value.toString();
+        if (value instanceof Uint8Array) return [...value];
+        if (typeof value === 'number' && !Number.isFinite(value)) return String(value);
+        return value;
+      })) as unknown[],
+    };
   }
 
   /**
@@ -150,5 +170,34 @@ export class FleetCommandObject {
       ? (this.firstStringArg ?? `(${this.firstVec3iArg!.x},${this.firstVec3iArg!.y},${this.firstVec3iArg!.z})`)
       : '';
     return `FleetCommand(fleet=${this.fleetDbId}, type=${type}${arg ? `, arg=${arg}` : ''})`;
+  }
+}
+
+/** Rejects runtime coercions that the primitive codec would otherwise accept. */
+function validateCommandValues(args: CommandArg[]): void {
+  for (const arg of args) {
+    switch (arg.kind) {
+      case 'boolean':
+        if (typeof arg.value !== 'boolean') throw new TypeError('Command boolean must be a boolean');
+        break;
+      case 'bytes':
+        if (!(arg.value instanceof Uint8Array)) throw new TypeError('Command bytes must be a Uint8Array');
+        break;
+      case 'float': validateCommandFloat(arg.value); break;
+      case 'vec3f':
+        validateCommandFloat(arg.x); validateCommandFloat(arg.y); validateCommandFloat(arg.z);
+        break;
+      case 'vec4f':
+        validateCommandFloat(arg.x); validateCommandFloat(arg.y); validateCommandFloat(arg.z); validateCommandFloat(arg.w);
+        break;
+      case 'struct': validateCommandValues(arg.value); break;
+    }
+  }
+}
+
+/** Accepts IEEE-754 float values and rejects coercion or finite overflow. */
+function validateCommandFloat(value: number): void {
+  if (typeof value !== 'number' || (Number.isFinite(value) && !Number.isFinite(Math.fround(value)))) {
+    throw new RangeError('Command float must be a number representable as float32');
   }
 }

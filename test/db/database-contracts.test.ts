@@ -118,8 +118,10 @@ describe('Database contracts — collections and alternate byte arrays', () => {
     assert.equal(empty.getResourceDensity(-1), 0);
     assert.equal(empty.getResourceDensityById(-1), 0);
     assert.throws(() => empty.withResourceDensityById(-1, 1), RangeError);
-    const planet = empty.withSectorType(0, 0, 0, 'PLANET', -1);
-    assert.equal(planet.getSectorByIndex(0)!.planetType, 'UNKNOWN');
+    assert.throws(() => empty.withSectorType(0, 0, 0, 'PLANET', -1), RangeError);
+    assert.isUndefined(empty.getSectorByIndex(0));
+    const planet = empty.withSectorType(0, 0, 0, 'PLANET', 255);
+    assert.equal(planet.getSectorByIndex(0)!.planetType, 'BARREN');
     assert.isUndefined(planet.getSectorByIndex(1));
     const bytes = empty.infosToBytes(); bytes[0] = 255; bytes[2] = 2; bytes[3] = 255;
     const entries = System.decodeSystemInfos(new Uint8Array(bytes));

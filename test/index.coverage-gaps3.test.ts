@@ -176,7 +176,7 @@ describe('SpawnData — withDeathSpawn / SpawnMarker', () => {
     const newDeath = new SpawnPoint('X', new SectorPosition(1,2,3), 0,0,0,0,0,0);
     const updated = psd.withDeathSpawn(newDeath);
     assert.equal(updated.deathSpawn.entityUID, 'X');
-    assert.equal(updated.logoutSpawn, sp);
+    assert.deepEqual(updated.logoutSpawn, sp);
   });
 
   it('SpawnMarker toTag / fromTag round-trip', () => {
@@ -273,7 +273,7 @@ describe('ManagerContainer — withSlotAssignment', function() {
 describe('ThrustConfig — uncovered paths', () => {
   it('ThrustConfig with repulsorBalance field', () => {
     const tag = Tags.struct(null, [
-      Tags.byte(null, 2),    // version >= 2
+      Tags.byte(null, 0),    // saved version
       Tags.byte(null, 1),    // automaticDampeners
       Tags.byte(null, 0),    // automaticReactivateDampeners
       Tags.vector3f(null, 0.5, 0.5, 0.5),
@@ -283,13 +283,13 @@ describe('ThrustConfig — uncovered paths', () => {
       Tags.float(null, 0.3), // repulsorBalance
     ]);
     const tc = ThrustConfig.fromTag(tag);
-    assert.equal(tc.version, 2);
+    assert.equal(tc.version, 0);
     assert.closeTo(tc.repulsorBalance ?? 0, 0.3, 0.01);
   });
 
   it('ThrustConfig.withDampeners returns updated', function() {
     const tag = Tags.struct(null, [
-      Tags.byte(null, 1), Tags.byte(null, 0), Tags.byte(null, 0),
+      Tags.byte(null, 0), Tags.byte(null, 0), Tags.byte(null, 0),
       Tags.vector3f(null,0,0,0), Tags.float(null,0), Tags.byte(null,0), Tags.byte(null,0),
     ]);
     const tc = ThrustConfig.fromTag(tag);
@@ -650,7 +650,7 @@ describe('SmbphWriter — classification branch', function() {
 describe('SmbmmParser — isEmpty=false branch', () => {
   it('non-empty smbmm file sets isEmpty=false', () => {
     const buf = Buffer.from([0x01, 0x02, 0x03]); // 3 non-zero bytes
-    const result = parseSmbmm(buf);
+    const result = parseSmbmm(buf, {mode:'preserve'});
     assert.isFalse(result.isEmpty);
     assert.equal(result.size, 3);
     assert.equal(result.raw.length, 3);

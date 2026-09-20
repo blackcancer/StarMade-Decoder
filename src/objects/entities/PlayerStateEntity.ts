@@ -43,7 +43,9 @@ import { Tag } from '../../core/Tag.js';
 import { Tags } from '../../core/TagBuilder.js';
 import { TagType } from '../../core/TagType.js';
 import { FINISH_TAG } from '../../core/Tag.js';
-import { readFrom, writeTo } from '../../core/TagParser.js';
+import type { TagReadOptions } from '../../core/TagParser.js';
+import { TagModelFile, replaceTagField } from '../../core/TagModelFile.js';
+import { DecodeError } from '../../core/DecodeError.js';
 import { StarMadeEntity } from './StarMadeEntity.js';
 import { SectorPosition } from '../components/Transform.js';
 import { Inventory } from '../components/Inventory.js';
@@ -73,51 +75,35 @@ import {
  * Represents the FactionMembership model used by high-level StarMade entity modelling.
  */
 export class FactionMembership {
-  /**
-   * Creates a FactionMembership instance.
-   *
-   * @param factionId - Input value for the constructor operation.
-   * @param rank - Input value for the constructor operation.
-   */
-  constructor(
-    readonly factionId: number,
-    readonly rank: number,
-  ) {}
-
-  static NONE = new FactionMembership(0, 0);
-
-  /**
-   * Creates a value from Tag.
-   *
-   * @param tag - Input value for the fromTag operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromTag(tag: Tag): FactionMembership {
-    const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
-    return new FactionMembership(
-      s[0]?.type === TagType.INT ? s[0].getInt() : 0,
-      s[1]?.type === TagType.INT ? s[1].getInt() : 0,
-    );
+  private readonly file: TagModelFile;
+  /** The second INT is the persisted suspension state, not a faction role/rank. */
+  constructor(readonly factionId: number, readonly suspended: number, options: TagReadOptions = {}, source?: TagModelFile) {
+    this.file = source ?? new TagModelFile(Tags.struct('pFac-v0', [Tags.int(null, factionId), Tags.int(null, suspended)]), options);
+    Object.defineProperty(this, 'file', { enumerable: false });
+    Object.freeze(this);
   }
-
-  /**
-   * Converts this value to Tag.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toTag(): Tag {
-    return Tags.struct(null, [
-      Tags.int(null, this.factionId),
-      Tags.int(null, this.rank),
-    ]);
+  /** Empty membership with no faction and no suspension. */
+  static readonly NONE = new FactionMembership(0, 0);
+  /** @deprecated Misnamed legacy alias; this is a suspension state, not a member role. */
+  get rank(): number { return this.suspended; }
+  /** Strict positional parsing retains extensions and accepts the historical absent suspension field. */
+  static fromTag(tag: Tag, options: TagReadOptions = {}): FactionMembership {
+    const file = new TagModelFile(tag, options), s = file.root.getStruct().filter(value => value.type !== TagType.FINISH);
+    if (s[0]?.type !== TagType.INT || (s[1] && s[1].type !== TagType.INT)) throw new DecodeError('E_FORMAT', 'Invalid player faction membership');
+    return new FactionMembership(s[0].getInt(), s[1] ? s[1].getInt() : 0, options, file);
   }
-
-  /**
-   * Builds the diagnostic string representation for this value.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toString(): string { return `FactionMembership(id=${this.factionId}, rank=${this.rank})`; }
+  /** Updates existing tuple fields while retaining names and unknown extensions. */
+  withFaction(factionId: number, suspended: number): FactionMembership {
+    let root = replaceTagField(this.file.root, 0, Tags.int(null, factionId));
+    const fields = root.getStruct().filter(value => value.type !== TagType.FINISH);
+    if (fields[1]) root = replaceTagField(root, 1, Tags.int(null, suspended));
+    else if (suspended !== 0) root = Tags.struct(root.name, [...fields, Tags.int(null, suspended)]);
+    return FactionMembership.fromTag(root, this.file.options);
+  }
+  /** Complete detached tuple, including its original field names and extensions. */
+  toTag(): Tag { return this.file.root; }
+  /** Diagnostic output names the actual suspension value. */
+  toString(): string { return `FactionMembership(id=${this.factionId}, suspended=${this.suspended})`; }
 }
 
 // ── PlayerStateEntity ─────────────────────────────────────────────────────────
@@ -128,51 +114,52 @@ export class FactionMembership {
 export class PlayerStateEntity extends StarMadeEntity {
   readonly entityType = 'PLAYER_STATE';
 
-  /**
-   * Creates a PlayerStateEntity instance.
-   *
-   * @param credits - Input value for the constructor operation.
-   * @param spawnData - Input value for the constructor operation.
-   * @param inventory - Input value for the constructor operation.
-   * @param currentSector - Input value for the constructor operation.
-   * @param logoutSector - Input value for the constructor operation.
-   * @param logoutLocalX - Input value for the constructor operation.
-   * @param logoutLocalY - Input value for the constructor operation.
-   * @param logoutLocalZ - Input value for the constructor operation.
-   * @param faction - Input value for the constructor operation.
-   * @param lastLogin - Input value for the constructor operation.
-   * @param lastLogout - Input value for the constructor operation.
-   * @param hasCreativeMode - Input value for the constructor operation.
-   * @param lastEnteredEntity - Input value for the constructor operation.
-   * @param health - Input value for the constructor operation.
-   * @param capsuleInventory - Input value for the constructor operation.
-   * @param microInventory - Input value for the constructor operation.
-   * @param macroInventory - Input value for the constructor operation.
-   * @param _rootTag - Input value for the constructor operation.
-   */
-  constructor(
-    readonly credits: bigint,
-    readonly spawnData: PlayerSpawnData,
-    readonly inventory: Inventory,
-    readonly currentSector: SectorPosition | null,
-    readonly logoutSector: SectorPosition | null,
-    readonly logoutLocalX: number,
-    readonly logoutLocalY: number,
-    readonly logoutLocalZ: number,
-    readonly faction: FactionMembership,
-    readonly lastLogin: bigint,
-    readonly lastLogout: bigint,
-    readonly hasCreativeMode: boolean,
-    readonly lastEnteredEntity: string,
-    readonly health: number,
-    readonly capsuleInventory: Inventory,
-    readonly microInventory: Inventory,
-    readonly macroInventory: Inventory,
-    /** All root Tag children for faithful round-tripping */
-    private readonly _rootTag: Tag,
-  ) {
-    super();
-    Object.defineProperty(this, '_rootTag', { enumerable: false });
+  readonly credits: bigint;
+  readonly currentSector: SectorPosition | null;
+  readonly logoutSector: SectorPosition | null;
+  readonly logoutLocalX: number;
+  readonly logoutLocalY: number;
+  readonly logoutLocalZ: number;
+  readonly faction: FactionMembership;
+  readonly lastLogin: bigint;
+  readonly lastLogout: bigint;
+  readonly hasCreativeMode: boolean;
+  readonly lastEnteredEntity: string;
+  readonly health: number;
+  /** Derives fields from the private source; malformed inventory/spawn data is never silently discarded. */
+  private constructor(private readonly file: TagModelFile) {
+    super(); const s = this._rootTag.getStruct().filter(tag => tag.type !== TagType.FINISH);
+    if (![TagType.INT, TagType.LONG].includes(s[0]?.type) || !s[1] || s[2]?.type !== TagType.STRUCT) {
+      throw new DecodeError('E_FORMAT', 'Player state requires credits, spawn data and inventory');
+    }
+    this.credits = s[0].type === TagType.INT ? BigInt(s[0].getInt()) : s[0].getLong();
+    this.currentSector = sector(s[3], 'sector', file.options); this.logoutSector = sector(s[5], 'lsector', file.options);
+    const local = s[4]?.name === 'lspawn' ? s[4].getVector3f() : null;
+    this.logoutLocalX = local?.x ?? 0; this.logoutLocalY = local?.y ?? 0; this.logoutLocalZ = local?.z ?? 0;
+    this.faction = s[6] ? FactionMembership.fromTag(s[6], file.options) : FactionMembership.NONE;
+    this.lastLogin = optional(s[7], TagType.LONG, 0n); this.lastLogout = optional(s[8], TagType.LONG, 0n);
+    this.hasCreativeMode = optional(s[10], TagType.BYTE, 0) !== 0;
+    this.lastEnteredEntity = optional(s[11], TagType.STRING, ''); this.health = finite(optional(s[27], TagType.FLOAT, 100));
+    this.spawnData; this.inventory; this.capsuleInventory; this.microInventory; this.macroInventory;
+    Object.defineProperty(this, 'file', { enumerable: false });
+    Object.freeze(this);
+  }
+  /** Detached source for field views and positional updates. */
+  private get _rootTag(): Tag { return this.file.root; }
+  /** Fresh component projection prevents mutations of public component objects from affecting the entity. */
+  get spawnData(): PlayerSpawnData { return playerSpawn(this._childAt(1), this.currentSector, this.file.options); }
+  /** Complete supported InventoryWire projection; caller mutations never alias retained source data. */
+  get inventory(): Inventory { return Inventory.fromTag(this._childAt(2), this.file.options); }
+  /** Optional capsule inventory, decoded strictly when present. */
+  get capsuleInventory(): Inventory { return this.inventoryAt(16); }
+  /** Optional micro inventory, decoded strictly when present. */
+  get microInventory(): Inventory { return this.inventoryAt(17); }
+  /** Optional macro inventory, decoded strictly when present. */
+  get macroInventory(): Inventory { return this.inventoryAt(18); }
+  /** Returns an independent empty inventory only when the legacy slot is absent. */
+  private inventoryAt(index: number): Inventory {
+    const tag = this.file.root.getStruct().filter(value => value.type !== TagType.FINISH)[index];
+    return tag ? Inventory.fromTag(tag, this.file.options) : new Inventory(new Map());
   }
 
   /** StarMade-Open PlayerState slot view, without raw Tag exposure. */
@@ -258,37 +245,37 @@ export class PlayerStateEntity extends StarMadeEntity {
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get hostHistory(): PlayerInfoHistoryList { return new PlayerInfoHistoryList(this._childAt(9)); }
+  get hostHistory(): PlayerInfoHistoryList { return new PlayerInfoHistoryList(this._childAt(9), this.file.options); }
   /**
    * Handles the scanHistory operation used by high-level StarMade entity modelling.
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get scanHistory(): ScanHistory { return new ScanHistory(this._childAt(20)); }
+  get scanHistory(): ScanHistory { return new ScanHistory(this._childAt(20), this.file.options); }
   /**
    * Handles the inventoryBackup operation used by high-level StarMade entity modelling.
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get inventoryBackup(): InventoryBackupState { return new InventoryBackupState(this._childAt(22)); }
+  get inventoryBackup(): InventoryBackupState { return new InventoryBackupState(this._childAt(22), this.file.options); }
   /**
    * Saves dCoordinates back to StarMade project files.
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get savedCoordinates(): SavedCoordinates { return new SavedCoordinates(this._childAt(23)); }
+  get savedCoordinates(): SavedCoordinates { return new SavedCoordinates(this._childAt(23), this.file.options); }
   /**
    * Handles the ignoredPlayers operation used by high-level StarMade entity modelling.
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get ignoredPlayers(): IgnoredPlayers { return new IgnoredPlayers(this._childAt(26)); }
+  get ignoredPlayers(): IgnoredPlayers { return new IgnoredPlayers(this._childAt(26), this.file.options); }
   /**
    * Handles the cargoInventoryBlock operation used by high-level StarMade entity modelling.
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get cargoInventoryBlock(): CargoInventoryBlock { return new CargoInventoryBlock(this._childAt(28)); }
+  get cargoInventoryBlock(): CargoInventoryBlock { return new CargoInventoryBlock(this._childAt(28), this.file.options); }
 
   // ── Immutable updates ──────────────────────────────────────────────
 
@@ -299,8 +286,11 @@ export class PlayerStateEntity extends StarMadeEntity {
    * @returns The computed StarMade-Decoder value.
    */
   withCredits(credits: bigint): PlayerStateEntity {
-    const newTag = Tags.setField(this._rootTag, 'credits', Tags.long('credits', credits));
-    return PlayerStateEntity.fromTag(newTag);
+    if (typeof credits !== 'bigint') throw new DecodeError('E_RANGE', 'Credits must be bigint');
+    const original = this.file.originalRoot.getStruct()[0];
+    const value = original.type === TagType.INT && credits >= -2147483648n && credits <= 2147483647n
+      ? Tags.int(null, Number(credits)) : Tags.long(null, credits);
+    return this.updated(replaceTagField(this._rootTag, 0, value, [TagType.INT, TagType.LONG]));
   }
 
   /**
@@ -310,35 +300,22 @@ export class PlayerStateEntity extends StarMadeEntity {
    * @returns The computed StarMade-Decoder value.
    */
   withCreativeMode(enabled: boolean): PlayerStateEntity {
-    // [10] = BYTE hasCreativeMode (anonymous, access by index)
-    const children = this._rootTag.getStruct();
-    const newChildren = [...children];
-    if (newChildren[10]?.type === TagType.BYTE) {
-      newChildren[10] = Tags.byte(null, enabled ? 1 : 0);
-    }
-    const newTag = new Tag(TagType.STRUCT, this._rootTag.name, newChildren);
-    return PlayerStateEntity.fromTag(newTag);
+    if (typeof enabled !== 'boolean') throw new DecodeError('E_RANGE', 'Creative mode must be boolean');
+    const original = this.file.originalRoot.getStruct()[10];
+    const value = original?.type === TagType.BYTE && (original.getByte() !== 0) === enabled ? original.getByte() : Number(enabled);
+    return this._withChild(10, Tags.byte(null, value));
   }
 
   /**
    * Returns a copy updated with Faction.
    *
    * @param factionId - Input value for the withFaction operation.
-   * @param rank - Input value for the withFaction operation.
+   * @param rank - Legacy argument name: this is the persisted suspension value, not a member role.
    * @returns The computed StarMade-Decoder value.
    */
   withFaction(factionId: number, rank = 0): PlayerStateEntity {
-    const membership = new FactionMembership(factionId, rank);
-    const facTag = this._rootTag.getStruct().find(
-      t => t.name === 'pFac-v0' || t.name === 'pFac'
-    );
-    if (facTag?.name) {
-      const newTag = Tags.setField(this._rootTag, facTag.name, Tags.rename(membership.toTag(), facTag.name));
-      return PlayerStateEntity.fromTag(new Tag(TagType.STRUCT, newTag.name,
-        [...newTag.getStruct().filter(t => t.type !== TagType.FINISH),
-         ...( [newTag.getStruct().find(t => t.type === TagType.FINISH)!])]));
-    }
-    return this;
+    const existing = FactionMembership.fromTag(this._childAt(6), this.file.options);
+    return this._withChild(6, existing.withFaction(factionId, rank).toTag());
   }
 
   /**
@@ -348,7 +325,7 @@ export class PlayerStateEntity extends StarMadeEntity {
    * @returns The computed StarMade-Decoder value.
    */
   withHealth(health: number): PlayerStateEntity {
-    return this._withChild(27, Tags.float(null, health));
+    return this._withChild(27, Tags.float(null, finite(health)));
   }
 
   /**
@@ -358,12 +335,7 @@ export class PlayerStateEntity extends StarMadeEntity {
    * @returns The computed StarMade-Decoder value.
    */
   withInventory(inventory: Inventory): PlayerStateEntity {
-    const children = this._rootTag.getStruct();
-    const newChildren = [...children];
-    if (newChildren[2]?.type === TagType.STRUCT) {
-      newChildren[2] = inventory.toTag();
-    }
-    return PlayerStateEntity.fromTag(new Tag(TagType.STRUCT, this._rootTag.name, newChildren));
+    return this._withChild(2, this.inventory.withContents(inventory).toTag());
   }
 
   /**
@@ -473,13 +445,13 @@ export class PlayerStateEntity extends StarMadeEntity {
    *
    * @returns The computed StarMade-Decoder value.
    */
-  toTag(): Tag { return this._rootTag; }
+  toTag(): Tag { return this.file.root; }
   /**
    * Converts this value to Buffer.
    *
    * @returns The computed StarMade-Decoder value.
    */
-  toBuffer(): Buffer { return writeTo(this._rootTag); }
+  toBuffer(): Buffer { return this.file.toBuffer(); }
 
   /**
    * Returns a copy updated with Child.
@@ -489,13 +461,8 @@ export class PlayerStateEntity extends StarMadeEntity {
    * @returns The computed StarMade-Decoder value.
    */
   private _withChild(index: number, tag: Tag): PlayerStateEntity {
-    const children = this._rootTag.getStruct().filter(t => t.type !== TagType.FINISH);
-    while (children.length <= index) children.push(Tags.nothing(null));
-    const current = children[index];
-    children[index] = current?.name !== undefined && tag.name === null
-      ? new Tag(tag.type, current.name, tag.value)
-      : tag;
-    return PlayerStateEntity.fromTag(new Tag(TagType.STRUCT, this._rootTag.name, [...children, FINISH_TAG]));
+    const accepted = index === 22 || index === 28 ? [TagType.BYTE, TagType.STRUCT] : [tag.type];
+    return this.updated(replaceTagField(this._rootTag, index, tag, accepted));
   }
 
   /**
@@ -516,72 +483,15 @@ export class PlayerStateEntity extends StarMadeEntity {
    * @param root - Input value for the fromTag operation.
    * @returns The computed StarMade-Decoder value.
    */
-  static fromTag(root: Tag): PlayerStateEntity {
-    const s = root.type === TagType.STRUCT
-      ? root.getStruct().filter(t => t.type !== TagType.FINISH)
-      : [];
-
-    // [0] credits
-    const credits = s[0]?.type === TagType.LONG ? s[0].getLong() : 0n;
-
-    // [1] spawnData
-    let spawnData = PlayerSpawnData.EMPTY;
-    if (s[1]?.type === TagType.STRUCT) {
-      try { spawnData = PlayerSpawnData.fromTag(s[1]); } catch { /* skip */ }
-    }
-
-    // [2] inventory
-    let inventory = Inventory.EMPTY;
-    if (s[2]?.type === TagType.STRUCT) {
-      try { inventory = Inventory.fromTag(s[2]); } catch { /* skip */ }
-    }
-
-    // Current sector
-    let currentSector: SectorPosition | null = null;
-    if (s[3]?.type === TagType.VECTOR3i) {
-      const v = s[3].getVector3i();
-      currentSector = new SectorPosition(v.x, v.y, v.z);
-    }
-    const lsectorTag = s.find(t => t.name === 'lsector' && t.type === TagType.VECTOR3i);
-    const logoutSector = lsectorTag ? (() => { const v = lsectorTag.getVector3i(); return new SectorPosition(v.x, v.y, v.z); })() : null;
-
-    const lspawnTag = s.find(t => t.name === 'lspawn' && t.type === TagType.VECTOR3f);
-    const lsp = lspawnTag?.getVector3f();
-
-    // [6] factionController
-    let faction = FactionMembership.NONE;
-    const facTag = s.find(t => (t.name === 'pFac-v0' || t.name === 'pFac') && t.type === TagType.STRUCT);
-    if (facTag) { try { faction = FactionMembership.fromTag(facTag); } catch { /* skip */ } }
-
-    const lastLogin    = s[7]?.type === TagType.LONG   ? s[7].getLong()    : 0n;
-    const lastLogout   = s[8]?.type === TagType.LONG   ? s[8].getLong()    : 0n;
-    const creative     = s[10]?.type === TagType.BYTE  ? s[10].getByte() !== 0 : false;
-    const lastEntered  = s[11]?.type === TagType.STRING ? s[11].getString() : '';
-    const health       = s[27]?.type === TagType.FLOAT ? s[27].getFloat()  : 100;
-
-    // Inventaires de fabrique
-    let capsule = Inventory.EMPTY, micro = Inventory.EMPTY, macro = Inventory.EMPTY;
-    if (s[16]?.type === TagType.STRUCT) { try { capsule = Inventory.fromTag(s[16]); } catch {} }
-    if (s[17]?.type === TagType.STRUCT) { try { micro   = Inventory.fromTag(s[17]); } catch {} }
-    if (s[18]?.type === TagType.STRUCT) { try { macro   = Inventory.fromTag(s[18]); } catch {} }
-
-    return new PlayerStateEntity(
-      credits, spawnData, inventory, currentSector, logoutSector,
-      lsp?.x ?? 0, lsp?.y ?? 0, lsp?.z ?? 0,
-      faction, lastLogin, lastLogout, creative, lastEntered, health,
-      capsule, micro, macro, root,
-    );
+  static fromTag(root: Tag, options: TagReadOptions = {}): PlayerStateEntity {
+    return new PlayerStateEntity(new TagModelFile(root, options));
   }
-
-  /**
-   * Creates a value from Buffer.
-   *
-   * @param data - Input value for the fromBuffer operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromBuffer(data: Buffer | Uint8Array): PlayerStateEntity {
-    return PlayerStateEntity.fromTag(readFrom(data));
+  /** Reads the complete file once under shared budgets and preserves its original envelope. */
+  static fromBuffer(data: Buffer | Uint8Array, options: TagReadOptions = {}): PlayerStateEntity {
+    return new PlayerStateEntity(TagModelFile.fromBuffer(data, options));
   }
+  /** Validates a revision with the same limits and original compression/version/trailing data. */
+  private updated(root: Tag): PlayerStateEntity { return new PlayerStateEntity(this.file.withRoot(root)); }
 
   /**
    * Builds the diagnostic string representation for this value.
@@ -605,7 +515,7 @@ function factionMembershipFromFieldValue(value: unknown): FactionMembership {
     const candidate = value as Record<string, unknown>;
     return new FactionMembership(
       fieldValueAsInteger(candidate.factionId, 'factionMembership.factionId'),
-      fieldValueAsInteger(candidate.rank ?? 0, 'factionMembership.rank'),
+      fieldValueAsInteger(candidate.suspended ?? candidate.rank ?? 0, 'factionMembership.rank'),
     );
   }
   throw new TypeError('Entity field "factionMembership" expects a FactionMembership or {factionId,rank}');
@@ -622,4 +532,30 @@ function factionMembershipFromFieldValue(value: unknown): FactionMembership {
 function requireInstance<T>(value: unknown, ctor: new (...args: any[]) => T, key: string): T {
   if (value instanceof ctor) return value;
   throw new TypeError(`Entity field "${key}" expects a ${ctor.name} object`);
+}
+
+/** Reads an optional scalar without converting a present malformed value into a default. */
+function optional<T extends bigint | number | string>(tag: Tag | undefined, type: TagType, fallback: T): T {
+  if (!tag) return fallback;
+  if (tag.type !== type) throw new DecodeError('E_FORMAT', 'Invalid optional player field');
+  return tag.value as T;
+}
+/** Legacy named sectors remain optional; a present matching field must have the correct type. */
+function sector(tag: Tag | undefined, name: string, options: TagReadOptions): SectorPosition | null {
+  if (tag?.name !== name) return null;
+  return SectorPosition.fromTag(tag, options);
+}
+/** Rejects non-finite health/position values before float32 storage. */
+function finite(value: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(Math.fround(value))) throw new DecodeError('E_RANGE', 'Player value must fit finite float32');
+  return Math.fround(value);
+}
+/** Reads both the actual structured spawn data and the documented legacy VECTOR3f form. */
+function playerSpawn(tag: Tag, current: SectorPosition | null, options: TagReadOptions): PlayerSpawnData {
+  if (tag.type === TagType.VECTOR3f) {
+    const value = tag.getVector3f(), position = current ?? new SectorPosition(0, 0, 0);
+    return new PlayerSpawnData(0, new SpawnPoint('', position, value.x, value.y, value.z, 0, 0, 0, options),
+      new SpawnPoint('', new SectorPosition(0, 0, 0), 0, 0, 0, 0, 0, 0, options), null, 0, 0, 0, options);
+  }
+  return PlayerSpawnData.fromTag(tag, options);
 }

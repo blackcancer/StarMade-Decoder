@@ -66,3 +66,8 @@ export {
   writeSbvSubtitles,
 } from './SbvSubtitles.js';
 export type { SbvSubtitleCue, SbvSubtitleFile } from './SbvSubtitles.js';
+
+export { SubtitleDocument } from './SubtitleDocument.js';
+export { SystemNamesDocument } from './SystemNamesDocument.js';
+export { XmlConfigDocument } from './XmlConfigDocument.js';
+export type { XmlConfigValue } from './XmlConfigDocument.js';

@@ -371,59 +371,65 @@ describe('Entity legacy parsers — error paths', () => {
 
 // ── entity/Catalog — system entries ──────────────────────────────────────────
 
-describe('entity/Catalog — system entries', function() {
+describe('entity/Catalog — actual permissions and ratings', function() {
   this.timeout(10_000);
 
-  it('parses catalog with system entries branch', function() {
+  it('keeps catalog entries and ratings distinct', function() {
     if (!hasSamples) { this.skip(); return; }
     const root = load('CATALOG.cat');
     const data = parseCatalog(root);
-    assert.isArray(data.playerEntries);
-    assert.isArray(data.systemEntries);
-    // totalCount includes both
-    assert.equal(data.totalCount, data.playerEntries.length + data.systemEntries.length);
+    assert.isArray(data.entries);
+    assert.isObject(data.ratings);
+    assert.equal(data.totalCount, data.entries.length);
+    assert.isUndefined((data as any).systemEntries);
   });
 });
 
 // ── entity/FloatingItems — items with payload ─────────────────────────────────
 
 describe('entity/FloatingItems — items with payload', () => {
-  it('parses items with type and count', () => {
+  it('parses independent metadata identifiers and opaque payloads inside sectors', () => {
     const inner = Tags.struct('floatingItems', [
-      Tags.struct(null, [Tags.short(null, 5), Tags.int(null, 10)]),
-      Tags.struct(null, [Tags.short(null, 7), Tags.int(null, 3)]),
+      Tags.struct(null, [Tags.vector3i(null, -1, 0, 2), Tags.struct(null, [
+        Tags.struct(null, [Tags.int(null, 5), Tags.short(null, -3), Tags.int('payload', 10)]),
+        Tags.struct(null, [Tags.int(null, 7), Tags.short(null, -3), Tags.string('payload', 'other')]),
+      ])]),
     ]);
-    const root = Tags.struct('FLOATING', [
+    const root = Tags.struct('moi', [
       Tags.byte(null, 0),   // version
-      Tags.int(null, 2),    // declaredCount
+      Tags.int(null, 20),   // next metadata identifier
       inner,
     ]);
     const buf = writeTo(root);
     const data = parseFloatingItems(readFrom(buf));
     assert.equal(data.items.length, 2);
-    assert.equal(data.items[0].type, 5);
-    assert.equal(data.items[0].count, 10);
+    assert.equal(data.nextId, 20);
+    assert.equal(data.items[0].id, 5);
+    assert.equal(data.items[0].type, -3);
+    assert.equal(data.items[0].payload.getInt(), 10);
+    assert.equal(data.items[1].payload.getString(), 'other');
+    assert.deepEqual(data.items[0].sector, { x: -1, y: 0, z: 2 });
   });
 });
 
-// ── entity/PlayerCharacter — Matrix4f transform branch ───────────────────────
+// ── entity/PlayerCharacter — stored float-list transform ───────────────────────
 
-describe('entity/PlayerCharacter — Matrix4f transform branch', function() {
+describe('entity/PlayerCharacter — stored float-list transform', function() {
   this.timeout(10_000);
 
-  it('parses with Matrix4f transform', function() {
+  it('projects the actual saved float-list transform', function() {
     if (!hasSamples) { this.skip(); return; }
     const root = load('ENTITY_PLAYERCHARACTER_InitSysRev.ent');
     const data = parsePlayerCharacter(root);
-    // Just verify no throw — transform may or may not be present
-    assert.isDefined(data);
+    assert.lengthOf(data.transformValues, 16);
+    assert.isUndefined(data.transform);
   });
 });
 
 // ── entity/Factions — name and credits fields ────────────────────────────────
 
-describe('entity/Factions — name and credits fields', () => {
-  it('parses faction with name and credits', () => {
+describe('entity/Factions — rejects heuristic field classification', () => {
+  it('does not reinterpret unrelated strings and longs as a faction name and credits', () => {
     const factionStruct = Tags.struct(null, [
       Tags.string(null, 'MyFaction'), // [0] name
       Tags.string(null, ''),          // [1] description (unused here)
@@ -435,8 +441,7 @@ describe('entity/Factions — name and credits fields', () => {
       factionStruct,
     ]);
     const buf = writeTo(root);
-    const data = parseFactions(readFrom(buf));
-    assert.isNumber(data.version);
+    assert.throws(() => parseFactions(readFrom(buf)), /Unsupported faction archive layout/);
   });
 });
 
@@ -515,7 +520,7 @@ describe('Inventory — toTag with meta ItemStack', () => {
 describe('ManagerContainer — withInventory / withPower', function() {
   this.timeout(10_000);
 
-  it('withInventory adds an inventory', function() {
+  it('withInventoryAt adds an inventory at an explicit position', function() {
     if (!hasSamples) { this.skip(); return; }
     const root = load('ENTITY_SHIP_Traders Homerl110.ent');
     const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
@@ -523,7 +528,7 @@ describe('ManagerContainer — withInventory / withPower', function() {
     if (!containerTag) { this.skip(); return; }
     const mc = ManagerContainer.fromTag(containerTag);
     const newInv = Inventory.EMPTY.set(new ItemStack(0, 1, 10));
-    const updated = mc.withInventory(0, newInv);
+    const updated = mc.withInventoryAt({ x: 1, y: 2, z: 3 }, newInv, 0);
     assert.equal(updated.inventories.get(0)?.size, 1);
   });
 

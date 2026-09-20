@@ -529,7 +529,7 @@ function serializableFactoryName(factoryId: number): string {
  */
 export function fieldValueAsNumber(value: unknown, key: string): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'bigint') return Number(value);
+  if (typeof value === 'bigint' && Number.isFinite(Number(value))) return Number(value);
   if (typeof value === 'string' && value.trim() !== '') {
     const parsed = Number(value);
     if (Number.isFinite(parsed)) return parsed;
@@ -546,7 +546,7 @@ export function fieldValueAsNumber(value: unknown, key: string): number {
  */
 export function fieldValueAsInteger(value: unknown, key: string): number {
   const number = fieldValueAsNumber(value, key);
-  if (!Number.isInteger(number)) {
+  if (!Number.isSafeInteger(number)) {
     throw new TypeError(`Entity field "${key}" expects an integer`);
   }
   return number;
@@ -561,7 +561,7 @@ export function fieldValueAsInteger(value: unknown, key: string): number {
  */
 export function fieldValueAsBigInt(value: unknown, key: string): bigint {
   if (typeof value === 'bigint') return value;
-  if (typeof value === 'number' && Number.isInteger(value)) return BigInt(value);
+  if (typeof value === 'number' && Number.isSafeInteger(value)) return BigInt(value);
   if (typeof value === 'string' && value.trim() !== '') return BigInt(value);
   throw new TypeError(`Entity field "${key}" expects an integer bigint value`);
 }

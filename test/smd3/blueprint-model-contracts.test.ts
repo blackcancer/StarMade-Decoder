@@ -147,7 +147,7 @@ describe('Blueprint contracts — metadata editing and preservation', () => {
     assert.isTrue(base.withManager(manager).hasManager);
     assert.isFalse(unchanged.withManager(null).hasManager);
     assert.isTrue(M.parseSmbpm(writeSmbpm(base.withManager(manager))).hasManager);
-    const thrust = ThrustConfig.fromTag(Tags.struct(null, []));
+    const thrust = ThrustConfig.DEFAULT;
     assert.isNotNull(M.parseSmbpm(writeSmbpm(base.withThrustConfig(thrust))).thrustConfig);
     assert.isNull(base.withThrustConfig(null).thrustConfig);
   });
@@ -158,9 +158,9 @@ describe('Blueprint contracts — metadata editing and preservation', () => {
       const first = M.parseSmbpm(b), second = M.parseSmbpm(writeSmbpm(first));
       assert.equal(M.getSmbpmInternals(second).lockBoxPresent, flag === 1);
     }
-    const tag = Tags.struct(null, []), raw = writeTo(tag);
+    const tag = Tags.struct(null, []), raw = writeTo(tag), thrustTag = ThrustConfig.DEFAULT.toTag(), thrustRaw = writeTo(thrustTag);
     for (const fields of [{ managerTag: tag }, { managerRaw: raw }, { managerRaw: raw, manager: ManagerContainer.fromTag(tag) },
-      { thrustTag: tag }, { thrustRaw: raw }, { thrustRaw: raw, thrustConfig: ThrustConfig.fromTag(tag) }]) {
+      { thrustTag }, { thrustRaw }, { thrustRaw, thrustConfig: ThrustConfig.fromTag(thrustTag) }]) {
       const model = { ...makeMeta(), ...fields };
       const encoded = writeSmbpm(model);
       assert.isAbove(encoded.length, raw.length);

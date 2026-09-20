@@ -1,6 +1,6 @@
 # Getting Started with StarMade-Decoder
 
-> **1.7.0 format classes:** Start with [the class guide](FORMAT_MODELS.md) for block/catalogue editing, blueprint grids, inventories and configurable limits.
+> **2.0.0 format classes:** Start with [the class guide](FORMAT_MODELS.md) for block/catalogue editing, blueprint grids, inventories and configurable limits.
 
 > **Earlier integrity update:** [Read the migration contract](INTEGRITY_AND_MIGRATION.md) for strict parsing, v7 LZ4, TagDocument, geometry context and changed error handling. Older examples using `writeTo` serialize only the root Tag, not its complete file envelope.
 
@@ -142,15 +142,21 @@ StarMade/                              ← starmadeDir in SMToolConfig
 | `ENTITY_PLAYERSTATE_*.ent` | Tag | `PlayerStateEntity.fromBuffer(data)` |
 | `*.smd3` | Binary segment | `parseSmd3(data)` |
 | `*.sment` | ZIP archive | `parseSment(data)` |
+| `*.smskin` | Texture ZIP archive | `SkinDocument.fromBuffer(data)` |
 | `*.smtpl` | Binary template | `parseSmtpl(data)` |
 | `*.smbpl` | Binary logic | `parseSmbpl(data)` |
 | `*.smbpm` | Binary metadata | `parseSmbpm(data)` |
-| `*.smbmm` | Binary mod mapping | `parseSmbmm(data)` |
-| `*.smbph` | Binary header | `parseBlueprintFolder(path)` writes this |
+| `*.smbmm` | Namespaced text / legacy zlib | `BlueprintModMappings.fromBuffer(data)` |
+| `*.smbph` | Binary header | `parseSmbph(data)` → `BlueprintHeader` |
 | `server.cfg` | Text | `ServerConfig.load(config)` |
 | `BlockConfig.xml` | XML | `BlockConfig.load(config)` |
 | `blockBehaviorConfig.xml` | XML | `BlockBehaviorConfig.load(config)` |
 | `FactionConfig.xml` | XML | `FactionConfig.load(config)` |
+| Other configuration XML | XML | `XmlConfigDocument.fromXml(text)` |
+| `*.seed` | Signed int64 | `WorldSeedDocument.fromBuffer(data)` |
+| `*.smdat` | Class-grouped JSON | `PersistentObjectDocument.fromBuffer(data)` |
+| `*.sbv` | Subtitle text | `SubtitleDocument.fromBuffer(data)` |
+| `systemNames.syl` | Syllable/flag text | `SystemNamesDocument.fromBuffer(data)` |
 
 > **Auto-detect from filename:** `parseSegmentControllerEntity(root, filename)` reads the file name and returns the right subclass (`Ship`, `SpaceStation`, `ShopSpaceStation`, or `FloatingRock`) automatically.
 
@@ -158,7 +164,7 @@ StarMade/                              ← starmadeDir in SMToolConfig
 
 ## 5. The Tag format in one minute
 
-Every StarMade save file (except `.smd3` and `.sment`) is a tree of **Tags**. A Tag is simply:
+Tag-based save files (`.ent`, `.fac`, `.cat`, `.tag`, `.sim`) contain a tree of **Tags**. Other blueprint and auxiliary formats use their own codecs. A Tag is simply:
 - a **type** (INT, STRING, STRUCT, LIST, LONG, …)
 - an optional **name**
 - a **value**

@@ -17,12 +17,18 @@ import { DecodeError, type DecodeDiagnostic } from '../core/DecodeError.js';
  * Represents the FleetRemotesObject model used by StarMade database object parsing.
  */
 export class FleetRemotesObject {
-  readonly remotes: ReadonlyMap<string, boolean>;
+  readonly #remotes: Map<string, boolean>;
+  /** Detached map; mutating the returned snapshot never edits this model. */
+  get remotes(): ReadonlyMap<string, boolean> { return new Map(this.#remotes); }
   readonly format: 'network' | 'java';
   readonly complete: boolean;
-  readonly diagnostics: ReadonlyArray<DecodeDiagnostic>;
+  readonly #diagnostics: ReadonlyArray<DecodeDiagnostic>;
+  /** Detached diagnostics for an explicitly recovered cell. */
+  get diagnostics(): ReadonlyArray<DecodeDiagnostic> { return this.#diagnostics.map(diagnostic => ({ ...diagnostic })); }
   /** Detached bytes of an explicitly incomplete recovery result. */
-  readonly raw?: Buffer;
+  readonly #raw?: Buffer;
+  /** Detached original recovery bytes, if parsing was incomplete. */
+  get raw(): Buffer | undefined { return this.#raw && Buffer.from(this.#raw); }
 
   /**
    * Creates a FleetRemotesObject instance.
@@ -31,9 +37,12 @@ export class FleetRemotesObject {
    * @param raw - Input value for the constructor operation.
    */
   private constructor(remotes: Map<string, boolean>, format: 'network' | 'java' = 'java', complete = true, diagnostics: ReadonlyArray<DecodeDiagnostic> = [], raw?: Buffer) {
-    this.remotes = new Map(remotes);
-    this.format = format; this.complete = complete; this.diagnostics = diagnostics;
-    if (raw) this.raw = Buffer.from(raw);
+    if (complete) encodeFleetRemotes(remotes, format);
+    this.#remotes = new Map(remotes);
+    this.format = format; this.complete = complete;
+    this.#diagnostics = diagnostics.map(diagnostic => ({ ...diagnostic }));
+    if (raw) this.#raw = Buffer.from(raw);
+    Object.freeze(this);
   }
 
   // ── Named constructors ─────────────────────────────────────────────────────
@@ -63,21 +72,22 @@ export class FleetRemotesObject {
   /** Sets (or adds) a remote state. */
   withRemote(name: string, active: boolean): FleetRemotesObject {
     this.requireComplete();
-    const copy = new Map(this.remotes);
+    const copy = new Map(this.#remotes);
     copy.set(name, active);
     return new FleetRemotesObject(copy, this.format);
   }
 
   /** Toggles a remote. Adds it as active if not present. */
   withToggle(name: string): FleetRemotesObject {
-    const current = this.remotes.get(name) ?? false;
+    const current = this.#remotes.get(name) ?? false;
     return this.withRemote(name, !current);
   }
 
   /** Removes a remote. */
   withoutRemote(name: string): FleetRemotesObject {
     this.requireComplete();
-    const copy = new Map(this.remotes);
+    if (typeof name !== 'string') throw new TypeError('Remote name must be a string');
+    const copy = new Map(this.#remotes);
     copy.delete(name);
     return new FleetRemotesObject(copy, this.format);
   }
@@ -89,7 +99,7 @@ export class FleetRemotesObject {
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get size(): number { return this.remotes.size; }
+  get size(): number { return this.#remotes.size; }
 
   /**
    * Reports whether isActive is true for the current value.
@@ -97,7 +107,7 @@ export class FleetRemotesObject {
    * @param name - Input value for the isActive operation.
    * @returns The computed StarMade-Decoder value.
    */
-  isActive(name: string): boolean { return this.remotes.get(name) ?? false; }
+  isActive(name: string): boolean { return this.#remotes.get(name) ?? false; }
 
   /**
    * Reports whether has is true for the current value.
@@ -105,11 +115,11 @@ export class FleetRemotesObject {
    * @param name - Input value for the has operation.
    * @returns The computed StarMade-Decoder value.
    */
-  has(name: string): boolean { return this.remotes.has(name); }
+  has(name: string): boolean { return this.#remotes.has(name); }
 
   /** All active remote names. */
   get activeNames(): string[] {
-    return [...this.remotes.entries()].filter(([, v]) => v).map(([k]) => k);
+    return [...this.#remotes.entries()].filter(([, v]) => v).map(([k]) => k);
   }
 
   // ── Serialization ──────────────────────────────────────────────────────────
@@ -120,7 +130,13 @@ export class FleetRemotesObject {
    */
   toBytes(): Buffer {
     this.requireComplete();
-    return encodeFleetRemotes(new Map(this.remotes), this.format);
+    return encodeFleetRemotes(new Map(this.#remotes), this.format);
+  }
+
+  /** JSON projection retaining map entries, recovery diagnostics and original bytes. */
+  toJSON(): { remotes: Record<string, boolean>; format: 'network' | 'java'; complete: boolean; diagnostics: ReadonlyArray<DecodeDiagnostic>; raw?: number[] } {
+    return { remotes: Object.fromEntries(this.#remotes), format: this.format, complete: this.complete,
+      diagnostics: this.diagnostics, raw: this.#raw && [...this.#raw] };
   }
 
   /** Refuses editing or serialization after any recovery omission. */
@@ -134,8 +150,8 @@ export class FleetRemotesObject {
    * @returns The computed StarMade-Decoder value.
    */
   toString(): string {
-    if (this.remotes.size === 0) return 'FleetRemotes(empty)';
-    const entries = [...this.remotes.entries()].map(([k, v]) => `${k}=${v}`).join(', ');
+    if (this.#remotes.size === 0) return 'FleetRemotes(empty)';
+    const entries = [...this.#remotes.entries()].map(([k, v]) => `${k}=${v}`).join(', ');
     return `FleetRemotes(${entries})`;
   }
 }

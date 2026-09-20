@@ -363,7 +363,7 @@ export function writeTo(tag: Tag, options: TagReadOptions = {}): Buffer {
   if (maximum < 3) throw new DecodeError('E_LIMIT', 'Tag output budget is too small');
   const writer = new BufferWriter(Math.min(4096, maximum), maximum);
   writer.writeInt16BE(0); // version (Java default = 0)
-  _writeTag(writer, tag);
+  writeBoundedTag(writer, tag);
   return writer.toBuffer();
 }
 
@@ -379,8 +379,19 @@ function writePayloadBytes(tag: Tag, options: TagReadOptions, compressed: boolea
   validateWritableTree(tag, tagBudget(options));
   const maximum = boundedInteger(options.maxInflatedBytes ?? 256 * 1024 * 1024, 'maxInflatedBytes');
   const writer = new BufferWriter(Math.min(4096, maximum), maximum);
-  _writeTag(writer, tag);
+  writeBoundedTag(writer, tag);
   return writer.toBuffer();
+}
+
+/** Classifies output exhaustion consistently while retaining scalar/encoding errors. */
+function writeBoundedTag(writer: BufferWriter, tag: Tag): void {
+  try { _writeTag(writer, tag); }
+  catch (cause) {
+    if (cause instanceof RangeError && cause.message.startsWith('BufferWriter limit exceeded:')) {
+      throw new DecodeError('E_LIMIT', 'Tag output byte budget exceeded', { cause });
+    }
+    throw cause;
+  }
 }
 
 /**
@@ -401,7 +412,8 @@ function validateWritableTree(root: Tag, budget: TagBudget): void {
     if (ancestors.has(tag)) throw new DecodeError('E_FORMAT', 'Cyclic Tag tree');
     if (tag.type !== TagType.STRUCT && tag.type !== TagType.LIST) continue;
     const items = tag.value;
-    if (!Array.isArray(items) || items.length > budget.maxListLength) throw new DecodeError('E_RANGE', 'Invalid Tag collection');
+    if (!Array.isArray(items)) throw new DecodeError('E_RANGE', 'Invalid Tag collection');
+    if (items.length > budget.maxListLength) throw new DecodeError('E_LIMIT', 'Tag collection length budget exceeded');
     if (tag.type === TagType.STRUCT) {
       if (!items.length || items[items.length - 1].type !== TagType.FINISH || items.slice(0, -1).some(t => t.type === TagType.FINISH)) {
         throw new DecodeError('E_FORMAT', 'STRUCT requires exactly one final FINISH tag');

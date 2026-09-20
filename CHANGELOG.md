@@ -2,8 +2,57 @@
 
 ## Unreleased
 
-The changes below are implemented in the **1.7.0 candidate**, awaiting a versioned
-release. This is a format SDK: validation, in-memory edits, explicit serialization
+No outstanding changes recorded after 2.0.0.
+
+## 2.0.0 — 2026-09-20
+
+### Complete format class layer
+
+- Add `SkinDocument` for `.smskin` archives: four named diffuse/emissive textures,
+  creation, immutable resource replacement, archive limits and exact unchanged or
+  edit/revert ZIP bytes. Reuse the existing ZIP codec; PNG bytes remain opaque.
+  Add an independent Python ZIP/PNG oracle and installed-package coverage.
+
+- Add `WorldSeedDocument`, `PersistentObjectDocument`, `SubtitleDocument`,
+  `SystemNamesDocument` and `BlueprintModMappings` for the five remaining auxiliary
+  formats. Expose immutable edits, detached projections, strict validation,
+  resource ceilings and unchanged/edit-revert source preservation.
+- Add public `XmlConfigDocument`; preserve XML comments, attributes, repeated
+  elements and extensions through the behavior/faction configuration wrappers.
+- Apply validated snapshots and propagated limits to existing entities,
+  components, faction/catalog/trading/chat/simulation collections, serializable
+  payloads and database-column classes. Legacy entity DTO parsers delegate to
+  the same validated models.
+- Preserve named fields, wrappers, opaque extensions and file envelopes through
+  modeled edits. Reject malformed present fields and unsafe integer inputs.
+- Support real `.smbmm` namespaced text and historical zlib compression, signed
+  short IDs, indexed lookup and explicit translation between namespace maps.
+- Support all three stored controller Tag layouts without applying rendering
+  transforms. Preserve all sixteen stored player transform values.
+
+### Breaking corrections
+
+- Use actual faction relation codes, BYTE member roles and explicit role masks;
+  retain NPC route payloads, floating-item sectors/counters and simulation counters.
+- Correct catalog permission/spawn fields and trade waypoint preservation.
+- Separate manager PowerAddOn from the opaque reactor payload; retain current
+  shield Tags. New inventory entries require explicit block positions.
+- Correct HP field widths, version-zero thrust, legacy power and docking layouts;
+  retain noncanonical boolean bytes on edit/revert.
+- Expose suspended faction membership separately from the deprecated rank alias.
+  Real player AI configuration has an explicit component accessor/editor.
+- Previous SDK int32-pair SMBMM output requires explicit `legacyInt32Pairs`;
+  unsupported or damaged game payloads are no longer accepted as empty data.
+
+See [migration notes](docs/INTEGRITY_AND_MIGRATION.md#upgrading-to-200),
+[format models](docs/FORMAT_MODELS.md) and the
+[qualification report](docs/V2_QUALIFICATION.md). All production files remain
+subject to exact 100% line and branch gates, without exclusions. GitHub delivery
+is separate from npm publication and in-game import qualification.
+
+## 1.7.0 — format-class candidate (2026-09-20)
+
+The following changes describe the preceding **1.7.0 candidate**. This is a format SDK: validation, in-memory edits, explicit serialization
 and adapters between formats. Rendering, administration workflows and database
 engine operations belong to the consuming projects. No npm publication or game
 runtime qualification is implied.

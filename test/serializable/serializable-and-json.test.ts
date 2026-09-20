@@ -343,22 +343,12 @@ describe('SERIALIZABLE — parse, inspect, modify bytes, round-trip', function (
     assert.exists(ev, 'NPCFactionNewsEvent must exist in FACTIONS.fac');
     console.log('    NPCFactionNewsEvent bytes:', ev!.raw.length, 'hex:', Buffer.from(ev!.raw).toString('hex'));
 
-    // Note : FACTIONS.fac contains legacy/corrupt bytes AFTER the root tag
-    // (orphan FINISH values, tag fragments). The parser reads the correct root tag,
-    // writeTo produces a shorter but semantically identical buffer.
-    // Therefore check that the beginning matches up to the re-encoded length.
+    // NPC TRADING events include both route endpoints; consuming them restores
+    // the entire root rather than mistaking their zero bytes for FINISH tags.
     const orig = fs.readFileSync(path.join(S, 'FACTIONS.fac'));
-    const tag = readFrom(orig);
+    const tag = readFrom(orig, { allowTrailingBytes: false });
     const reenc = writeTo(tag);
-    // The re-encoded buffer must be an exact prefix of the original
-    assert.isBelow(reenc.length, orig.length, 'FACTIONS.fac has known post-tag extra data');
-    assert.equal(
-      Buffer.from(reenc).toString('hex'),
-      orig.slice(0, reenc.length).toString('hex'),
-      'NPCFactionNewsEvent round-trip: exact prefix through the end of the root tag'
-    );
-    console.log('    NPCFactionNewsEvent: tag root reenc='+reenc.length+'B / orig='+orig.length+'B (extra='+
-      (orig.length-reenc.length)+'B legacy ignored) → ok');
+    assert.equal(Buffer.from(reenc).toString('hex'), orig.toString('hex'), 'Exact complete FACTIONS.fac round-trip');
   });
 
   it('factoryId=3 LongSet — parse and exact round-trip', () => {

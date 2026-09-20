@@ -125,3 +125,34 @@ describe('Audit completion: Tag budgets', () => {
       (error: unknown) => error instanceof DecodeError && error.code === 'E_FORMAT');
   });
 });
+
+describe('Tag writer resource error classification',()=>{
+  it('reports actual bounded BufferWriter exhaustion as E_LIMIT with its original RangeError',()=>{
+    for(const tag of [Tags.string(null,'long payload'),Tags.int('long field name',1),Tags.byteArray(null,Buffer.alloc(64))]) {
+      const exact=writeTo(tag).length;assert.deepEqual(writeTo(tag,{maxInflatedBytes:exact}),writeTo(tag));
+      assert.throws(()=>writeTo(tag,{maxInflatedBytes:exact-1}),(error:unknown)=>{
+        assert.ok(error instanceof DecodeError);assert.equal(error.code,'E_LIMIT');
+        assert.ok(error.cause instanceof RangeError);assert.match(error.cause.message,/^BufferWriter limit exceeded:/);return true;
+      });
+    }
+    const plain=writeTo(Tags.int(null,1)),compressed=gzipSync(plain.subarray(2));
+    const file=readTagDocument(compressed,{maxInflatedBytes:plain.length-2});
+    assert.throws(()=>file.toBuffer(Tags.string(null,'exceeds')),isLimit);
+    for(const maxInflatedBytes of [0,1,2])assert.throws(()=>writeTo(Tags.int(null,1),{maxInflatedBytes}),isLimit);
+  });
+  it('retains scalar range errors and arbitrary serializable errors unchanged',()=>{
+    assert.throws(()=>writeTo(Tags.int(null,2**31)),(error:unknown)=>error instanceof RangeError&&!(error instanceof DecodeError));
+    for(const original of [new RangeError('custom serializer range'),new Error('BufferWriter limit exceeded: custom serializer error')]) {
+      const tag=new Tag(TagType.SERIALIZABLE,null,{getFactoryId:()=>1,writeToTag:()=>{throw original;}});
+      assert.throws(()=>writeTo(tag),(error:unknown)=>error===original);
+    }
+  });
+  it('distinguishes collection resource limits from malformed collection values',()=>{
+    const struct=Tags.struct(null,[Tags.int(null,1)]),list=Tags.list(null,[Tags.int(null,1),Tags.int(null,2)]);
+    for(const root of [struct,list]) {
+      assert.throws(()=>writeTo(root,{maxListLength:1}),isLimit);
+      assert.deepEqual(writeTo(root,{maxListLength:2}),writeTo(root));
+    }
+    assert.throws(()=>writeTo(new Tag(TagType.STRUCT,null,null)),(error:unknown)=>error instanceof DecodeError&&error.code==='E_RANGE');
+  });
+});

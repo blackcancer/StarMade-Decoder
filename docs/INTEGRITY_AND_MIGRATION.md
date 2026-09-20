@@ -1,4 +1,55 @@
-# Data integrity and migration — 1.5.0
+# Data integrity and migration
+
+## Upgrading to 2.0.0
+
+V2 completes the format-model layer and corrects schema assumptions in older SDK
+classes. The accepted layouts follow the external reference revision below;
+malformed present fields now fail instead of becoming empty/default data. Call
+`registerAllFactories()` before reading Tags containing serializable payloads.
+
+- Format records retain validated snapshots, opaque fields and source names.
+  Edit with `with…`/collection methods and serialize the returned revision.
+  Mutating a returned map, vector, JSON object or Tag no longer changes its owner.
+  Low-level Tags and blueprint/grid document editors keep their explicit mutable
+  APIs. Existing DTO parsers now delegate to the same validated entity classes.
+- Supply read limits on the model entry point; they propagate through nested
+  views and edits. `bigint` is required for exact int64 values. Unsafe JavaScript
+  integers are rejected; `Tags.long` no longer silently rounds them.
+- Faction relation wire values are NEUTRAL=0, WAR=1, ALLY=2. Member role is a BYTE;
+  new factions require explicit stored role masks/names. The SDK supplies no
+  administrative permission defaults. Player faction slot 1 means suspended
+  membership; the old `factionRank` alias is deprecated.
+- NPC TRADING events carry two integer vectors, not a guessed string. Floating
+  item archives retain sector records/external metadata and their next-ID counter.
+  Simulation `uniqueGroups` is a counter, not a timestamp. Catalog permission and
+  spawn-count fields follow their actual positions.
+- `ManagerContainer` PowerAddOn uses slot 2; `powerReactor` retains the separate
+  slot-15 payload. Current shield STRUCTs have an explicit editor. Adding an
+  inventory requires `withInventoryAt(position, inventory, kind?)`; kind-only
+  operations cannot invent a position and reject ambiguity.
+- HP payload class ID is 1; INT/LONG widths of HP and armor are independent.
+  Current thrust uses version BYTE 0, VECTOR3f and FLOAT. Legacy DOUBLE power and
+  old docking representations remain supported. Corrections may reject synthetic
+  layouts produced by older SDK constructors.
+- Player transform models retain all sixteen stored values without applying 3D
+  calculations. `aiConfiguration`/`withAiConfiguration` work on real AI STRUCTs;
+  the old `noAI` property describes only a legacy BYTE placeholder.
+- `ControlElementMapper.fromTag` accepts current SERIALIZABLE and both historical
+  STRUCT layouts, retaining native coordinates and opaque extensions. Conversion
+  of an int32 legacy coordinate to an int16 payload rejects out-of-range values.
+  This is separate from the documented unversioned blueprint logic migration.
+- Real `.smbmm` files are `modName~blockName~shortId` UTF-8 lines, sometimes zlib
+  compressed. Use `BlueprintModMappings` for editing. For known files written as
+  int32 pairs by older SDK versions, opt into `legacyInt32Pairs`; do not enable it
+  speculatively for game data. Unknown-payload preservation is explicit.
+
+Exact source reproduction requires the original document/model. Creating a new
+record or serializing a detached Tag cannot restore discarded envelope bytes.
+For a changed file, correctness is defined by the stored fields and preservation
+contract, not by matching compression output from a different implementation.
+See [format models](FORMAT_MODELS.md) and [V2 qualification](V2_QUALIFICATION.md).
+
+## Earlier integrity changes (1.5–1.7)
 
 ## Scope and reference
 

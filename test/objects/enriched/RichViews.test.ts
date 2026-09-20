@@ -108,14 +108,14 @@ describe('Phase 4 — BlockConfig-enriched views', function () {
     const ecm = new ElementCountMap([
       { type: 1, count: 0 },
       { type: 2, count: -4 },
-      { type: 999999, count: 7 },
+      { type: 30000, count: 7 },
     ]);
 
     const enriched = enrichBlockCounts(ecm);
     const stats = getBlockCountStats(ecm);
 
     assert.lengthOf(enriched, 1);
-    assert.equal(enriched[0].blockName, 'block#999999');
+    assert.equal(enriched[0].blockName, 'block#30000');
     assert.isNull(enriched[0].blockDef);
     assert.equal(stats.totalBlocks, 7);
     assert.equal(stats.totalMass, 0);
@@ -141,7 +141,7 @@ describe('Phase 4 — BlockConfig-enriched views', function () {
     assert.equal(stats!.totalBlocks, 0);
   });
 
-  it('ManagerContainer.relevantElementCountMap tolerates malformed relevantECM data', () => {
+  it('ManagerContainer rejects malformed relevantECM data without inventing an empty map', () => {
     const ship = Ship.fromBuffer(fs.readFileSync(path.join(S, 'ENTITY_SHIP_Traders Homerl110.ent')));
     const mc = ship.managerContainer!;
     const children = mc.toTag().getStruct().filter(t => t.type !== TagType.FINISH);
@@ -151,12 +151,10 @@ describe('Phase 4 — BlockConfig-enriched views', function () {
       Tags.struct(null, [Tags.short(null, 5), Tags.string(null, 'bad')]),
     ]);
 
-    const malformed = new ManagerContainer(
+    assert.throws(() => new ManagerContainer(
       mc.inventories, mc.initialShields, mc.powerState, mc.texts,
       mc.slotAssignment, mc.pullPermission, children,
-    );
-
-    assert.deepEqual(malformed.relevantElementCountMap?.counts, []);
+    ));
   });
 
   it('enrichSmd3 resolves block definitions from a segment', () => {

@@ -23,34 +23,29 @@ const slots = (values: Record<number, Tag>): Tag => Tags.struct(null,
   Array.from({ length: Math.max(0, ...Object.keys(values).map(Number)) + 1 }, (_, i) => values[i] ?? Tags.nothing(null)));
 
 describe('Component contracts — defaults and alternative representations', () => {
-  it('defaults missing docking, HP, spawn and transform fields', () => {
-    const docking = DockingState.fromTag(empty());
-    assert.deepEqual(docking, DockingState.UNDOCKED);
-    assert.deepEqual(HpState.fromTag(empty()), HpState.EMPTY);
-    const hp = HpState.fromTag(slots({ 1: slots({ 0: Tags.string(null, 'not-hp'), 7: Tags.byte(null, 1) }) }));
-    assert.equal(hp.hp, 0n); assert.isTrue(hp.rebootRecover);
-    assert.equal(hp.toTag().type, TagType.STRUCT);
-    assert.deepEqual(SpawnPoint.fromTag(empty()), SpawnPoint.ZERO);
+  it('rejects malformed docking and HP while exercising spawn and transform contracts', () => {
+    assert.throws(() => DockingState.fromTag(empty()));
+    assert.throws(() => HpState.fromTag(empty()));
+    assert.throws(() => HpState.fromTag(slots({ 1: slots({ 0: Tags.string(null, 'not-hp'), 7: Tags.byte(null, 1) }) })));
+    assert.throws(() => SpawnPoint.fromTag(empty()));
     const point = SpawnPoint.ZERO.with({ entityUID: 'ship', sector: new SectorPosition(1, 2, 3),
       localX: 4, localY: 5, localZ: 6, gravX: 7, gravY: 8, gravZ: 9 });
     assert.deepEqual(SpawnPoint.fromTag(point.toTag()), point);
     assert.deepEqual(point.with({}), point);
-    assert.equal(SpawnMarker.fromTag(empty()).lastSpawned, 0n);
-    assert.equal(SpawnMarker.fromTag(empty()).sectorX, 0);
-    assert.strictEqual(SpawnController.fromTag(empty()), SpawnController.EMPTY);
-    assert.lengthOf(SpawnController.fromTag(Tags.struct(null, [Tags.struct(null, [bad(), empty()])])).markers, 1);
-    const incomplete = PlayerSpawnData.fromTag(slots({ 0: Tags.byte(null, 1) }));
-    assert.isNull(incomplete.preSpecialSector); assert.equal(incomplete.preSpecialOriginX, 0);
+    assert.throws(() => SpawnMarker.fromTag(empty()));
+    assert.throws(() => SpawnController.fromTag(empty()));
+    assert.throws(() => SpawnController.fromTag(Tags.struct(null, [Tags.struct(null, [bad(), empty()])])));
+    assert.throws(() => PlayerSpawnData.fromTag(slots({ 0: Tags.byte(null, 1) })));
     assert.throws(() => EntityTransform.fromMatrix4fList(empty()), TypeError);
     assert.equal(EntityTransform.IDENTITY.with({ originX: 12 }).originX, 12);
   });
 
-  it('round-trips every thrust switch and defaults missing rotation balance', () => {
+  it('round-trips every thrust switch and rejects missing rotation balance', () => {
     for (const value of [true, false]) {
-      const thrust = new ThrustConfig(2, value, value, 1, 2, 3, 4, value, value, 5);
+      const thrust = new ThrustConfig(0, value, value, 1, 2, 3, 4, value, value, 5);
       assert.deepEqual(ThrustConfig.fromTag(thrust.toTag()), thrust);
     }
-    assert.equal(ThrustConfig.fromTag(slots({ 3: Tags.vector3f(null, 1, 2, 3) })).rotationBalance, 0);
+    assert.throws(() => ThrustConfig.fromTag(slots({ 3: Tags.vector3f(null, 1, 2, 3) })));
   });
 
   it('normalizes legacy wrapped slots and incomplete inventory metadata', () => {
@@ -69,14 +64,17 @@ describe('Component contracts — defaults and alternative representations', () 
     assert.equal(item.count, 2); assert.equal(item.type, 5); assert.notInclude(item.toString(), 'meta=');
   });
 
-  it('ignores malformed text and slot-assignment entries without inventing positions', () => {
-    assert.strictEqual(TextBlocks.fromTag(Tags.byte(null, 0)), TextBlocks.EMPTY);
-    const text = Tags.struct(null, [Tags.byte(null, 0), empty(), slots({ 0: Tags.int(null, 1), 1: Tags.string(null, 'bad pos') }),
-      slots({ 0: Tags.long(null, 2n), 1: Tags.int(null, 3) }), slots({ 0: Tags.long(null, 3n), 1: Tags.string(null, 'ok') })]);
-    const result = TextBlocks.fromTag(text);
+  it('rejects malformed text records and preserves valid slot-assignment extensions', () => {
+    assert.throws(() => TextBlocks.fromTag(Tags.byte(null, 0)));
+    for (const malformed of [Tags.byte(null, 0), empty(), slots({ 0: Tags.int(null, 1), 1: Tags.string(null, 'bad pos') }),
+      slots({ 0: Tags.long(null, 2n), 1: Tags.int(null, 3) })]) {
+      assert.throws(() => TextBlocks.fromTag(Tags.struct(null, [malformed])));
+    }
+    const result = TextBlocks.fromTag(Tags.struct(null, [slots({ 0: Tags.long(null, 3n), 1: Tags.string(null, 'ok') })]));
     assert.equal(result.size, 1); assert.equal(result.get(3n), 'ok');
-    const assignment = SlotAssignment.fromTag(Tags.struct(null, [Tags.byte(null, 0), empty(), slots({ 0: Tags.int(null, 0) })]));
-    assert.isObject(assignment); assert.equal(assignment.toTag().type, TagType.STRUCT);
+    const source = Tags.struct(null, [Tags.byte(null, 0), empty(), slots({ 0: Tags.int(null, 0) })]);
+    const assignment = SlotAssignment.fromTag(source);
+    assert.deepEqual(assignment.assign(1, 4n).unassign(1).toTag(), source);
   });
 });
 
@@ -87,9 +85,9 @@ describe('Component contracts — manager field edits', () => {
       texts: TextBlocks.EMPTY, warpGateInfo: new Slot.WarpGateInfo(), modules: new Slot.ManagerModulesState(),
       aiConfiguration: new Slot.AiConfigurationState(), slotAssignment: SlotAssignment.EMPTY,
       raceGateInfo: new Slot.RaceGateInfo(), unloadedDummies: new Slot.UnloadedDummiesState(),
-      moduleExplosions: new Slot.ModuleExplosionsState(), powerReactor: new PowerState(1, 2), modData: new Slot.ModDataState(),
+      moduleExplosions: new Slot.ModuleExplosionsState(), powerAddOn: new PowerState(1, 2), powerReactor: new Slot.EntSlotObject('PowerInterface', Tags.struct(null, [Tags.byte(null, 1), Tags.long(null, -1n)])), modData: new Slot.ModDataState(),
     };
-    const properties: Record<string, string> = { powerReactor: 'powerState' };
+    const properties: Record<string, string> = { powerAddOn: 'powerState' };
     for (const [key, value] of Object.entries(values)) {
       const updated = base.getField(key)!.withValue(value);
       assert.instanceOf((updated as any)[properties[key] ?? key], value.constructor, key);
@@ -97,18 +95,17 @@ describe('Component contracts — manager field edits', () => {
     }
     assert.equal(base.getField('shieldAddOn')!.withValue(7).initialShields, 7);
     assert.equal(base.getField('pullPermission')!.withValue(1).pullPermission, 1);
-    assert.isNull(base.getField('missing')); assert.strictEqual(base.getInventory(999), Inventory.EMPTY);
+    assert.isNull(base.getField('missing')); assert.equal(base.getInventory(999).size, 0);
     assert.equal(base.initialShields, 0);
   });
 
-  it('handles malformed optional inventory/power payloads without losing the manager', () => {
-    assert.strictEqual(ManagerContainer.fromTag(Tags.byte(null, 0)), ManagerContainer.EMPTY);
+  it('rejects malformed inventory and PowerAddOn records without reporting an empty manager', () => {
+    assert.throws(() => ManagerContainer.fromTag(Tags.byte(null, 0)));
     const unserializable = Tags.struct(null, [slots({ 0: Tags.int(null, 0), 2: bad() })]);
-    assert.throws(() => ManagerContainer.fromTag(slots({ 0: unserializable })), 'Invalid Tag collection');
-    // Malformed inventory semantics remain preservable when the Tag tree itself is valid.
+    assert.throws(() => ManagerContainer.fromTag(slots({ 0: unserializable })));
     const inventoryList = Tags.struct(null, [Tags.byte(null, 0), empty(), slots({ 0: Tags.int(null, 0), 2: Tags.struct('inv1', []) })]);
-    const manager = ManagerContainer.fromTag(slots({ 0: inventoryList, 15: bad() }));
-    assert.equal(manager.inventories.size, 0); assert.deepEqual(manager.powerState, PowerState.EMPTY);
-    assert.deepEqual(ManagerContainer.fromTag(slots({ 2: bad() })).powerState, PowerState.EMPTY);
+    assert.throws(() => ManagerContainer.fromTag(slots({ 0: inventoryList })));
+    assert.throws(() => ManagerContainer.fromTag(slots({ 15: bad() })));
+    assert.throws(() => ManagerContainer.fromTag(slots({ 2: bad() })));
   });
 });

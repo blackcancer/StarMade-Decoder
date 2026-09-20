@@ -566,7 +566,7 @@ describe('SmbmmWriter — .smbmm encoding', function () {
     const raw = new Uint8Array([0x01, 0x02, 0x03, 0x04]);
     const buf = writeSmbmm({ size: 4, isEmpty: false, raw });
     assert.equal(buf.length, 4);
-    const parsed = parseSmbmm(buf);
+    const parsed = parseSmbmm(buf, {mode:'preserve'});
     assert.isFalse(parsed.isEmpty);
     assert.deepEqual(Array.from(parsed.raw), [1, 2, 3, 4]);
   });
@@ -584,7 +584,7 @@ describe('SmbmmWriter — .smbmm encoding', function () {
       ],
       raw: new Uint8Array(16),
     });
-    const parsed = parseSmbmm(buf);
+    const parsed = parseSmbmm(buf, {legacyInt32Pairs:true});
     assert.equal(parsed.format, 'int32Pairs');
     assert.deepEqual(parsed.mappings, [
       { from: 10, to: 20 },
@@ -613,29 +613,28 @@ describe('SimWriter — .sim encoding', function () {
   it('writes synthetic simulation groups from high-level fields', async () => {
     const { writeSim } = await import('../../src/smd3/SimWriter.js');
     const { parseSim } = await import('../../src/smd3/SimParser.js');
-    const root = Tags.struct('SimulationState', []);
     const encoded = writeSim({
-      version: 1,
+      version: 0,
       lastUpdate: 123n,
       simulation: null,
-      rootTag: root,
       groups: [{
-        version: 2,
-        type: 3,
+        version: 1,
+        type: 2,
         members: ['ENTITY_SHIP_Test'],
         startTime: 456n,
         startSector: { x: 1, y: 2, z: 3 },
-        programId: 4,
-        raw: root,
+        programId: 1,
+        metadata: Tags.struct(null, [Tags.vector3i(null, 4, 5, 6), Tags.string(null, 'ENTITY_Target')]),
       }],
     });
     const parsed = parseSim(encoded);
-    assert.equal(parsed.version, 1);
+    assert.equal(parsed.version, 0);
     assert.equal(parsed.lastUpdate, 123n);
     assert.lengthOf(parsed.groups, 1);
     assert.deepEqual(parsed.groups[0].members, ['ENTITY_SHIP_Test']);
     assert.deepEqual(parsed.groups[0].startSector, { x: 1, y: 2, z: 3 });
-    assert.equal(parsed.groups[0].programId, 4);
+    assert.equal(parsed.groups[0].programId, 1);
+    assert.equal(parsed.groups[0].metadata!.getStruct()[1].getString(), 'ENTITY_Target');
   });
 });
 

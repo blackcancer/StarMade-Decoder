@@ -145,9 +145,10 @@ describe('Block configuration contracts — persistence and metadata', () => {
       assert.equal(vanilla.getNumber('Config.Value'), 1);
       (edited as any).saveCustom(config, vanilla);
       assert.isAbove(edited.entries().size, 0); assert.include(edited.toString(), Ctor.name);
-      for (const raw of [null, '', { Null: null, Repeated: [1, 2] }]) {
-        assert.equal((Ctor as any)._flatten(raw).size, 0);
-      }
+      assert.equal(Ctor.fromXml('').entries().size, 0);
+      const repeated = Ctor.fromXml('<Config><Repeated>1</Repeated><Repeated>2</Repeated></Config>');
+      assert.include(repeated.toXml(), '<Repeated>1</Repeated><Repeated>2</Repeated>');
+      assert.throws(() => repeated.get('Config.Repeated'), /Ambiguous/);
     });
   }
 });

@@ -71,7 +71,7 @@ describe('Slot model contracts — defaults and field coercion', () => {
   });
 
   it('updates list elements and containers by value and rejects incompatible edits', () => {
-    for (const listType of [TagType.INT, undefined]) {
+    for (const listType of [TagType.INT]) {
       const list = new S.EntSlotObject('List', new Tag(TagType.LIST, null, [Tags.int(null, 1)], listType));
       assert.equal(list.withFieldValue(0, 9).toTag().getList()[0].getInt(), 9);
     }
@@ -79,7 +79,7 @@ describe('Slot model contracts — defaults and field coercion', () => {
     for (const name of [null, 'named']) {
       const original = new S.NpcDataState(Tags.struct('root', [Tags.struct(name, [])]));
       const changed = original.withFieldValue(0, child);
-      assert.equal(changed.toTag().getStruct()[0].name, name ?? 'other');
+      assert.equal(changed.toTag().getStruct()[0].name, name);
     }
     const fields = new S.EntSlotObject('Fields', Tags.struct(null, [Tags.int('n', 1)]));
     assert.equal(fields.withFieldValue('n', 2).fields[0].value, 2);
@@ -164,7 +164,7 @@ describe('Slot model contracts — rails and blueprint state', () => {
     assert.equal(spawn.getCount(5), 4); assert.equal(spawn.totalBlocks, 6);
     assert.lengthOf(spawn.counts, 2); assert.equal(spawn.withCount(5, 0).totalBlocks, 2);
     assert.equal(spawn.withCount(5, 0).withCount(6, 0).totalBlocks, 0);
-    assert.equal(new S.ItemsToSpawnWith(Tags.byteArray(null, [255])).totalBlocks, 0);
+    assert.throws(() => new S.ItemsToSpawnWith(Tags.byteArray(null, [255])));
     const cargo = new S.CargoInventoryBlock().withPiece(piece);
     assert.deepEqual(cargo.piece, piece); assert.deepEqual(cargo.toJSON().piece, piece);
     assert.isNull(cargo.clear().piece);
@@ -209,12 +209,12 @@ describe('Slot model contracts — collections and scanner data', () => {
     assert.equal(h.withTime(8n).time, 8n); assert.equal(h.withTime(8).time, 8n);
     assert.equal(h.withIp('::1').ip, '::1'); assert.equal(h.withStarmadeName('Pilot').starmadeName, 'Pilot');
     assert.equal(S.PlayerInfoHistoryEntry.create(7n, '::1', 'Pilot').starmadeName, 'Pilot');
-    assert.equal(S.PlayerInfoHistoryEntry.fromTag(empty()).time, 0n);
+    assert.throws(() => S.PlayerInfoHistoryEntry.fromTag(empty()), /History records/);
     const coordinate = S.SavedCoordinateEntry.create(v, 'Home');
     assert.equal(coordinate.withName('Base').name, 'Base');
     assert.deepEqual(coordinate.withSector({ x: 3, y: 2, z: 1 }).sector, { x: 3, y: 2, z: 1 });
     assert.deepEqual(coordinate.withColor(v4).color, v4); assert.equal(coordinate.withIcon(4).icon, 4);
-    assert.equal(S.SavedCoordinateEntry.fromTag(empty()).name, '');
+    assert.throws(() => S.SavedCoordinateEntry.fromTag(empty()), /Coordinates require/);
     const scan = S.ScanDataRecord.create({ origin: v, time: 10n, range: 32 });
     const explosion = S.ModuleExplosionState.create();
     const collections = [
@@ -355,6 +355,6 @@ describe('Slot model contracts — modules and inventories', () => {
     assert.equal(invalid.version, 0); assert.isNull(invalid.min); assert.equal(invalid.cause, 0);
     const fields = Array.from({ length: 10 }, () => Tags.nothing(null));
     fields[9] = Tags.byteArray(null, [255, 255, 255, 255]);
-    assert.deepEqual(new S.ModuleExplosionState(Tags.struct(null, fields)).explosionPositions, []);
+    assert.throws(() => new S.ModuleExplosionState(Tags.struct(null, fields)).explosionPositions, /Incomplete explosion-position list/);
   });
 });

@@ -804,7 +804,7 @@ export function parseSmbpm(data: Buffer | Uint8Array, tagOptions: TagReadOptions
         internals.managerRaw = new Uint8Array(tagBuf);
         try {
           internals.managerTag = readFrom(tagBuf, tagOptions);
-          result.manager = ManagerContainer.fromTag(internals.managerTag);
+          result.manager = ManagerContainer.fromTag(internals.managerTag, tagOptions);
         } catch (cause) { throw new DecodeError(cause instanceof DecodeError ? cause.code : 'E_FORMAT', 'Invalid manager Tag in blueprint metadata', { cause }); }
         return finalizeSmbpm(result, internals); // SEG_MANAGER_BYTE ends reading
       }
@@ -922,7 +922,7 @@ export function parseSmbpm(data: Buffer | Uint8Array, tagOptions: TagReadOptions
         internals.thrustRaw = new Uint8Array(tagBuf);
         try {
           internals.thrustTag = readFrom(tagBuf, tagOptions);
-          result.thrustConfig = ThrustConfig.fromTag(internals.thrustTag);
+          result.thrustConfig = ThrustConfig.fromTag(internals.thrustTag, tagOptions);
         } catch (cause) { throw new DecodeError(cause instanceof DecodeError ? cause.code : 'E_FORMAT', 'Invalid embedded Tag in blueprint metadata', { cause }); }
         return finalizeSmbpm(result, internals); // tag consumes the rest of the stream
       }

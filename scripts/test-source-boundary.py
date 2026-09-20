@@ -32,6 +32,12 @@ with tempfile.TemporaryDirectory(prefix='decoder-source-boundary-') as folder:
     with zipfile.ZipFile(root / 'package.zip', 'w') as archive:
         archive.writestr('source.tar.gz', nested.getvalue())
     assert module.scan(root)[1] == ['package.zip!source.tar.gz!nested/Forbidden.java']
+    for extension in ('.sment', '.smskin'):
+        skin = root / ('disguised' + extension)
+        with zipfile.ZipFile(skin, 'w') as archive:
+            archive.writestr('Forbidden.class', b'publication-boundary-test')
+        assert skin.name + '!Forbidden.class' in module.scan(root)[1]
+        skin.unlink()
     (root / 'package.zip').write_bytes(b'invalid archive')
     result = subprocess.run([sys.executable, str(script), str(root)], capture_output=True)
     assert result.returncode == 1

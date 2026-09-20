@@ -7,6 +7,10 @@
  * fields, summaries, and immutable update helpers.
  */
 
+import { TagModelFile } from '../core/TagModelFile.js';
+import { DecodeError } from '../core/DecodeError.js';
+import { copyTagModel, tagModelOptions } from '../core/TagModel.js';
+import type { TagReadOptions } from '../core/TagParser.js';
 import { Tag, FINISH_TAG } from '../core/Tag.js';
 import { Tags } from '../core/TagBuilder.js';
 import { TagType, TAG_TYPE_NAMES } from '../core/TagType.js';
@@ -25,6 +29,16 @@ import {
   type EntityFieldSchema,
   type EntityFieldSetterMap,
 } from './EntityFieldView.js';
+
+/** Private local budgets shared by immutable revisions, never by caller-owned mutable options. */
+const slotOptions = new WeakMap<object, TagReadOptions>();
+/** Freezes detached projections; private Tag graphs remain inaccessible and are copied on output. */
+function freezeSlotView(value: object): void {
+  for (const item of Object.values(value)) {
+    if (item !== null && typeof item === 'object' && !Object.isFrozen(item)) freezeSlotView(item);
+  }
+  Object.freeze(value);
+}
 
 /**
  * Describes the EntVector3i data shape used by high-level StarMade object modelling.
@@ -182,13 +196,17 @@ export class EntSlotObject {
    * @param kind - Input value for the constructor operation.
    * @param tag - Input value for the constructor operation.
    */
-  constructor(kind: string, tag: Tag = Tags.nothing(null)) {
+  constructor(kind: string, tag: Tag = Tags.nothing(null), options: TagReadOptions = {}) {
+    tag=copyTagModel(tag,options); slotOptions.set(this,Object.freeze(tagModelOptions(options)));
+
     this.kind = kind;
     this.present = tag.type !== TagType.NOTHING && tag.type !== TagType.FINISH;
     this.tagName = tag.name;
     this.tagType = tagTypeName(tag.type);
     this.childCount = tagChildren(tag).length;
     Object.defineProperty(this, '_tag', { value: tag, enumerable: false });
+
+    if (new.target === EntSlotObject) freezeSlotView(this);
   }
 
   /**
@@ -227,7 +245,7 @@ export class EntSlotObject {
     const index = typeof keyOrIndex === 'number'
       ? keyOrIndex
       : this.fields.find(field => field.key === keyOrIndex)?.index ?? -1;
-    if (index < 0 || index >= children.length) {
+    if (!Number.isInteger(index) || index < 0 || index >= children.length) {
       throw new RangeError(`${this.kind} field "${String(keyOrIndex)}" does not exist`);
     }
     const next = [...children];
@@ -241,7 +259,7 @@ export class EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   toTag(): Tag {
-    return this._tag;
+    return copyTagModel(this._tag,slotOptions.get(this));
   }
 
   /**
@@ -268,10 +286,10 @@ export class EntSlotObject {
    */
   protected _withTag(tag: Tag): this {
     if (this.constructor === EntSlotObject) {
-      return new EntSlotObject(this.kind, tag) as this;
+      return new EntSlotObject(this.kind, tag, slotOptions.get(this)) as this;
     }
-    const Ctor = this.constructor as new (tag: Tag) => this;
-    return new Ctor(tag);
+    const Ctor = this.constructor as new (tag: Tag, options?: TagReadOptions) => this;
+    return new Ctor(tag, slotOptions.get(this));
   }
 
   /**
@@ -309,8 +327,11 @@ export class NpcDataState extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.struct('[]', [])) {
-    super('NpcDataState', tag);
+  constructor(tag: Tag = Tags.struct('[]', []), options: TagReadOptions = {}) {
+    super('NpcDataState', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -319,7 +340,7 @@ export class NpcDataState extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): NpcDataState {
-    return new NpcDataState(Tags.struct(this.tagName, []));
+    return new NpcDataState(Tags.struct(this.tagName, []), slotOptions.get(this));
   }
 }
 
@@ -342,7 +363,9 @@ export class UniqueSegmentPieceState {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag) {
+  constructor(tag: Tag, options: TagReadOptions = {}) {
+    tag=copyTagModel(tag,options); slotOptions.set(this,Object.freeze(tagModelOptions(options)));
+
     const children = tagChildren(tag);
     this.version = children[0]?.type === TagType.BYTE ? children[0].getByte() : 0;
     this.entityUid = children[1]?.type === TagType.STRING ? children[1].getString() : '';
@@ -352,6 +375,8 @@ export class UniqueSegmentPieceState {
     this.active = children[5]?.type === TagType.BYTE ? children[5].getByte() !== 0 : false;
     this.hitpoints = children[6]?.type === TagType.BYTE ? children[6].getByte() : 0;
     Object.defineProperty(this, '_tag', { value: tag, enumerable: false });
+
+    freezeSlotView(this);
   }
 
   /**
@@ -360,8 +385,8 @@ export class UniqueSegmentPieceState {
    * @param value - Input value for the from operation.
    * @returns The computed StarMade-Decoder value.
    */
-  static from(value: UniqueSegmentPieceValue): UniqueSegmentPieceState {
-    return new UniqueSegmentPieceState(uniqueSegmentPieceTag(value));
+  static from(value: UniqueSegmentPieceValue, options: TagReadOptions = {}): UniqueSegmentPieceState {
+    return new UniqueSegmentPieceState(uniqueSegmentPieceTag(value), options);
   }
 
   /**
@@ -371,7 +396,7 @@ export class UniqueSegmentPieceState {
    * @returns The computed StarMade-Decoder value.
    */
   withEntityUid(entityUid: string): UniqueSegmentPieceState {
-    return UniqueSegmentPieceState.from({ ...this.toJSON(), entityUid });
+    return new UniqueSegmentPieceState(replaceChild(this._tag,1,Tags.string(null,entityUid)),slotOptions.get(this));
   }
 
   /**
@@ -381,7 +406,7 @@ export class UniqueSegmentPieceState {
    * @returns The computed StarMade-Decoder value.
    */
   withPosition(position: EntVector3i): UniqueSegmentPieceState {
-    return UniqueSegmentPieceState.from({ ...this.toJSON(), position });
+    return new UniqueSegmentPieceState(replaceChild(this._tag,2,Tags.vector3i(null,position.x,position.y,position.z)),slotOptions.get(this));
   }
 
   /**
@@ -391,7 +416,7 @@ export class UniqueSegmentPieceState {
    * @returns The computed StarMade-Decoder value.
    */
   withType(type: number): UniqueSegmentPieceState {
-    return UniqueSegmentPieceState.from({ ...this.toJSON(), type });
+    return new UniqueSegmentPieceState(replaceChild(this._tag,3,Tags.short(null,type)),slotOptions.get(this));
   }
 
   /**
@@ -401,7 +426,7 @@ export class UniqueSegmentPieceState {
    * @returns The computed StarMade-Decoder value.
    */
   withOrientation(orientation: number): UniqueSegmentPieceState {
-    return UniqueSegmentPieceState.from({ ...this.toJSON(), orientation });
+    return new UniqueSegmentPieceState(replaceChild(this._tag,4,Tags.byte(null,orientation)),slotOptions.get(this));
   }
 
   /**
@@ -411,7 +436,7 @@ export class UniqueSegmentPieceState {
    * @returns The computed StarMade-Decoder value.
    */
   withActive(active: boolean): UniqueSegmentPieceState {
-    return UniqueSegmentPieceState.from({ ...this.toJSON(), active });
+    return new UniqueSegmentPieceState(replaceChild(this._tag,5,Tags.bool(null,active)),slotOptions.get(this));
   }
 
   /**
@@ -421,7 +446,7 @@ export class UniqueSegmentPieceState {
    * @returns The computed StarMade-Decoder value.
    */
   withHitpoints(hitpoints: number): UniqueSegmentPieceState {
-    return UniqueSegmentPieceState.from({ ...this.toJSON(), hitpoints });
+    return new UniqueSegmentPieceState(replaceChild(this._tag,6,Tags.byte(null,hitpoints)),slotOptions.get(this));
   }
 
   /**
@@ -430,7 +455,7 @@ export class UniqueSegmentPieceState {
    * @returns The computed StarMade-Decoder value.
    */
   toTag(): Tag {
-    return this._tag;
+    return copyTagModel(this._tag,slotOptions.get(this));
   }
 
   /**
@@ -462,8 +487,12 @@ export class RailRequestState {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.byte(null, 1)) {
+  constructor(tag: Tag = Tags.byte(null, 1), options: TagReadOptions = {}) {
+    tag=copyTagModel(tag,options); slotOptions.set(this,Object.freeze(tagModelOptions(options)));
+
     Object.defineProperty(this, '_tag', { value: tag, enumerable: false });
+
+    freezeSlotView(this);
   }
 
   /**
@@ -483,7 +512,7 @@ export class RailRequestState {
   get rail(): UniqueSegmentPieceState | null {
     if (this.disconnect) return null;
     const tag = tagChildren(this._tag)[0];
-    return tag?.type === TagType.STRUCT ? new UniqueSegmentPieceState(tag) : null;
+    return tag?.type === TagType.STRUCT ? new UniqueSegmentPieceState(tag, slotOptions.get(this)) : null;
   }
 
   /**
@@ -494,7 +523,7 @@ export class RailRequestState {
   get docked(): UniqueSegmentPieceState | null {
     if (this.disconnect) return null;
     const tag = tagChildren(this._tag)[1];
-    return tag?.type === TagType.STRUCT ? new UniqueSegmentPieceState(tag) : null;
+    return tag?.type === TagType.STRUCT ? new UniqueSegmentPieceState(tag, slotOptions.get(this)) : null;
   }
 
   /**
@@ -662,7 +691,7 @@ export class RailRequestState {
    * @returns The computed StarMade-Decoder value.
    */
   disconnectRequest(): RailRequestState {
-    return new RailRequestState(Tags.byte(null, 1));
+    return new RailRequestState(Tags.byte(null, 1), slotOptions.get(this));
   }
 
   /**
@@ -671,7 +700,7 @@ export class RailRequestState {
    * @returns The computed StarMade-Decoder value.
    */
   toTag(): Tag {
-    return this._tag;
+    return copyTagModel(this._tag,slotOptions.get(this));
   }
 
   /**
@@ -702,7 +731,7 @@ export class RailRequestState {
     if (this.disconnect) {
       throw new TypeError('Cannot edit fields on a disconnected RailRequestState');
     }
-    return new RailRequestState(replaceChild(this._tag, index, tag));
+    return new RailRequestState(replaceChild(this._tag, index, tag), slotOptions.get(this));
   }
 }
 
@@ -715,8 +744,11 @@ export class RailControllerState extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.byte(null, 0)) {
-    super('RailControllerState', tag);
+  constructor(tag: Tag = Tags.byte(null, 0), options: TagReadOptions = {}) {
+    super('RailControllerState', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -772,7 +804,7 @@ export class RailControllerState extends EntSlotObject {
   get currentRequest(): RailRequestState | null {
     const requestTag = tagChildren(this.toTag())[1];
     const firstRequest = tagChildren(requestTag)[0];
-    return firstRequest ? new RailRequestState(firstRequest) : null;
+    return firstRequest ? new RailRequestState(firstRequest, slotOptions.get(this)) : null;
   }
 
   /**
@@ -782,7 +814,7 @@ export class RailControllerState extends EntSlotObject {
    */
   get expectedRequests(): readonly RailRequestState[] {
     const expectedTag = tagChildren(this.toTag())[2];
-    return tagChildren(expectedTag).map(child => new RailRequestState(child));
+    return tagChildren(expectedTag).map(child => new RailRequestState(child, slotOptions.get(this)));
   }
 
   /**
@@ -793,7 +825,7 @@ export class RailControllerState extends EntSlotObject {
    */
   withCurrentRequest(request: RailRequestState | null): RailControllerState {
     if (request === null) {
-      return new RailControllerState(Tags.byte(null, 0));
+      return new RailControllerState(Tags.byte(null, 0), slotOptions.get(this));
     }
     const mode = this.modeCode > 0 ? this.modeCode : 3;
     const expected = this._expectedTag();
@@ -801,7 +833,7 @@ export class RailControllerState extends EntSlotObject {
       Tags.byte(null, mode),
       Tags.struct(null, [request.toTag()]),
       expected,
-    ]));
+    ]), slotOptions.get(this));
   }
 
   /**
@@ -819,9 +851,9 @@ export class RailControllerState extends EntSlotObject {
             Tags.byte(null, 2),
             Tags.struct(null, []),
             Tags.struct(null, requests.map(request => request.toTag())),
-          ]));
+          ]), slotOptions.get(this));
     }
-    return new RailControllerState(replaceChild(tag, 2, Tags.struct(null, requests.map(request => request.toTag()))));
+    return new RailControllerState(replaceChild(tag, 2, Tags.struct(null, requests.map(request => request.toTag()))), slotOptions.get(this));
   }
 
   /**
@@ -853,7 +885,7 @@ export class RailControllerState extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): RailControllerState {
-    return new RailControllerState(Tags.byte(null, 0));
+    return new RailControllerState(Tags.byte(null, 0), slotOptions.get(this));
   }
 
   /**
@@ -893,8 +925,11 @@ export class CoreTimerState extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.struct(null, [Tags.long(null, -1n)])) {
-    super('CoreTimerState', tag);
+  constructor(tag: Tag = Tags.struct(null, [Tags.long(null, -1n)]), options: TagReadOptions = {}) {
+    super('CoreTimerState', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -924,7 +959,7 @@ export class CoreTimerState extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   withTimeLeftMs(timeLeftMs: bigint | number): CoreTimerState {
-    return new CoreTimerState(Tags.struct(this.tagName, [Tags.long(null, timeLeftMs)]));
+    return new CoreTimerState(Tags.struct(this.tagName, [Tags.long(null, timeLeftMs)]), slotOptions.get(this));
   }
 
   /**
@@ -955,8 +990,11 @@ export class BlueprintInfo extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.byte(null, 1)) {
-    super('BlueprintInfo', tag);
+  constructor(tag: Tag = Tags.byte(null, 1), options: TagReadOptions = {}) {
+    super('BlueprintInfo', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -998,7 +1036,7 @@ export class BlueprintInfo extends EntSlotObject {
     return new BlueprintInfo(Tags.struct(this.tagName, [
       Tags.string(null, path),
       Tags.string(null, this.identifier),
-    ]));
+    ]), slotOptions.get(this));
   }
 
   /**
@@ -1011,7 +1049,7 @@ export class BlueprintInfo extends EntSlotObject {
     return new BlueprintInfo(Tags.struct(this.tagName, [
       Tags.string(null, this.path),
       Tags.string(null, identifier),
-    ]));
+    ]), slotOptions.get(this));
   }
 
   /**
@@ -1020,7 +1058,7 @@ export class BlueprintInfo extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): BlueprintInfo {
-    return new BlueprintInfo(Tags.byte(null, 1));
+    return new BlueprintInfo(Tags.byte(null, 1), slotOptions.get(this));
   }
 
   /**
@@ -1042,8 +1080,12 @@ export class ItemsToSpawnWith extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.byte(null, 0)) {
-    super('ItemsToSpawnWith', tag);
+  constructor(tag: Tag = Tags.byte(null, 0), options: TagReadOptions = {}) {
+    super('ItemsToSpawnWith', tag, options);
+    tag = this.toTag();
+
+    this.elementCountMap;
+    freezeSlotView(this);
   }
 
   /**
@@ -1054,11 +1096,7 @@ export class ItemsToSpawnWith extends EntSlotObject {
   get elementCountMap(): ElementCountMap {
     const tag = this.toTag();
     if (tag.type !== TagType.BYTE_ARRAY) return new ElementCountMap([]);
-    try {
-      return ElementCountMap.fromRaw(tag.getByteArray());
-    } catch {
-      return new ElementCountMap([]);
-    }
+    return ElementCountMap.fromRaw(tag.getByteArray(), { maxBytes: slotOptions.get(this)?.maxInflatedBytes, maxEntries: slotOptions.get(this)?.maxListLength });
   }
 
   /**
@@ -1099,7 +1137,7 @@ export class ItemsToSpawnWith extends EntSlotObject {
   withCount(type: number, count: number): ItemsToSpawnWith {
     const map = this.elementCountMap.setCount(type, count);
     return map.totalBlocks > 0
-      ? new ItemsToSpawnWith(Tags.byteArray(this.tagName, map.toRaw()))
+      ? new ItemsToSpawnWith(Tags.byteArray(this.tagName, map.toRaw()), slotOptions.get(this))
       : this.clear();
   }
 
@@ -1109,7 +1147,7 @@ export class ItemsToSpawnWith extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): ItemsToSpawnWith {
-    return new ItemsToSpawnWith(Tags.byte(null, 0));
+    return new ItemsToSpawnWith(Tags.byte(null, 0), slotOptions.get(this));
   }
 
   /**
@@ -1146,7 +1184,9 @@ export class QuarterState {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag) {
+  constructor(tag: Tag, options: TagReadOptions = {}) {
+    tag=copyTagModel(tag,options); slotOptions.set(this,Object.freeze(tagModelOptions(options)));
+
     const children = tagChildren(tag);
     this.version = children[0]?.type === TagType.BYTE ? children[0].getByte() : 0;
     this.type = children[1]?.type === TagType.BYTE ? children[1].getByte() : 0;
@@ -1162,9 +1202,11 @@ export class QuarterState {
       .filter(child => child.type === TagType.INT)
       .map(child => child.getInt());
     this.extra = children[11] && children[11].type !== TagType.NOTHING
-      ? new EntSlotObject(`${this.typeName}QuarterExtra`, children[11])
+      ? new EntSlotObject(`${this.typeName}QuarterExtra`, children[11], options)
       : null;
     Object.defineProperty(this, '_tag', { value: tag, enumerable: false });
+
+    freezeSlotView(this);
   }
 
   /**
@@ -1184,7 +1226,7 @@ export class QuarterState {
     index?: bigint | number;
     childIds?: readonly number[];
     extra?: EntSlotObject | null;
-  }): QuarterState {
+  }, options: TagReadOptions = {}): QuarterState {
     const childIds = data.childIds ?? [];
     return new QuarterState(Tags.struct(null, [
       Tags.byte(null, 0),
@@ -1199,7 +1241,7 @@ export class QuarterState {
       Tags.int(null, childIds.length),
       new Tag(TagType.LIST, null, childIds.map(id => Tags.int(null, id)), TagType.INT),
       data.extra?.toTag() ?? Tags.nothing(null),
-    ]));
+    ]), options);
   }
 
   /**
@@ -1209,7 +1251,7 @@ export class QuarterState {
    * @returns The computed StarMade-Decoder value.
    */
   withType(type: number): QuarterState {
-    return new QuarterState(replaceChild(this._tag, 1, Tags.byte(null, type)));
+    return new QuarterState(replaceChild(this._tag, 1, Tags.byte(null, type)), slotOptions.get(this));
   }
 
   /**
@@ -1224,7 +1266,7 @@ export class QuarterState {
       replaceChild(this._tag, 2, Tags.vector3i(null, min.x, min.y, min.z)),
       3,
       Tags.vector3i(null, max.x, max.y, max.z),
-    ));
+    ), slotOptions.get(this));
   }
 
   /**
@@ -1234,7 +1276,7 @@ export class QuarterState {
    * @returns The computed StarMade-Decoder value.
    */
   withId(id: number): QuarterState {
-    return new QuarterState(replaceChild(this._tag, 4, Tags.int(null, id)));
+    return new QuarterState(replaceChild(this._tag, 4, Tags.int(null, id)), slotOptions.get(this));
   }
 
   /**
@@ -1244,7 +1286,7 @@ export class QuarterState {
    * @returns The computed StarMade-Decoder value.
    */
   withStatus(status: string): QuarterState {
-    return new QuarterState(replaceChild(this._tag, 5, Tags.string(null, status)));
+    return new QuarterState(replaceChild(this._tag, 5, Tags.string(null, status)), slotOptions.get(this));
   }
 
   /**
@@ -1254,7 +1296,7 @@ export class QuarterState {
    * @returns The computed StarMade-Decoder value.
    */
   withIntegrity(integrity: number): QuarterState {
-    return new QuarterState(replaceChild(this._tag, 6, Tags.float(null, integrity)));
+    return new QuarterState(replaceChild(this._tag, 6, Tags.float(null, integrity)), slotOptions.get(this));
   }
 
   /**
@@ -1264,7 +1306,7 @@ export class QuarterState {
    * @returns The computed StarMade-Decoder value.
    */
   withPriority(priority: number): QuarterState {
-    return new QuarterState(replaceChild(this._tag, 7, Tags.int(null, priority)));
+    return new QuarterState(replaceChild(this._tag, 7, Tags.int(null, priority)), slotOptions.get(this));
   }
 
   /**
@@ -1274,7 +1316,7 @@ export class QuarterState {
    * @returns The computed StarMade-Decoder value.
    */
   withIndex(index: bigint | number): QuarterState {
-    return new QuarterState(replaceChild(this._tag, 8, Tags.long(null, index)));
+    return new QuarterState(replaceChild(this._tag, 8, Tags.long(null, index)), slotOptions.get(this));
   }
 
   /**
@@ -1288,7 +1330,7 @@ export class QuarterState {
       replaceChild(this._tag, 9, Tags.int(null, childIds.length)),
       10,
       new Tag(TagType.LIST, null, childIds.map(id => Tags.int(null, id)), TagType.INT),
-    ));
+    ), slotOptions.get(this));
   }
 
   /**
@@ -1298,7 +1340,7 @@ export class QuarterState {
    * @returns The computed StarMade-Decoder value.
    */
   withExtra(extra: EntSlotObject | null): QuarterState {
-    return new QuarterState(replaceChild(this._tag, 11, extra?.toTag() ?? Tags.nothing(null)));
+    return new QuarterState(replaceChild(this._tag, 11, extra?.toTag() ?? Tags.nothing(null)), slotOptions.get(this));
   }
 
   /**
@@ -1307,7 +1349,7 @@ export class QuarterState {
    * @returns The computed StarMade-Decoder value.
    */
   toTag(): Tag {
-    return this._tag;
+    return copyTagModel(this._tag,slotOptions.get(this));
   }
 
   /**
@@ -1342,8 +1384,11 @@ export class QuarterManagerState extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.struct(null, [Tags.byte(null, 0), Tags.struct(null, [])])) {
-    super('QuarterManagerState', tag);
+  constructor(tag: Tag = Tags.struct(null, [Tags.byte(null, 0), Tags.struct(null, [])]), options: TagReadOptions = {}) {
+    super('QuarterManagerState', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -1365,7 +1410,7 @@ export class QuarterManagerState extends EntSlotObject {
     const quarterStruct = tagChildren(this.toTag())[1];
     return tagChildren(quarterStruct)
       .filter(child => child.type === TagType.STRUCT)
-      .map(child => new QuarterState(child));
+      .map(child => new QuarterState(child, slotOptions.get(this)));
   }
 
   /**
@@ -1375,7 +1420,7 @@ export class QuarterManagerState extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   withVersion(version: number): QuarterManagerState {
-    return new QuarterManagerState(replaceChild(this.toTag(), 0, Tags.byte(null, version)));
+    return new QuarterManagerState(replaceChild(this.toTag(), 0, Tags.byte(null, version)), slotOptions.get(this));
   }
 
   /**
@@ -1394,7 +1439,7 @@ export class QuarterManagerState extends EntSlotObject {
     }
     const nextQuarters = [...quarters];
     nextQuarters[index] = quarter.toTag();
-    return new QuarterManagerState(replaceChild(this.toTag(), 1, Tags.struct(quarterStruct.name, nextQuarters)));
+    return new QuarterManagerState(replaceChild(this.toTag(), 1, Tags.struct(quarterStruct.name, nextQuarters)), slotOptions.get(this));
   }
 
   /**
@@ -1410,7 +1455,7 @@ export class QuarterManagerState extends EntSlotObject {
       this.toTag(),
       1,
       Tags.struct(quarterStruct.name, [...tagChildren(quarterStruct), quarter.toTag()]),
-    ));
+    ), slotOptions.get(this));
   }
 
   /**
@@ -1422,7 +1467,7 @@ export class QuarterManagerState extends EntSlotObject {
     return new QuarterManagerState(Tags.struct(this.tagName, [
       Tags.byte(null, this.version),
       Tags.struct(null, []),
-    ]));
+    ]), slotOptions.get(this));
   }
 
   /**
@@ -1439,88 +1484,34 @@ export class QuarterManagerState extends EntSlotObject {
  * Represents the PlayerInfoHistoryEntry model used by high-level StarMade object modelling.
  */
 export class PlayerInfoHistoryEntry {
-  /**
-   * Creates a PlayerInfoHistoryEntry instance.
-   *
-   * @param time - Input value for the constructor operation.
-   * @param ip - Input value for the constructor operation.
-   * @param starmadeName - Input value for the constructor operation.
-   */
-  constructor(
-    readonly time: bigint,
-    readonly ip: string,
-    readonly starmadeName: string,
-  ) {}
-
-  /**
-   * Builds a value for high-level StarMade object modelling.
-   *
-   * @param time - Input value for the create operation.
-   * @param ip - Input value for the create operation.
-   * @param starmadeName - Input value for the create operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static create(time: bigint | number, ip: string, starmadeName = ''): PlayerInfoHistoryEntry {
-    return new PlayerInfoHistoryEntry(typeof time === 'number' ? BigInt(time) : time, ip, starmadeName);
+  #file: TagModelFile;
+  /** Creates a detached history record using the persisted LONG/STRING/STRING schema. */
+  constructor(readonly time: bigint, readonly ip: string, readonly starmadeName: string, options: TagReadOptions = {}, source?: TagModelFile) {
+    this.#file = source ?? new TagModelFile(Tags.struct(null, [Tags.long(null, time), Tags.string(null, ip), Tags.string(null, starmadeName)]), options);
+    Object.freeze(this);
   }
-
-  /**
-   * Creates a value from Tag.
-   *
-   * @param tag - Input value for the fromTag operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromTag(tag: Tag): PlayerInfoHistoryEntry {
-    const children = tagChildren(tag);
-    return new PlayerInfoHistoryEntry(
-      children[0]?.type === TagType.LONG ? children[0].getLong() : 0n,
-      children[1]?.type === TagType.STRING ? children[1].getString() : '',
-      children[2]?.type === TagType.STRING ? children[2].getString() : '',
-    );
+  /** Creates a record; numeric timestamps must be exact integers. */
+  static create(time: bigint | number, ip: string, starmadeName = '', options: TagReadOptions = {}): PlayerInfoHistoryEntry {
+    return new PlayerInfoHistoryEntry(fieldValueAsBigInt(time, 'time'), ip, starmadeName, options);
   }
-
-  /**
-   * Returns a copy updated with Time.
-   *
-   * @param time - Input value for the withTime operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  withTime(time: bigint | number): PlayerInfoHistoryEntry {
-    return new PlayerInfoHistoryEntry(typeof time === 'number' ? BigInt(time) : time, this.ip, this.starmadeName);
+  /** Reads a complete record and preserves names and extension fields. */
+  static fromTag(tag: Tag, options: TagReadOptions = {}): PlayerInfoHistoryEntry {
+    const file = new TagModelFile(tag, options), children = tagChildren(file.root);
+    if (tag.type !== TagType.STRUCT || children[0]?.type !== TagType.LONG || children[1]?.type !== TagType.STRING || children[2]?.type !== TagType.STRING) {
+      throw new DecodeError('E_FORMAT', 'History records require a timestamp, address and player name');
+    }
+    return new PlayerInfoHistoryEntry(children[0].getLong(), children[1].getString(), children[2].getString(), file.options, file);
   }
-
-  /**
-   * Returns a copy updated with Ip.
-   *
-   * @param ip - Input value for the withIp operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  withIp(ip: string): PlayerInfoHistoryEntry {
-    return new PlayerInfoHistoryEntry(this.time, ip, this.starmadeName);
-  }
-
-  /**
-   * Returns a copy updated with StarmadeName.
-   *
-   * @param starmadeName - Input value for the withStarmadeName operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  withStarmadeName(starmadeName: string): PlayerInfoHistoryEntry {
-    return new PlayerInfoHistoryEntry(this.time, this.ip, starmadeName);
-  }
-
-  /**
-   * Converts this value to Tag.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toTag(): Tag {
-    return Tags.struct(null, [
-      Tags.long(null, this.time),
-      Tags.string(null, this.ip),
-      Tags.string(null, this.starmadeName),
-    ]);
-  }
+  /** Changes the exact persisted timestamp without losing extension fields. */
+  withTime(time: bigint | number): PlayerInfoHistoryEntry { return this.updated(0, Tags.long(null, fieldValueAsBigInt(time, 'time'))); }
+  /** Changes only the stored address. */
+  withIp(ip: string): PlayerInfoHistoryEntry { return this.updated(1, Tags.string(null, ip)); }
+  /** Changes only the stored player name. */
+  withStarmadeName(starmadeName: string): PlayerInfoHistoryEntry { return this.updated(2, Tags.string(null, starmadeName)); }
+  /** Validates a detached revision against the original limits. */
+  private updated(index: number, tag: Tag): PlayerInfoHistoryEntry { return PlayerInfoHistoryEntry.fromTag(replaceChild(this.#file.root, index, tag), this.#file.options); }
+  /** Returns a complete detached record. */
+  toTag(): Tag { return this.#file.root; }
 }
 
 /**
@@ -1532,8 +1523,11 @@ export class PlayerInfoHistoryList extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.struct('hist', [])) {
-    super('PlayerInfoHistoryList', tag);
+  constructor(tag: Tag = Tags.struct('hist', []), options: TagReadOptions = {}) {
+    super('PlayerInfoHistoryList', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -1544,7 +1538,7 @@ export class PlayerInfoHistoryList extends EntSlotObject {
   get entries(): readonly PlayerInfoHistoryEntry[] {
     return tagChildren(this.toTag())
       .filter(child => child.type === TagType.STRUCT)
-      .map(child => PlayerInfoHistoryEntry.fromTag(child));
+      .map(child => PlayerInfoHistoryEntry.fromTag(child, slotOptions.get(this)));
   }
 
   /**
@@ -1554,7 +1548,7 @@ export class PlayerInfoHistoryList extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   addEntry(entry: PlayerInfoHistoryEntry): PlayerInfoHistoryList {
-    return new PlayerInfoHistoryList(Tags.struct(this.tagName, [...this.entries.map(e => e.toTag()), entry.toTag()]));
+    return new PlayerInfoHistoryList(Tags.struct(this.tagName, [...this.entries.map(e => e.toTag()), entry.toTag()]), slotOptions.get(this));
   }
 
   /**
@@ -1568,7 +1562,7 @@ export class PlayerInfoHistoryList extends EntSlotObject {
     const entries = [...this.entries];
     if (index < 0 || index >= entries.length) throw new RangeError(`History index ${index} does not exist`);
     entries[index] = entry;
-    return new PlayerInfoHistoryList(Tags.struct(this.tagName, entries.map(e => e.toTag())));
+    return new PlayerInfoHistoryList(Tags.struct(this.tagName, entries.map(e => e.toTag())), slotOptions.get(this));
   }
 
   /**
@@ -1581,7 +1575,7 @@ export class PlayerInfoHistoryList extends EntSlotObject {
     const entries = [...this.entries];
     if (index < 0 || index >= entries.length) throw new RangeError(`History index ${index} does not exist`);
     entries.splice(index, 1);
-    return new PlayerInfoHistoryList(Tags.struct(this.tagName, entries.map(e => e.toTag())));
+    return new PlayerInfoHistoryList(Tags.struct(this.tagName, entries.map(e => e.toTag())), slotOptions.get(this));
   }
 
   /**
@@ -1590,7 +1584,7 @@ export class PlayerInfoHistoryList extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): PlayerInfoHistoryList {
-    return new PlayerInfoHistoryList(Tags.struct(this.tagName, []));
+    return new PlayerInfoHistoryList(Tags.struct(this.tagName, []), slotOptions.get(this));
   }
 
   /**
@@ -1621,7 +1615,9 @@ export class ScanDataRecord {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag) {
+  constructor(tag: Tag, options: TagReadOptions = {}) {
+    tag=copyTagModel(tag,options); slotOptions.set(this,Object.freeze(tagModelOptions(options)));
+
     const children = tagChildren(tag);
     this.origin = vector3iFromTag(children[0]) ?? { x: 0, y: 0, z: 0 };
     this.time = children[1]?.type === TagType.LONG ? children[1].getLong() : 0n;
@@ -1630,6 +1626,8 @@ export class ScanDataRecord {
     this.entityData = tagChildren(children[4]).map(parseScanEntityData);
     this.resourceData = tagChildren(children[5]).map(parseScanResourceData);
     Object.defineProperty(this, '_tag', { value: tag, enumerable: false });
+
+    freezeSlotView(this);
   }
 
   /**
@@ -1645,7 +1643,7 @@ export class ScanDataRecord {
     systemOwnershipType?: number;
     entityData?: readonly ScanEntityData[];
     resourceData?: readonly ScanResourceData[];
-  }): ScanDataRecord {
+  }, options: TagReadOptions = {}): ScanDataRecord {
     return new ScanDataRecord(Tags.struct('ScanDataTag', [
       Tags.vector3i('Origin', data.origin.x, data.origin.y, data.origin.z),
       Tags.long('Time', data.time),
@@ -1653,7 +1651,7 @@ export class ScanDataRecord {
       Tags.int('SystemOwnershipType', data.systemOwnershipType ?? 0),
       Tags.struct('EntityData', (data.entityData ?? []).map(scanEntityDataToTag)),
       Tags.struct('ResourceData', (data.resourceData ?? []).map(scanResourceDataToTag)),
-    ]));
+    ]), options);
   }
 
   /**
@@ -1663,7 +1661,7 @@ export class ScanDataRecord {
    * @returns The computed StarMade-Decoder value.
    */
   withOrigin(origin: EntVector3i): ScanDataRecord {
-    return new ScanDataRecord(replaceChild(this._tag, 0, Tags.vector3i('Origin', origin.x, origin.y, origin.z)));
+    return new ScanDataRecord(replaceChild(this._tag, 0, Tags.vector3i('Origin', origin.x, origin.y, origin.z)), slotOptions.get(this));
   }
 
   /**
@@ -1673,7 +1671,7 @@ export class ScanDataRecord {
    * @returns The computed StarMade-Decoder value.
    */
   withTime(time: bigint | number): ScanDataRecord {
-    return new ScanDataRecord(replaceChild(this._tag, 1, Tags.long('Time', time)));
+    return new ScanDataRecord(replaceChild(this._tag, 1, Tags.long('Time', time)), slotOptions.get(this));
   }
 
   /**
@@ -1683,7 +1681,7 @@ export class ScanDataRecord {
    * @returns The computed StarMade-Decoder value.
    */
   withRange(range: number): ScanDataRecord {
-    return new ScanDataRecord(replaceChild(this._tag, 2, Tags.float('Range', range)));
+    return new ScanDataRecord(replaceChild(this._tag, 2, Tags.float('Range', range)), slotOptions.get(this));
   }
 
   /**
@@ -1693,7 +1691,7 @@ export class ScanDataRecord {
    * @returns The computed StarMade-Decoder value.
    */
   withSystemOwnershipType(systemOwnershipType: number): ScanDataRecord {
-    return new ScanDataRecord(replaceChild(this._tag, 3, Tags.int('SystemOwnershipType', systemOwnershipType)));
+    return new ScanDataRecord(replaceChild(this._tag, 3, Tags.int('SystemOwnershipType', systemOwnershipType)), slotOptions.get(this));
   }
 
   /**
@@ -1703,7 +1701,7 @@ export class ScanDataRecord {
    * @returns The computed StarMade-Decoder value.
    */
   withEntityData(entityData: readonly ScanEntityData[]): ScanDataRecord {
-    return new ScanDataRecord(replaceChild(this._tag, 4, Tags.struct('EntityData', entityData.map(scanEntityDataToTag))));
+    return new ScanDataRecord(replaceChild(this._tag, 4, Tags.struct('EntityData', entityData.map(scanEntityDataToTag))), slotOptions.get(this));
   }
 
   /**
@@ -1723,7 +1721,7 @@ export class ScanDataRecord {
    * @returns The computed StarMade-Decoder value.
    */
   withResourceData(resourceData: readonly ScanResourceData[]): ScanDataRecord {
-    return new ScanDataRecord(replaceChild(this._tag, 5, Tags.struct('ResourceData', resourceData.map(scanResourceDataToTag))));
+    return new ScanDataRecord(replaceChild(this._tag, 5, Tags.struct('ResourceData', resourceData.map(scanResourceDataToTag))), slotOptions.get(this));
   }
 
   /**
@@ -1742,7 +1740,7 @@ export class ScanDataRecord {
    * @returns The computed StarMade-Decoder value.
    */
   toTag(): Tag {
-    return this._tag;
+    return copyTagModel(this._tag,slotOptions.get(this));
   }
 }
 
@@ -1755,8 +1753,11 @@ export class ScanHistory extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.struct(null, [])) {
-    super('ScanHistory', tag);
+  constructor(tag: Tag = Tags.struct(null, []), options: TagReadOptions = {}) {
+    super('ScanHistory', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -1767,7 +1768,7 @@ export class ScanHistory extends EntSlotObject {
   get scans(): readonly ScanDataRecord[] {
     return tagChildren(this.toTag())
       .filter(child => child.type === TagType.STRUCT)
-      .map(child => new ScanDataRecord(child));
+      .map(child => new ScanDataRecord(child, slotOptions.get(this)));
   }
 
   /**
@@ -1782,7 +1783,7 @@ export class ScanHistory extends EntSlotObject {
     if (index < 0 || index >= scans.length) throw new RangeError(`Scan index ${index} does not exist`);
     const next = [...scans];
     next[index] = scan.toTag();
-    return new ScanHistory(Tags.struct(this.tagName, next));
+    return new ScanHistory(Tags.struct(this.tagName, next), slotOptions.get(this));
   }
 
   /**
@@ -1792,7 +1793,7 @@ export class ScanHistory extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   addScan(scan: ScanDataRecord): ScanHistory {
-    return new ScanHistory(Tags.struct(this.tagName, [...this.scans.map(entry => entry.toTag()), scan.toTag()]));
+    return new ScanHistory(Tags.struct(this.tagName, [...this.scans.map(entry => entry.toTag()), scan.toTag()]), slotOptions.get(this));
   }
 
   /**
@@ -1805,7 +1806,7 @@ export class ScanHistory extends EntSlotObject {
     const scans = [...this.scans];
     if (index < 0 || index >= scans.length) throw new RangeError(`Scan index ${index} does not exist`);
     scans.splice(index, 1);
-    return new ScanHistory(Tags.struct(this.tagName, scans.map(scan => scan.toTag())));
+    return new ScanHistory(Tags.struct(this.tagName, scans.map(scan => scan.toTag())), slotOptions.get(this));
   }
 
   /**
@@ -1814,7 +1815,7 @@ export class ScanHistory extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): ScanHistory {
-    return new ScanHistory(Tags.struct(this.tagName, []));
+    return new ScanHistory(Tags.struct(this.tagName, []), slotOptions.get(this));
   }
 
   /**
@@ -1831,103 +1832,49 @@ export class ScanHistory extends EntSlotObject {
  * Represents the SavedCoordinateEntry model used by high-level StarMade object modelling.
  */
 export class SavedCoordinateEntry {
-  /**
-   * Creates a SavedCoordinateEntry instance.
-   *
-   * @param sector - Input value for the constructor operation.
-   * @param name - Input value for the constructor operation.
-   * @param color - Input value for the constructor operation.
-   * @param icon - Input value for the constructor operation.
-   */
-  constructor(
-    readonly sector: EntVector3i,
-    readonly name: string,
-    readonly color: EntVector4f = { x: 1, y: 1, z: 1, w: 1 },
-    readonly icon = 0,
-  ) {}
-
-  /**
-   * Builds a value for high-level StarMade object modelling.
-   *
-   * @param sector - Input value for the create operation.
-   * @param name - Input value for the create operation.
-   * @param color - Input value for the create operation.
-   * @param icon - Input value for the create operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static create(sector: EntVector3i, name: string, color?: EntVector4f, icon?: number): SavedCoordinateEntry {
-    return new SavedCoordinateEntry(sector, name, color, icon);
+  #file: TagModelFile;
+  readonly sector: EntVector3i;
+  readonly color: EntVector4f;
+  /** Creates a stored coordinate and color; no world/display transformation is calculated. */
+  constructor(sector: EntVector3i, readonly name: string, color: EntVector4f = { x: 1, y: 1, z: 1, w: 1 }, readonly icon = 0,
+    options: TagReadOptions = {}, source?: TagModelFile) {
+    this.#file = source ?? new TagModelFile(Tags.struct(null, [Tags.vector3i(null, sector.x, sector.y, sector.z), Tags.string(null, name),
+      Tags.vector4f(null, color.x, color.y, color.z, color.w), Tags.int(null, icon)]), options);
+    this.sector = Object.freeze({ ...sector }); this.color = Object.freeze({ x: Math.fround(color.x), y: Math.fround(color.y), z: Math.fround(color.z), w: Math.fround(color.w) });
+    Object.freeze(this);
   }
-
-  /**
-   * Creates a value from Tag.
-   *
-   * @param tag - Input value for the fromTag operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromTag(tag: Tag): SavedCoordinateEntry {
-    const children = tagChildren(tag);
-    return new SavedCoordinateEntry(
-      vector3iFromTag(children[0]) ?? { x: 0, y: 0, z: 0 },
-      children[1]?.type === TagType.STRING ? children[1].getString() : '',
-      vector4fFromTag(children[2]) ?? { x: 1, y: 1, z: 1, w: 1 },
-      children[3]?.type === TagType.INT ? children[3].getInt() : 0,
-    );
+  /** Creates a coordinate using the actual stored defaults. */
+  static create(sector: EntVector3i, name: string, color?: EntVector4f, icon?: number, options: TagReadOptions = {}): SavedCoordinateEntry {
+    return new SavedCoordinateEntry(sector, name, color, icon, options);
   }
-
-  /**
-   * Returns a copy updated with Sector.
-   *
-   * @param sector - Input value for the withSector operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  withSector(sector: EntVector3i): SavedCoordinateEntry {
-    return new SavedCoordinateEntry(sector, this.name, this.color, this.icon);
+  /** Reads a coordinate and the complete optional color/icon pair. */
+  static fromTag(tag: Tag, options: TagReadOptions = {}): SavedCoordinateEntry {
+    const file = new TagModelFile(tag, options), children = tagChildren(file.root);
+    if (tag.type !== TagType.STRUCT || children[0]?.type !== TagType.VECTOR3i || children[1]?.type !== TagType.STRING ||
+      (children.length > 2 && (children[2]?.type !== TagType.VECTOR4f || children[3]?.type !== TagType.INT))) {
+      throw new DecodeError('E_FORMAT', 'Coordinates require sector/name and a complete optional color/icon pair');
+    }
+    return new SavedCoordinateEntry(children[0].getVector3i(), children[1].getString(), children.length > 2 ? children[2].getVector4f() : undefined,
+      children.length > 2 ? children[3].getInt() : undefined, file.options, file);
   }
-
-  /**
-   * Returns a copy updated with Name.
-   *
-   * @param name - Input value for the withName operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  withName(name: string): SavedCoordinateEntry {
-    return new SavedCoordinateEntry(this.sector, name, this.color, this.icon);
+  /** Changes only the stored sector. */
+  withSector(sector: EntVector3i): SavedCoordinateEntry { return this.updated(0, Tags.vector3i(null, sector.x, sector.y, sector.z)); }
+  /** Changes only the stored label. */
+  withName(name: string): SavedCoordinateEntry { return this.updated(1, Tags.string(null, name)); }
+  /** Changes the stored color, adding the historical icon default when absent. */
+  withColor(color: EntVector4f): SavedCoordinateEntry { return this.updated(2, Tags.vector4f(null, color.x, color.y, color.z, color.w)); }
+  /** Changes the stored icon, adding the historical color default when absent. */
+  withIcon(icon: number): SavedCoordinateEntry { return this.updated(3, Tags.int(null, icon)); }
+  /** Retains unknown fields and names while introducing optional pairs together. */
+  private updated(index: number, tag: Tag): SavedCoordinateEntry {
+    let root = this.#file.root;
+    if (index >= 2 && tagChildren(root).length === 2) {
+      root = replaceChild(replaceChild(root, 2, Tags.vector4f(null, 1, 1, 1, 1)), 3, Tags.int(null, 0));
+    }
+    return SavedCoordinateEntry.fromTag(replaceChild(root, index, tag), this.#file.options);
   }
-
-  /**
-   * Returns a copy updated with Color.
-   *
-   * @param color - Input value for the withColor operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  withColor(color: EntVector4f): SavedCoordinateEntry {
-    return new SavedCoordinateEntry(this.sector, this.name, color, this.icon);
-  }
-
-  /**
-   * Returns a copy updated with Icon.
-   *
-   * @param icon - Input value for the withIcon operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  withIcon(icon: number): SavedCoordinateEntry {
-    return new SavedCoordinateEntry(this.sector, this.name, this.color, icon);
-  }
-
-  /**
-   * Converts this value to Tag.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toTag(): Tag {
-    return Tags.struct(null, [
-      Tags.vector3i(null, this.sector.x, this.sector.y, this.sector.z),
-      Tags.string(null, this.name),
-      Tags.vector4f(null, this.color.x, this.color.y, this.color.z, this.color.w),
-      Tags.int(null, this.icon),
-    ]);
-  }
+  /** Returns the original or edited detached Tag graph. */
+  toTag(): Tag { return this.#file.root; }
 }
 
 /**
@@ -1939,8 +1886,11 @@ export class SavedCoordinates extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.struct(null, [])) {
-    super('SavedCoordinates', tag);
+  constructor(tag: Tag = Tags.struct(null, []), options: TagReadOptions = {}) {
+    super('SavedCoordinates', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -1951,7 +1901,7 @@ export class SavedCoordinates extends EntSlotObject {
   get entries(): readonly SavedCoordinateEntry[] {
     return tagChildren(this.toTag())
       .filter(child => child.type === TagType.STRUCT)
-      .map(child => SavedCoordinateEntry.fromTag(child));
+      .map(child => SavedCoordinateEntry.fromTag(child, slotOptions.get(this)));
   }
 
   /**
@@ -1961,7 +1911,7 @@ export class SavedCoordinates extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   add(entry: SavedCoordinateEntry): SavedCoordinates {
-    return new SavedCoordinates(Tags.struct(this.tagName, [...this.entries.map(e => e.toTag()), entry.toTag()]));
+    return new SavedCoordinates(Tags.struct(this.tagName, [...this.entries.map(e => e.toTag()), entry.toTag()]), slotOptions.get(this));
   }
 
   /**
@@ -1975,7 +1925,7 @@ export class SavedCoordinates extends EntSlotObject {
     const entries = [...this.entries];
     if (index < 0 || index >= entries.length) throw new RangeError(`Saved coordinate index ${index} does not exist`);
     entries[index] = entry;
-    return new SavedCoordinates(Tags.struct(this.tagName, entries.map(e => e.toTag())));
+    return new SavedCoordinates(Tags.struct(this.tagName, entries.map(e => e.toTag())), slotOptions.get(this));
   }
 
   /**
@@ -1988,7 +1938,7 @@ export class SavedCoordinates extends EntSlotObject {
     const entries = [...this.entries];
     if (index < 0 || index >= entries.length) throw new RangeError(`Saved coordinate index ${index} does not exist`);
     entries.splice(index, 1);
-    return new SavedCoordinates(Tags.struct(this.tagName, entries.map(e => e.toTag())));
+    return new SavedCoordinates(Tags.struct(this.tagName, entries.map(e => e.toTag())), slotOptions.get(this));
   }
 
   /**
@@ -1997,7 +1947,7 @@ export class SavedCoordinates extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): SavedCoordinates {
-    return new SavedCoordinates(Tags.struct(this.tagName, []));
+    return new SavedCoordinates(Tags.struct(this.tagName, []), slotOptions.get(this));
   }
 
   /**
@@ -2019,8 +1969,11 @@ export class IgnoredPlayers extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.struct(null, [])) {
-    super('IgnoredPlayers', tag);
+  constructor(tag: Tag = Tags.struct(null, []), options: TagReadOptions = {}) {
+    super('IgnoredPlayers', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -2043,7 +1996,7 @@ export class IgnoredPlayers extends EntSlotObject {
   add(name: string): IgnoredPlayers {
     return this.names.includes(name)
       ? this
-      : new IgnoredPlayers(Tags.struct(this.tagName, [...this.names.map(n => Tags.string(null, n)), Tags.string(null, name)]));
+      : new IgnoredPlayers(Tags.struct(this.tagName, [...this.names.map(n => Tags.string(null, n)), Tags.string(null, name)]), slotOptions.get(this));
   }
 
   /**
@@ -2053,7 +2006,7 @@ export class IgnoredPlayers extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   remove(name: string): IgnoredPlayers {
-    return new IgnoredPlayers(Tags.struct(this.tagName, this.names.filter(n => n !== name).map(n => Tags.string(null, n))));
+    return new IgnoredPlayers(Tags.struct(this.tagName, this.names.filter(n => n !== name).map(n => Tags.string(null, n))), slotOptions.get(this));
   }
 
   /**
@@ -2062,7 +2015,7 @@ export class IgnoredPlayers extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): IgnoredPlayers {
-    return new IgnoredPlayers(Tags.struct(this.tagName, []));
+    return new IgnoredPlayers(Tags.struct(this.tagName, []), slotOptions.get(this));
   }
 
   /**
@@ -2084,8 +2037,11 @@ export class InventoryBackupState extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.byte(null, 0)) {
-    super('InventoryBackupState', tag);
+  constructor(tag: Tag = Tags.byte(null, 0), options: TagReadOptions = {}) {
+    super('InventoryBackupState', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -2185,12 +2141,11 @@ export class InventoryBackupState extends EntSlotObject {
     microInventory: Inventory;
     macroInventory: Inventory;
   }): InventoryBackupState {
-    return new InventoryBackupState(Tags.struct(this.tagName, [
-      inventories.mainInventory.toTag(),
-      inventories.capsuleInventory.toTag(),
-      inventories.microInventory.toTag(),
-      inventories.macroInventory.toTag(),
-    ]));
+    let root = this.toTag();
+    for (const [index, inventory] of [inventories.mainInventory, inventories.capsuleInventory, inventories.microInventory, inventories.macroInventory].entries()) {
+      root = replaceChild(root, index, inventory.toTag());
+    }
+    return new InventoryBackupState(root, slotOptions.get(this));
   }
 
   /**
@@ -2199,7 +2154,7 @@ export class InventoryBackupState extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): InventoryBackupState {
-    return new InventoryBackupState(Tags.byte(null, 0));
+    return new InventoryBackupState(Tags.byte(null, 0), slotOptions.get(this));
   }
 
   /**
@@ -2227,11 +2182,7 @@ export class InventoryBackupState extends EntSlotObject {
   private _inventoryAt(index: number): Inventory | null {
     const tag = tagChildren(this.toTag())[index];
     if (tag?.type !== TagType.STRUCT) return null;
-    try {
-      return Inventory.fromTag(tag);
-    } catch {
-      return null;
-    }
+    return Inventory.fromTag(tag, slotOptions.get(this));
   }
 
   /**
@@ -2244,8 +2195,8 @@ export class InventoryBackupState extends EntSlotObject {
   private _withInventoryAt(index: number, inventory: Inventory): InventoryBackupState {
     const children = tagChildren(this.toTag());
     while (children.length < 4) children.push(Inventory.EMPTY.toTag());
-    children[index] = inventory.toTag();
-    return new InventoryBackupState(Tags.struct(this.tagName, children.slice(0, 4)));
+    children[index] = Tags.rename(inventory.toTag(), children[index].name);
+    return new InventoryBackupState(Tags.struct(this.tagName, children), slotOptions.get(this));
   }
 }
 
@@ -2258,8 +2209,11 @@ export class CargoInventoryBlock extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.byte(null, 0)) {
-    super('CargoInventoryBlock', tag);
+  constructor(tag: Tag = Tags.byte(null, 0), options: TagReadOptions = {}) {
+    super('CargoInventoryBlock', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -2298,7 +2252,7 @@ export class CargoInventoryBlock extends EntSlotObject {
       Tags.byte(null, piece.orientation),
       Tags.byte(null, piece.active ? 1 : 0),
       Tags.byte(null, piece.hitpoints),
-    ]));
+    ]), slotOptions.get(this));
   }
 
   /**
@@ -2307,7 +2261,7 @@ export class CargoInventoryBlock extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): CargoInventoryBlock {
-    return new CargoInventoryBlock(Tags.byte(null, 0));
+    return new CargoInventoryBlock(Tags.byte(null, 0), slotOptions.get(this));
   }
 
   /**
@@ -2329,8 +2283,11 @@ export class WarpGateInfo extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.byte(null, 0)) {
-    super('WarpGateInfo', tag);
+  constructor(tag: Tag = Tags.byte(null, 0), options: TagReadOptions = {}) {
+    super('WarpGateInfo', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -2339,7 +2296,7 @@ export class WarpGateInfo extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): WarpGateInfo {
-    return new WarpGateInfo(Tags.byte(null, 0));
+    return new WarpGateInfo(Tags.byte(null, 0), slotOptions.get(this));
   }
 }
 
@@ -2352,8 +2309,11 @@ export class RaceGateInfo extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.byte(null, 0)) {
-    super('RaceGateInfo', tag);
+  constructor(tag: Tag = Tags.byte(null, 0), options: TagReadOptions = {}) {
+    super('RaceGateInfo', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -2362,7 +2322,7 @@ export class RaceGateInfo extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): RaceGateInfo {
-    return new RaceGateInfo(Tags.byte(null, 0));
+    return new RaceGateInfo(Tags.byte(null, 0), slotOptions.get(this));
   }
 }
 
@@ -2381,7 +2341,9 @@ export class ManagerModuleEntryState {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag) {
+  constructor(tag: Tag, options: TagReadOptions = {}) {
+    tag=copyTagModel(tag,options); slotOptions.set(this,Object.freeze(tagModelOptions(options)));
+
     const children = tagChildren(tag);
     const positionTag = children[0];
     if (positionTag?.type === TagType.VECTOR3i) {
@@ -2393,6 +2355,8 @@ export class ManagerModuleEntryState {
     }
     this.payloadType = tagTypeName(children[1]?.type ?? TagType.NOTHING);
     Object.defineProperty(this, '_tag', { value: tag, enumerable: false });
+
+    freezeSlotView(this);
   }
 
   /**
@@ -2401,7 +2365,7 @@ export class ManagerModuleEntryState {
    * @returns The computed StarMade-Decoder value.
    */
   get payload(): EntSlotObject {
-    return new EntSlotObject('ManagerModuleEntryPayload', tagChildren(this._tag)[1] ?? Tags.nothing(null));
+    return new EntSlotObject('ManagerModuleEntryPayload', tagChildren(this._tag)[1] ?? Tags.nothing(null), slotOptions.get(this));
   }
 
   /**
@@ -2444,7 +2408,7 @@ export class ManagerModuleEntryState {
    * @returns The computed StarMade-Decoder value.
    */
   withPosition(position: EntVector3i): ManagerModuleEntryState {
-    return new ManagerModuleEntryState(replaceChild(this._tag, 0, Tags.long(null, posToIndex(position.x, position.y, position.z))));
+    return new ManagerModuleEntryState(replaceChild(this._tag, 0, Tags.long(null, posToIndex(position.x, position.y, position.z))), slotOptions.get(this));
   }
 
   /**
@@ -2454,7 +2418,7 @@ export class ManagerModuleEntryState {
    * @returns The computed StarMade-Decoder value.
    */
   withPositionIndex(positionIndex: bigint | number): ManagerModuleEntryState {
-    return new ManagerModuleEntryState(replaceChild(this._tag, 0, Tags.long(null, positionIndex)));
+    return new ManagerModuleEntryState(replaceChild(this._tag, 0, Tags.long(null, positionIndex)), slotOptions.get(this));
   }
 
   /**
@@ -2464,7 +2428,7 @@ export class ManagerModuleEntryState {
    * @returns The computed StarMade-Decoder value.
    */
   withPayload(payload: EntSlotObject): ManagerModuleEntryState {
-    return new ManagerModuleEntryState(replaceChild(this._tag, 1, payload.toTag()));
+    return new ManagerModuleEntryState(replaceChild(this._tag, 1, payload.toTag()), slotOptions.get(this));
   }
 
   /**
@@ -2480,7 +2444,7 @@ export class ManagerModuleEntryState {
       Tags.float(null, encodedCharge),
       Tags.byte(null, autoCharge ? 1 : 0),
       Tags.byte(null, active ? 1 : 0),
-    ])));
+    ]), slotOptions.get(this)));
   }
 
   /**
@@ -2489,7 +2453,7 @@ export class ManagerModuleEntryState {
    * @returns The computed StarMade-Decoder value.
    */
   toTag(): Tag {
-    return this._tag;
+    return copyTagModel(this._tag,slotOptions.get(this));
   }
 
   /**
@@ -2518,8 +2482,11 @@ export class ManagerModuleState extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.struct(null, [])) {
-    super('ManagerModuleState', tag);
+  constructor(tag: Tag = Tags.struct(null, []), options: TagReadOptions = {}) {
+    super('ManagerModuleState', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -2557,7 +2524,7 @@ export class ManagerModuleState extends EntSlotObject {
   get entries(): readonly ManagerModuleEntryState[] {
     return tagChildren(this.toTag())
       .filter(child => child.type === TagType.STRUCT)
-      .map(child => new ManagerModuleEntryState(child));
+      .map(child => new ManagerModuleEntryState(child, slotOptions.get(this)));
   }
 
   /**
@@ -2572,7 +2539,7 @@ export class ManagerModuleState extends EntSlotObject {
     if (index < 0 || index >= entries.length) throw new RangeError(`Manager module entry index ${index} does not exist`);
     const next = [...entries];
     next[index] = entry.toTag();
-    return new ManagerModuleState(Tags.struct(this.tagId, next));
+    return new ManagerModuleState(Tags.struct(this.tagId, next), slotOptions.get(this));
   }
 
   /**
@@ -2582,7 +2549,7 @@ export class ManagerModuleState extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   addEntry(entry: ManagerModuleEntryState): ManagerModuleState {
-    return new ManagerModuleState(Tags.struct(this.tagId, [...tagChildren(this.toTag()), entry.toTag()]));
+    return new ManagerModuleState(Tags.struct(this.tagId, [...tagChildren(this.toTag()), entry.toTag()]), slotOptions.get(this));
   }
 
   /**
@@ -2596,7 +2563,7 @@ export class ManagerModuleState extends EntSlotObject {
     if (index < 0 || index >= entries.length) throw new RangeError(`Manager module entry index ${index} does not exist`);
     const next = [...entries];
     next.splice(index, 1);
-    return new ManagerModuleState(Tags.struct(this.tagId, next));
+    return new ManagerModuleState(Tags.struct(this.tagId, next), slotOptions.get(this));
   }
 
   /**
@@ -2605,7 +2572,7 @@ export class ManagerModuleState extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clearEntries(): ManagerModuleState {
-    return new ManagerModuleState(Tags.struct(this.tagId, []));
+    return new ManagerModuleState(Tags.struct(this.tagId, []), slotOptions.get(this));
   }
 
   /**
@@ -2627,8 +2594,11 @@ export class ManagerModulesState extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.struct(null, [])) {
-    super('ManagerModulesState', tag);
+  constructor(tag: Tag = Tags.struct(null, []), options: TagReadOptions = {}) {
+    super('ManagerModulesState', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -2639,7 +2609,7 @@ export class ManagerModulesState extends EntSlotObject {
   get modules(): readonly ManagerModuleState[] {
     return tagChildren(this.toTag())
       .filter(child => child.type === TagType.STRUCT)
-      .map(child => new ManagerModuleState(child));
+      .map(child => new ManagerModuleState(child, slotOptions.get(this)));
   }
 
   /**
@@ -2684,7 +2654,7 @@ export class ManagerModulesState extends EntSlotObject {
     const renamed = Tags.rename(module.toTag(), tagId);
     const next = index >= 0 ? [...modules] : [...modules, renamed];
     if (index >= 0) next[index] = renamed;
-    return new ManagerModulesState(Tags.struct(this.tagName, next));
+    return new ManagerModulesState(Tags.struct(this.tagName, next), slotOptions.get(this));
   }
 
   /**
@@ -2693,7 +2663,7 @@ export class ManagerModulesState extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): ManagerModulesState {
-    return new ManagerModulesState(Tags.struct(this.tagName, []));
+    return new ManagerModulesState(Tags.struct(this.tagName, []), slotOptions.get(this));
   }
 
   /**
@@ -2715,8 +2685,11 @@ export class AiConfigurationState extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.struct('AIConfig1', [])) {
-    super('AiConfigurationState', tag);
+  constructor(tag: Tag = Tags.struct('AIConfig1', []), options: TagReadOptions = {}) {
+    super('AiConfigurationState', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -2765,7 +2738,7 @@ export class AiConfigurationState extends EntSlotObject {
     });
     const next = index >= 0 ? [...settings] : [...settings, settingTag];
     if (index >= 0) next[index] = settingTag;
-    return new AiConfigurationState(Tags.struct(this.tagName, next));
+    return new AiConfigurationState(Tags.struct(this.tagName, next), slotOptions.get(this));
   }
 
   /**
@@ -2774,7 +2747,7 @@ export class AiConfigurationState extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): AiConfigurationState {
-    return new AiConfigurationState(Tags.struct(this.tagName, []));
+    return new AiConfigurationState(Tags.struct(this.tagName, []), slotOptions.get(this));
   }
 
   /**
@@ -2796,8 +2769,11 @@ export class UnloadedDummiesState extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.struct(null, [])) {
-    super('UnloadedDummiesState', tag);
+  constructor(tag: Tag = Tags.struct(null, []), options: TagReadOptions = {}) {
+    super('UnloadedDummiesState', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -2815,7 +2791,7 @@ export class UnloadedDummiesState extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): UnloadedDummiesState {
-    return new UnloadedDummiesState(Tags.struct(this.tagName, []));
+    return new UnloadedDummiesState(Tags.struct(this.tagName, []), slotOptions.get(this));
   }
 
   /**
@@ -2839,8 +2815,12 @@ export class ModuleExplosionState {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag) {
+  constructor(tag: Tag, options: TagReadOptions = {}) {
+    tag=copyTagModel(tag,options); slotOptions.set(this,Object.freeze(tagModelOptions(options)));
+
     Object.defineProperty(this, '_tag', { value: tag, enumerable: false });
+
+    freezeSlotView(this);
   }
 
   /**
@@ -2861,7 +2841,7 @@ export class ModuleExplosionState {
     explosionPositions?: readonly (bigint | number)[];
     chain?: boolean;
     cause?: number;
-  } = {}): ModuleExplosionState {
+  } = {}, options: TagReadOptions = {}): ModuleExplosionState {
     const min = data.min ?? { x: 0, y: 0, z: 0 };
     const max = data.max ?? { x: 0, y: 0, z: 0 };
     return new ModuleExplosionState(Tags.struct(null, [
@@ -2877,7 +2857,7 @@ export class ModuleExplosionState {
       Tags.byteArray(null, writeInt64ListPayload(data.explosionPositions ?? [])),
       Tags.byte(null, data.chain ? 1 : 0),
       Tags.byte(null, data.cause ?? 0),
-    ]));
+    ]), options);
   }
 
   /**
@@ -2961,7 +2941,7 @@ export class ModuleExplosionState {
   get summary(): ModuleExplosionSummary {
     const children = tagChildren(this._tag);
     const positions = children[9]?.type === TagType.BYTE_ARRAY ? children[9].getByteArray() : new Uint8Array();
-    const explosionPositions = readInt64ListPayload(positions);
+    const explosionPositions = children[9]?.type === TagType.BYTE_ARRAY ? readInt64ListPayload(positions) : [];
     return {
       version: children[0]?.type === TagType.BYTE ? children[0].getByte() : 0,
       created: children[1]?.type === TagType.LONG ? children[1].getLong() : 0n,
@@ -2986,7 +2966,7 @@ export class ModuleExplosionState {
    * @returns The computed StarMade-Decoder value.
    */
   withCreated(created: bigint | number): ModuleExplosionState {
-    return new ModuleExplosionState(replaceChild(this._tag, 1, Tags.long(null, created)));
+    return new ModuleExplosionState(replaceChild(this._tag, 1, Tags.long(null, created)), slotOptions.get(this));
   }
 
   /**
@@ -2996,7 +2976,7 @@ export class ModuleExplosionState {
    * @returns The computed StarMade-Decoder value.
    */
   withLastExplosion(lastExplosion: bigint | number): ModuleExplosionState {
-    return new ModuleExplosionState(replaceChild(this._tag, 2, Tags.long(null, lastExplosion)));
+    return new ModuleExplosionState(replaceChild(this._tag, 2, Tags.long(null, lastExplosion)), slotOptions.get(this));
   }
 
   /**
@@ -3006,7 +2986,7 @@ export class ModuleExplosionState {
    * @returns The computed StarMade-Decoder value.
    */
   withExplosionDelay(explosionDelay: bigint | number): ModuleExplosionState {
-    return new ModuleExplosionState(replaceChild(this._tag, 3, Tags.long(null, explosionDelay)));
+    return new ModuleExplosionState(replaceChild(this._tag, 3, Tags.long(null, explosionDelay)), slotOptions.get(this));
   }
 
   /**
@@ -3016,7 +2996,7 @@ export class ModuleExplosionState {
    * @returns The computed StarMade-Decoder value.
    */
   withModuleId(moduleId: bigint | number): ModuleExplosionState {
-    return new ModuleExplosionState(replaceChild(this._tag, 4, Tags.long(null, moduleId)));
+    return new ModuleExplosionState(replaceChild(this._tag, 4, Tags.long(null, moduleId)), slotOptions.get(this));
   }
 
   /**
@@ -3026,7 +3006,7 @@ export class ModuleExplosionState {
    * @returns The computed StarMade-Decoder value.
    */
   withRadius(radius: number): ModuleExplosionState {
-    return new ModuleExplosionState(replaceChild(this._tag, 5, Tags.int(null, radius)));
+    return new ModuleExplosionState(replaceChild(this._tag, 5, Tags.int(null, radius)), slotOptions.get(this));
   }
 
   /**
@@ -3036,7 +3016,7 @@ export class ModuleExplosionState {
    * @returns The computed StarMade-Decoder value.
    */
   withDamage(damage: number): ModuleExplosionState {
-    return new ModuleExplosionState(replaceChild(this._tag, 6, Tags.int(null, damage)));
+    return new ModuleExplosionState(replaceChild(this._tag, 6, Tags.int(null, damage)), slotOptions.get(this));
   }
 
   /**
@@ -3051,7 +3031,7 @@ export class ModuleExplosionState {
       replaceChild(this._tag, 7, Tags.vector3f(null, min.x, min.y, min.z)),
       8,
       Tags.vector3f(null, max.x, max.y, max.z),
-    ));
+    ), slotOptions.get(this));
   }
 
   /**
@@ -3061,7 +3041,7 @@ export class ModuleExplosionState {
    * @returns The computed StarMade-Decoder value.
    */
   withExplosionPositions(positions: readonly (bigint | number)[]): ModuleExplosionState {
-    return new ModuleExplosionState(replaceChild(this._tag, 9, Tags.byteArray(null, writeInt64ListPayload(positions))));
+    return new ModuleExplosionState(replaceChild(this._tag, 9, Tags.byteArray(null, writeInt64ListPayload(positions))), slotOptions.get(this));
   }
 
   /**
@@ -3071,7 +3051,7 @@ export class ModuleExplosionState {
    * @returns The computed StarMade-Decoder value.
    */
   addExplosionPosition(position: bigint | number): ModuleExplosionState {
-    return this.withExplosionPositions([...this.explosionPositions, typeof position === 'number' ? BigInt(position) : position]);
+    return this.withExplosionPositions([...this.explosionPositions, fieldValueAsBigInt(position, 'position')]);
   }
 
   /**
@@ -3094,7 +3074,7 @@ export class ModuleExplosionState {
    * @returns The computed StarMade-Decoder value.
    */
   withChain(chain: boolean): ModuleExplosionState {
-    return new ModuleExplosionState(replaceChild(this._tag, 10, Tags.byte(null, chain ? 1 : 0)));
+    return new ModuleExplosionState(replaceChild(this._tag, 10, Tags.byte(null, chain ? 1 : 0)), slotOptions.get(this));
   }
 
   /**
@@ -3104,7 +3084,7 @@ export class ModuleExplosionState {
    * @returns The computed StarMade-Decoder value.
    */
   withCause(cause: number): ModuleExplosionState {
-    return new ModuleExplosionState(replaceChild(this._tag, 11, Tags.byte(null, cause)));
+    return new ModuleExplosionState(replaceChild(this._tag, 11, Tags.byte(null, cause)), slotOptions.get(this));
   }
 
   /**
@@ -3113,7 +3093,7 @@ export class ModuleExplosionState {
    * @returns The computed StarMade-Decoder value.
    */
   toTag(): Tag {
-    return this._tag;
+    return copyTagModel(this._tag,slotOptions.get(this));
   }
 
   /**
@@ -3135,8 +3115,11 @@ export class ModuleExplosionsState extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.struct(null, [])) {
-    super('ModuleExplosionsState', tag);
+  constructor(tag: Tag = Tags.struct(null, []), options: TagReadOptions = {}) {
+    super('ModuleExplosionsState', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -3147,7 +3130,7 @@ export class ModuleExplosionsState extends EntSlotObject {
   get explosions(): readonly ModuleExplosionState[] {
     return tagChildren(this.toTag())
       .filter(child => child.type === TagType.STRUCT)
-      .map(child => new ModuleExplosionState(child));
+      .map(child => new ModuleExplosionState(child, slotOptions.get(this)));
   }
 
   /**
@@ -3162,7 +3145,7 @@ export class ModuleExplosionsState extends EntSlotObject {
     if (index < 0 || index >= explosions.length) throw new RangeError(`Module explosion index ${index} does not exist`);
     const next = [...explosions];
     next[index] = explosion.toTag();
-    return new ModuleExplosionsState(Tags.struct(this.tagName, next));
+    return new ModuleExplosionsState(Tags.struct(this.tagName, next), slotOptions.get(this));
   }
 
   /**
@@ -3172,7 +3155,7 @@ export class ModuleExplosionsState extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   addExplosion(explosion: ModuleExplosionState): ModuleExplosionsState {
-    return new ModuleExplosionsState(Tags.struct(this.tagName, [...tagChildren(this.toTag()), explosion.toTag()]));
+    return new ModuleExplosionsState(Tags.struct(this.tagName, [...tagChildren(this.toTag()), explosion.toTag()]), slotOptions.get(this));
   }
 
   /**
@@ -3186,7 +3169,7 @@ export class ModuleExplosionsState extends EntSlotObject {
     if (index < 0 || index >= explosions.length) throw new RangeError(`Module explosion index ${index} does not exist`);
     const next = [...explosions];
     next.splice(index, 1);
-    return new ModuleExplosionsState(Tags.struct(this.tagName, next));
+    return new ModuleExplosionsState(Tags.struct(this.tagName, next), slotOptions.get(this));
   }
 
   /**
@@ -3195,7 +3178,7 @@ export class ModuleExplosionsState extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): ModuleExplosionsState {
-    return new ModuleExplosionsState(Tags.struct(this.tagName, []));
+    return new ModuleExplosionsState(Tags.struct(this.tagName, []), slotOptions.get(this));
   }
 
   /**
@@ -3217,8 +3200,11 @@ export class ModDataState extends EntSlotObject {
    *
    * @param tag - Input value for the constructor operation.
    */
-  constructor(tag: Tag = Tags.struct('ModMCModules', [])) {
-    super('ModDataState', tag);
+  constructor(tag: Tag = Tags.struct('ModMCModules', []), options: TagReadOptions = {}) {
+    super('ModDataState', tag, options);
+    tag = this.toTag();
+
+    freezeSlotView(this);
   }
 
   /**
@@ -3236,7 +3222,7 @@ export class ModDataState extends EntSlotObject {
    * @returns The computed StarMade-Decoder value.
    */
   clear(): ModDataState {
-    return new ModDataState(Tags.struct(this.tagName, []));
+    return new ModDataState(Tags.struct(this.tagName, []), slotOptions.get(this));
   }
 
   /**
@@ -3337,7 +3323,7 @@ function managerModuleKind(tagId: string | null): string {
  * @returns The computed StarMade-Decoder value.
  */
 function tagTypeName(type: TagType): string {
-  return TAG_TYPE_NAMES[type] ?? TagType[type] ?? String(type);
+  return TAG_TYPE_NAMES[type];
 }
 
 /**
@@ -3381,7 +3367,7 @@ function matrix4fFromArray(values: EntMatrix4f): Matrix4f {
  */
 function rebuildContainerTag(tag: Tag, children: Tag[]): Tag {
   if (tag.type === TagType.LIST) {
-    const listType = tag.listType ?? children[0].type;
+    const listType = tag.listType!;
     return new Tag(TagType.LIST, tag.name, children, listType);
   }
   // Both callers validate a non-empty STRUCT/LIST before rebuilding.
@@ -3398,9 +3384,9 @@ function rebuildContainerTag(tag: Tag, children: Tag[]): Tag {
  */
 function replaceChild(tag: Tag, index: number, replacement: Tag): Tag {
   const children = tagChildren(tag);
-  while (children.length <= index) children.push(Tags.nothing(null));
   const current = children[index];
-  children[index] = current && replacement.name === null
+  while (children.length <= index) children.push(Tags.nothing(null));
+  children[index] = current
     ? new Tag(replacement.type, current.name, replacement.value, replacement.listType ?? undefined)
     : replacement;
   return rebuildContainerTag(tag.type === TagType.STRUCT || tag.type === TagType.LIST ? tag : Tags.struct(tag.name, []), children);
@@ -3415,7 +3401,7 @@ function replaceChild(tag: Tag, index: number, replacement: Tag): Tag {
  */
 function coerceTagValue(current: Tag, value: unknown): Tag {
   if (value instanceof EntSlotObject) {
-    return current.name !== null ? Tags.rename(value.toTag(), current.name) : value.toTag();
+    return Tags.rename(value.toTag(), current.name);
   }
 
   switch (current.type) {
@@ -3440,7 +3426,7 @@ function coerceTagValue(current: Tag, value: unknown): Tag {
       return Tags.vector3i(current.name, vector.x, vector.y, vector.z);
     }
     case TagType.VECTOR3f: {
-      const vector = vector3FromValue(value, current.name ?? 'vector3fField');
+      const vector = vector3FromValue(value, current.name ?? 'vector3fField', false);
       return Tags.vector3f(current.name, vector.x, vector.y, vector.z);
     }
     case TagType.VECTOR4f: {
@@ -3469,13 +3455,14 @@ function coerceTagValue(current: Tag, value: unknown): Tag {
  * @param key - Input value for the vector3FromValue operation.
  * @returns The computed StarMade-Decoder value.
  */
-function vector3FromValue(value: unknown, key: string): EntVector3i {
+function vector3FromValue(value: unknown, key: string, integer = true): EntVector3i {
+  const read = integer ? fieldValueAsInteger : fieldValueAsNumber;
   if (value !== null && typeof value === 'object') {
     const candidate = value as Record<string, unknown>;
     return {
-      x: fieldValueAsInteger(candidate.x, `${key}.x`),
-      y: fieldValueAsInteger(candidate.y, `${key}.y`),
-      z: fieldValueAsInteger(candidate.z, `${key}.z`),
+      x: read(candidate.x, `${key}.x`),
+      y: read(candidate.y, `${key}.y`),
+      z: read(candidate.z, `${key}.z`),
     };
   }
   throw new TypeError(`Entity field "${key}" expects {x,y,z}`);
@@ -3523,18 +3510,6 @@ function vector3fFromTag(tag: Tag | undefined): EntVector3f | null {
   if (tag?.type !== TagType.VECTOR3f) return null;
   const v = tag.getVector3f();
   return { x: v.x, y: v.y, z: v.z };
-}
-
-/**
- * Handles the vector4fFromTag operation used by high-level StarMade object modelling.
- *
- * @param tag - Input value for the vector4fFromTag operation.
- * @returns The computed StarMade-Decoder value.
- */
-function vector4fFromTag(tag: Tag | undefined): EntVector4f | null {
-  if (tag?.type !== TagType.VECTOR4f) return null;
-  const v = tag.getVector4f();
-  return { x: v.x, y: v.y, z: v.z, w: v.w };
 }
 
 /**
@@ -3665,7 +3640,8 @@ function readInt64BE(bytes: Uint8Array, offset: number): bigint {
  * @param value - Input value for the writeInt64BE operation.
  */
 function writeInt64BE(bytes: Uint8Array, offset: number, value: bigint | number): void {
-  let unsigned = typeof value === 'number' ? BigInt(value) : value;
+  let unsigned = fieldValueAsBigInt(value, 'position');
+  if (unsigned < -0x8000000000000000n || unsigned > 0x7fffffffffffffffn) throw new DecodeError('E_RANGE', 'Position exceeds int64');
   if (unsigned < 0) unsigned += 0x10000000000000000n;
   for (let i = 7; i >= 0; i--) {
     bytes[offset + i] = Number(unsigned & 0xffn);
@@ -3680,10 +3656,11 @@ function writeInt64BE(bytes: Uint8Array, offset: number, value: bigint | number)
  * @returns The computed StarMade-Decoder value.
  */
 function readInt64ListPayload(bytes: Uint8Array): bigint[] {
-  if (bytes.length < 4) return [];
-  const count = Math.max(0, readInt32BE(bytes, 0));
+  if (bytes.length < 4) throw new DecodeError('E_FORMAT', 'Missing explosion-position count');
+  const count = readInt32BE(bytes, 0);
+  if (count < 0 || bytes.length !== 4 + count * 8) throw new DecodeError('E_FORMAT', 'Incomplete explosion-position list');
   const values: bigint[] = [];
-  for (let index = 0; index < count && 4 + index * 8 + 8 <= bytes.length; index++) {
+  for (let index = 0; index < count; index++) {
     values.push(readInt64BE(bytes, 4 + index * 8));
   }
   return values;

@@ -22,3 +22,10 @@ export type { ItemMeta, ItemGroup, InventoryCapacity, InventoryReadOptions, Item
 export { InventoryLocation }                  from './InventoryLocation.js';
 export { PowerState, ThrustConfig }           from './PowerAndThrust.js';
 export { ManagerContainer, PullPermission }   from './ManagerContainer.js';
+
+export type { SlotAssignmentOptions } from './SlotAssignment.js';
+export type { HpStateOptions, HpStateFields } from './HpState.js';
+export type { DockingQuaternion, DockingStateOptions, DockingStateFields } from './DockingState.js';
+export type { PowerStateOptions, PowerStateFields, ThrustConfigOptions, ThrustConfigFields } from './PowerAndThrust.js';
+export type { SpawnPointChanges, PlayerSpawnDataChanges, SpawnMarkerChanges } from './SpawnData.js';
+export type { EntityTransformChanges } from './Transform.js';

@@ -1,6 +1,6 @@
 # Format classes
 
-The 1.7.0 SDK provides models for stored StarMade data: decoding, explicit
+The 2.0.0 SDK provides models for stored StarMade data: decoding, explicit
 validation, in-memory edits, indexed access and serialization. Each consumer
 chooses its own workflow. StarMade-3D owns mesh generation, rendered coordinates,
 rotations and projection; StarMade-BlockEditor owns its editing interface;
@@ -24,6 +24,74 @@ stored fields and binary-column codecs without running those applications.
 These classes complement the existing entity, metadata, logic, template, Tag and
 configuration models listed in [the API reference](API.md). Constructing or editing
 a model does not write a file. Use an explicit writer/save method to publish it.
+
+## Coverage of supported formats
+
+Every supported format family now has a dedicated model or document. This covers
+the supported wire schemas, not every historical game version. The same contracts
+apply throughout: validate represented fields, retain unrelated source data,
+separate mutable projections from owned state, and serialize explicitly. Resource
+options match each codec: `TagReadOptions` for Tag graphs, `FormatLimits` for
+bounded auxiliary collections and codec-specific options for blueprints/database
+columns. Fixed-size values also enforce their native wire widths.
+
+| Format / data family | Model / document | Scope |
+| --- | --- | --- |
+| `.smskin` | `SkinDocument` | ZIP archives with four opaque PNG textures; immutable edits and exact source preservation |
+| Generic Tag files | `Tag`, `TagDocument`, builders | Mutable low-level trees; document retains source envelope |
+| `.ent` entities and components | `Ship`, `SpaceStation`, `ShopSpaceStation`, `FloatingRock`, player classes, `ManagerContainer`, `Inventory` | Typed immutable records and explicit component replacements |
+| `.fac`, `.cat`, trading/chat/NPC `.tag`, `.sim` | `FactionManager`, `Catalog`, `TradingManager`, `ChatChannelManager`, `NPCFactionManager`, `SimulationState` | Validated collections and retained opaque fields |
+| Floating items `.ent` | `FloatingItemsArchive` | Sector records, external metadata and next-ID counter |
+| `.sment` and blueprint folders | `BlueprintDocument`, `BlueprintArchive`, `BlueprintEntity`, `BlueprintModel` | Editable hierarchy, original resources and bounded complete export |
+| `.smd3` | `Smd3Document`, `Segment`, `BlockVolume`, `BlockState` | Editing versions 6/7; legacy SMD0/1/2 requires explicit migration |
+| `.smbph`, `.smbpl`, `.smbpm`, `.smtpl` | `BlueprintHeader`, `BlueprintLogic`, `BlueprintMeta`, `BlueprintTemplate` | Format-specific validated models and writers |
+| `.smbmm` | `BlueprintModMappings` | Namespaced text, legacy zlib, signed-short IDs and explicit translations |
+| `server.cfg`, block/behavior/faction XML | `ServerConfig`, `BlockConfig`, `BlockDefinition`, `BlockBehaviorConfig`, `FactionConfig`, `XmlConfigDocument` | Immutable edits; arbitrary XML paths preserve unknown nodes |
+| HSQLDB binary columns | `FleetCommandObject`, `FleetRemotesObject`, `SectorItemsObject`, `TradePricesObject`, `StarSystem` | Binary-column codecs; StarMade-DB owns the database engine |
+| `.seed` | `WorldSeedDocument` | Exact signed-int64 seed; decimal JSON |
+| `.smdat` | `PersistentObjectDocument` | Bounded per-class JSON data, with depth/node limits |
+| `.sbv` | `SubtitleDocument` | Cue editing and half-open time lookup; no media rendering |
+| `systemNames.syl` | `SystemNamesDocument` | Stored syllables/flags; no procedural name generation |
+
+### Ownership, limits and source bytes
+
+Format records and components snapshot inputs and return immutable revisions or
+detached projections. Low-level `Tag` trees, blueprint document models and grid
+editors deliberately support mutation; their contracts are explicit. Copying a
+Tag returned by a record is unnecessary before editing it: the returned tree is
+already detached from that record.
+
+Limits are retained through immutable updates. Shared read counters are charged
+for external data once, without charging the model's internal snapshots again.
+`FormatLimits` defaults to 16 MiB and 100,000 entries. Additional JSON node/depth
+limits apply to `.smdat`; Tag/blueprint readers retain their documented budgets.
+Input/output byte limits concern encoded files; collection validation also applies
+to caller-created models. Some auxiliary models check aggregate output bytes at
+`toBuffer()`. No limit implies a game capacity, permission or server policy.
+
+Use a source-aware document/model when exact bytes matter. Unchanged data and
+supported semantic edit/revert return the retained original representation;
+changed data use the relevant writer. Compression, whitespace or ZIP layout after
+a real edit need not match an independently generated file. `toTag()` is a detached
+logical tree; use the originating model's `toBuffer()` to retain its file envelope.
+Bare constructors have no source envelope to preserve. XML edits retain unknown
+nodes but may normalize textual formatting. See [blueprint editing](BLUEPRINT_EDITING.md)
+for per-resource guarantees and restrictions.
+
+```ts
+import {
+  WorldSeedDocument, BlueprintModMappings, PersistentObjectDocument,
+} from 'starmade-decoder';
+
+const seed = new WorldSeedDocument(-9223372036854775808n);
+const mappings = new BlueprintModMappings([
+  { modName: 'Example', blockName: 'Hull', id: 2000 },
+], { maxEntries: 1000, maxBytes: 65536 });
+const localId = mappings.idOf('Example', 'Hull');
+const saved = new PersistentObjectDocument([], { maxNodes: 1000, maxDepth: 16 })
+  .withClass('Example', [{ id: localId }]);
+const bytes = saved.toBuffer();
+```
 
 ## Blocks and blueprints
 
@@ -195,29 +263,44 @@ Format behavior was checked against the external read-only StarMade-Open revisio
 in this project, its npm package or new CI artifacts. Binary cross-checks use
 independent Python implementations and captured JDK vectors.
 
-On **2026-09-20**, Node.js 20.20.2 with `STARMADE_TEST_DIR=/srv/StarMade` passed
-**1,233 tests, zero pending and zero failing**. Exact global and per-file gates
-passed for **110 production modules**: **30,246/30,246 lines**, **7,599/7,599
-branches**, zero exclusions/skips. Function coverage is **1,934/1,972 (98.07%)**
-and is reported separately from the required line/branch gates.
+The [V2 qualification report](V2_QUALIFICATION.md) records exact measured counters
+and checks. Tests exercise edit/revert bytes, opaque XML/Tag fields, manager
+positions, historical payloads, corruption, resource limits, detached ownership
+and public consumer contracts. Coverage measures execution and does not replace
+these assertions. See [coverage requirements](TEST_COVERAGE.md) for blocking gates.
+The checks do not launch the game or establish in-game import qualification.
 
-Additional checks passed:
+## Skin archives
 
-- TypeScript build, declaration JSDoc, source/archive publication guard and test
-  layout gate (66 suites), plus negative source/coverage-gate regressions.
-- Installed npm tarball in an isolated production consumer: public exports,
-  runtime classes, catalogue round-trip, position-indexed inventories, negative
-  grid edits, complete ZIP/folder writing and TypeScript consumer declarations.
-- Independent Python binary checks: eight UTF vectors and six malformed vectors,
-  32,768 packed words, ObjectStream maps, 35 regions / 1,146,880 positions matching
-  captured JDK hashes, and three blueprint archives / 163,840 words.
-- Independent `python-lz4==4.4.5`: 36 SDK blocks decoded externally and 72 external
-  blocks decoded by the SDK. Production dependency audit: zero vulnerabilities.
-- Read-only installed catalogue: all **1,516 definitions** preserved after
-  in-memory XML/type-map export/reparse. Game files were not modified.
+`.smskin` is a ZIP containing four textures. `SkinDocument` uses the same validated
+ZIP carrier as blueprint documents. `create()` writes `skin_main_diff.png`,
+`skin_main_em.png`, `skin_helmet_diff.png` and `skin_helmet_em.png`. Reading also
+accepts custom root-level prefixes with those four suffixes, as the client does;
+ambiguous or missing roles fail. Unknown resources and directory entries survive.
 
-The suite exercises exact edit/revert bytes, opaque XML/Tag fields, manager
-positions, binary corruption, resource limits, detached ownership and consumer
-contracts. Coverage measures execution and does not replace these assertions.
-See [coverage requirements](TEST_COVERAGE.md) for blocking gates. These checks do
-not launch the game or establish in-game import qualification.
+```ts
+import fs from 'node:fs';
+import { SkinDocument } from 'starmade-decoder';
+
+const skin = SkinDocument.fromBuffer(fs.readFileSync('Player.smskin'), {
+  maxInputBytes: 16 * 1024 * 1024,
+  maxEntryBytes: 4 * 1024 * 1024,
+});
+const diffuse = skin.texture('mainDiffuse'); // detached PNG bytes
+const edited = skin.withTexture('mainDiffuse', fs.readFileSync('replacement.png'));
+fs.writeFileSync('Player-edited.smskin', edited.toBuffer());
+```
+
+`textureInfo(role)` exposes the stored name and byte length; `files` is a detached
+map. `withFile`/`withoutFile` edit ancillary resources while requiring a complete,
+unambiguous skin. Limits apply to input/output archive bytes, individual and total
+uncompressed bytes, and entry count. Defaults: 16 MiB input/output/total, 4 MiB per
+entry and 64 entries. Limits survive edits; invalid updates leave their source
+unchanged. ZIP32 stored/deflated entries are supported; encrypted/ZIP64 archives
+are rejected by the shared codec.
+
+Validation covers ZIP structure, paths, sizes, decompression and CRCs, required
+texture roles and PNG signatures. The SDK does not decode pixels, validate a
+complete PNG image, resize textures, or apply upload/rendering policies. Use an
+image codec in the consumer for those image operations. New archives use canonical
+filenames; preserving a custom/extended source does not certify server acceptance.

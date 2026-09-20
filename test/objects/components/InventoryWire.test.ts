@@ -125,7 +125,8 @@ describe('Inventory wire', () => {
     const wrongStruct = inventoryTag(); wrongStruct.getStruct()[0] = Tags.struct(null, [Tags.short(null, 0)]);
     assert.throws(() => Inventory.fromTag(wrongStruct));
     let deep = inventoryTag(); for (let i = 0; i < 18; i++) deep = Tags.struct('stash', [Tags.nothing(null), deep]);
-    assert.throws(() => Inventory.fromTag(deep), 'nesting');
+    assert.throws(() => Inventory.fromTag(deep, { maxDepth: 16 }));
+    assert.equal(Inventory.fromTag(deep, { maxDepth: 80 }).size, 2);
     assert.throws(() => writeInventoryWire([new ItemStack(0, -5, 1)]));
     assert.throws(() => writeInventoryWire([new ItemStack(0, 5, 1, { id: 1, type: 2, subId: 0, orientation: 0 })]));
   });

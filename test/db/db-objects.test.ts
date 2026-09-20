@@ -404,11 +404,11 @@ describe('StarSystem', function () {
     assert.isTrue(sys.presentResources.some(r => r.name === 'Quantanium'));
   });
 
-  it('withResourceDensity clamps to 0–255', function () {
-    const sys = StarSystem.empty()
-      .withResourceDensity(0, 999)
-      .withResourceDensity(1, -5);
-    assert.strictEqual(sys.getResourceDensity(0), 255);
+  it('withResourceDensity rejects values outside 0–255 without changing the system', function () {
+    const sys = StarSystem.empty().withResourceDensity(0, 25);
+    assert.throws(() => sys.withResourceDensity(0, 999), RangeError);
+    assert.throws(() => sys.withResourceDensity(1, -5), RangeError);
+    assert.strictEqual(sys.getResourceDensity(0), 25);
     assert.strictEqual(sys.getResourceDensity(1), 0);
   });
 

@@ -38,54 +38,41 @@ const slots = (values: Record<number, Tag>): Tag => {
 registerAllFactories();
 
 describe('Entity contracts — defaults and malformed optional data', () => {
-  it('provides empty views for absent or differently typed optional fields', () => {
+  it('rejects missing entities and exposes optional views of valid records', () => {
     for (const root of [Tags.struct(null, []), Tags.byte(null, 0)]) {
-      const sc = Ship.fromTag(root);
-      assert.equal(sc.uniqueId, ''); assert.equal(sc.seed, 0n);
-      assert.deepEqual(sc.bounds, { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 });
-      assert.isTrue(sc.vulnerable); assert.isTrue(sc.minable); assert.isFalse(sc.scrap);
-      assert.equal(sc.toTag().type, TagType.STRUCT);
-      const pc = PlayerCharacterEntity.fromTag(root);
-      assert.equal(pc.id, 0); assert.equal(pc.speed, 4); assert.equal(pc.stepHeight, 0);
-      const ps = PlayerStateEntity.fromTag(root);
-      assert.equal(ps.credits, 0n); assert.equal(ps.health, 100); assert.isNull(ps.currentSector);
+      assert.throws(() => Ship.fromTag(root));
+      assert.throws(() => PlayerCharacterEntity.fromTag(root));
+      assert.throws(() => PlayerStateEntity.fromTag(root));
     }
-    const p = PlayerStateEntity.fromTag(Tags.struct(null, []));
-    assert.strictEqual(p.withFaction(1), p);
+    const p = player();
+    assert.equal(p.withFaction(1).faction.factionId, 1);
     assert.equal(p.withLastLogin(42n).lastLogin, 42n);
     assert.equal(p.withLastLogout(43n).lastLogout, 43n);
     assert.equal(p.withLastEnteredEntity('entity').lastEnteredEntity, 'entity');
     assert.equal(p.withMineAutoArmSecs(12).toTag().getStruct()[30].getInt(), 12);
-    assert.equal(p.savedCoordinates.entries.length, 0);
-    assert.equal(FactionMembership.fromTag(Tags.struct(null, [])).rank, 0);
-    assert.equal(FactionMembership.fromTag(Tags.struct(null, [])).factionId, 0);
+    assert.isArray(p.savedCoordinates.entries);
+    assert.throws(() => FactionMembership.fromTag(Tags.struct(null, [])));
+    assert.equal(FactionMembership.fromTag(new FactionMembership(0, 0).toTag()).factionId, 0);
     assert.isNull(p.getField('missing'));
     assert.isNull(character().getField('missing'));
     assert.isNull(ship().getField('missing'));
     assert.isNull(ship().getTransformableField('missing'));
   });
 
-  it('isolates malformed optional entity components from the remainder of the root', () => {
-    for (const index of [3, 7, 15, 21]) {
-      const sc = Ship.fromTag(slots({ 0: Tags.string('uniqueId', 'test'), [index]: bad() }));
-      assert.equal(sc.uniqueId, 'test');
-      if (index === 7) assert.isNull(sc.managerContainer);
-      if (index === 15) assert.equal(sc.textBlocks.size, 0);
+  it('rejects corrupt present entity components instead of replacing them with defaults', () => {
+    for (const index of [3,7,15,21]) {
+      const root=ship().toTag();root.getStruct()[index]=bad();
+      assert.throws(()=>Ship.fromTag(root));
     }
-    const sc = Ship.fromTag(slots({ 0: Tags.string('uniqueId', 'test'), 4: new Tag(TagType.SERIALIZABLE, null, new RawElement(0, new Uint8Array([1]))) }));
-    assert.lengthOf(sc.controlElementMap.links, 0);
+    const malformedMap=ship().toTag();malformedMap.getStruct()[4]=new Tag(TagType.SERIALIZABLE,'cs1',new RawElement(0,new Uint8Array([1])));
+    assert.throws(()=>Ship.fromTag(malformedMap));
     for (const index of [1, 2, 16, 17, 18]) {
-      const ps = PlayerStateEntity.fromTag(slots({ [index]: bad() }));
-      assert.equal(ps.inventory.size + ps.capsuleInventory.size + ps.microInventory.size + ps.macroInventory.size, 0);
+      assert.throws(() => PlayerStateEntity.fromTag(slots({ [index]: bad() })));
     }
-    assert.equal(PlayerStateEntity.fromTag(Tags.struct(null, [bad('pFac')])).faction.factionId, 0);
-    const tr = GameEntity.parseTransformable(slots({ 1: new Tag(TagType.LIST, null, [], TagType.FLOAT), 6: bad() }));
-    assert.strictEqual(tr.transform, EntityTransform.IDENTITY);
-    assert.strictEqual(tr.spawnController, SpawnController.EMPTY);
-    assert.equal(tr.owner, ''); assert.equal(tr.factionId, 0);
-    assert.deepEqual(tr.sectorPosition, SectorPosition.ZERO);
+    assert.throws(() => PlayerStateEntity.fromTag(Tags.struct(null, [bad('pFac')])));
+    assert.throws(() => GameEntity.parseTransformable(slots({ 1: new Tag(TagType.LIST, null, [], TagType.FLOAT), 6: bad() })));
     const texts = TextBlocks.EMPTY.set(1n, 'sign');
-    const textShip = Ship.fromTag(slots({ 0: Tags.string('uniqueId', 'test'), 15: texts.toTag() }));
+    const textRoot=ship().toTag();textRoot.getStruct()[15]=texts.toTag();const textShip=Ship.fromTag(textRoot);
     assert.equal(Ship.fromTag(textShip.toTag()).textBlocks.size, 1);
   });
 
@@ -147,10 +134,10 @@ describe('Entity contracts — immutable field edits', () => {
       assert.instanceOf((next as any)[key], value.constructor);
       assert.throws(() => original.getField(key)!.withValue({}), TypeError);
     }
-    const empty = Ship.fromTag(Tags.struct(null, []));
+    const empty = Ship.fromTag(Tags.struct('s3', ship().toTag().getStruct().slice(0,11)));
     const namedNpc = new Slot.NpcDataState(Tags.struct('custom-npc', []));
-    assert.equal(empty.withNpcData(namedNpc).toTag().getStruct()[14].name, 'custom-npc');
-    assert.instanceOf(empty.withQuarterManager(new Slot.QuarterManagerState()).quarterManager, Slot.QuarterManagerState);
+    assert.throws(() => empty.withNpcData(namedNpc), /complete source record/);
+    assert.throws(() => empty.withQuarterManager(new Slot.QuarterManagerState()), /complete source record/);
     for (const Ctor of [SpaceStation, ShopSpaceStation, FloatingRock]) {
       const entity = Ctor.fromTag(original.toTag());
       assert.equal(entity.withUniqueId('other').uniqueId, 'other');
@@ -172,7 +159,7 @@ describe('Entity contracts — immutable field edits', () => {
       assert.equal(original.getTransformableField('sectorPosition')!.withValue(value).sectorPosition.y, 5);
     }
     assert.throws(() => original.getTransformableField('sectorPosition')!.withValue(false), TypeError);
-    assert.strictEqual(original.getTransformableField('spawnController')!.withValue(SpawnController.EMPTY).spawnController, SpawnController.EMPTY);
+    assert.deepEqual(original.getTransformableField('spawnController')!.withValue(SpawnController.EMPTY).spawnController, SpawnController.EMPTY);
     assert.throws(() => original.getTransformableField('spawnController')!.withValue({}), TypeError);
     for (const [key, value] of [['mass', 3], ['factionId', -1], ['owner', 'owner']] as const) {
       assert.strictEqual((original.getTransformableField(key)!.withValue(value) as any)[key], value);

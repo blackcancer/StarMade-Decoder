@@ -19,217 +19,76 @@
 
 import fs from 'fs';
 import path from 'path';
-import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import type { SMToolConfig } from './SMToolConfig.js';
+import { XmlConfigDocument } from './XmlConfigDocument.js';
+import { formatLimits, formatText, type FormatLimits } from '../core/FormatLimits.js';
+import { DecodeError } from '../core/DecodeError.js';
 
-/**
- * Defines PARSER for StarMade configuration loading, editing, and metadata enrichment.
- */
-const PARSER = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  parseTagValue: true,
-  trimValues: true,
-});
-
-/**
- * Defines BUILDER for StarMade configuration loading, editing, and metadata enrichment.
- */
-const BUILDER = new XMLBuilder({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  format: true,
-  indentBy: '    ',
-});
-
-// ── Behavior entry value ──────────────────────────────────────
-
-/**
- * Defines the BehaviorValue type used by StarMade configuration loading, editing, and metadata enrichment.
- */
+/** Scalar configuration values. Unknown XML extensions remain part of the document. */
 export type BehaviorValue = string | number | boolean;
 
-// ── BlockBehaviorConfig ───────────────────────────────────────────────────────
-
-/**
- * Represents the BlockBehaviorConfig model used by StarMade configuration loading, editing, and metadata enrichment.
- */
+/** Immutable XML configuration with memory exports and explicit custom-file writes. */
 export class BlockBehaviorConfig {
-  private readonly _values: Map<string, BehaviorValue>;
-  private readonly _rawXml: any; // raw XML tree for round-tripping
+  readonly #document: XmlConfigDocument;
 
-  /**
-   * Creates a BlockBehaviorConfig instance.
-   *
-   * @param values - Input value for the constructor operation.
-   * @param raw - Input value for the constructor operation.
-   */
-  private constructor(values: Map<string, BehaviorValue>, raw: any) {
-    this._values = values;
-    this._rawXml = raw;
-  }
+  /** Retains an immutable private XML document. */
+  private constructor(document: XmlConfigDocument) { this.#document = document; Object.freeze(this); }
 
-  // ── Loading ────────────────────────────────────────────────────────────
-
-  /**
-   * Loads data from StarMade project files.
-   *
-   * @param config - Input value for the load operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static load(config: SMToolConfig): BlockBehaviorConfig {
+  /** Reads vanilla and custom XML without changing any source file. Options bound bytes and XML nodes. */
+  static load(config: SMToolConfig, options: FormatLimits = {}): BlockBehaviorConfig {
     const vanillaPath = path.join(config.paths.dataConfig, 'blockBehaviorConfig.xml');
-    if (!fs.existsSync(vanillaPath)) {
-      throw new Error(`blockBehaviorConfig.xml not found: ${vanillaPath}`);
-    }
-
-    const xml = fs.readFileSync(vanillaPath, 'utf8');
-    const raw = PARSER.parse(xml);
-    const values = BlockBehaviorConfig._flatten(raw);
-
-    // Merge custom files (*.xml in customBlockBehaviorConfig/)
+    if (!fs.existsSync(vanillaPath)) throw new Error(`blockBehaviorConfig.xml not found: ${vanillaPath}`);
+    let document = readConfig(vanillaPath, options);
     const customDir = config.paths.custom.blockBehaviorConfig;
     if (fs.existsSync(customDir)) {
-      for (const f of fs.readdirSync(customDir).filter(n => n.endsWith('.xml'))) {
-        const customXml  = fs.readFileSync(path.join(customDir, f), 'utf8');
-        const customRaw  = PARSER.parse(customXml);
-        const customVals = BlockBehaviorConfig._flatten(customRaw);
-        for (const [k, v] of customVals) values.set(k, v);
+      for (const file of fs.readdirSync(customDir).filter(name => name.endsWith('.xml')).sort()) {
+        document = document.merge(readConfig(path.join(customDir, file), options));
       }
     }
-
-    return new BlockBehaviorConfig(values, raw);
+    return new BlockBehaviorConfig(document);
   }
 
-  /**
-   * Creates a value from Xml.
-   *
-   * @param xml - Input value for the fromXml operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromXml(xml: string): BlockBehaviorConfig {
-    const raw = PARSER.parse(xml);
-    return new BlockBehaviorConfig(BlockBehaviorConfig._flatten(raw), raw);
+  /** Parses XML in memory, preserving its root name, attributes, comments and unknown nodes. */
+  static fromXml(xml: string, options: FormatLimits = {}): BlockBehaviorConfig {
+    return new BlockBehaviorConfig(XmlConfigDocument.fromXml(xml, options));
   }
 
-  // ── Accessors ─────────────────────────────────────────────────────────────────
-
-  /**
-   * Returns the requested value.
-   *
-   * @param key - Input value for the get operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  get(key: string): BehaviorValue | undefined { return this._values.get(key); }
-  /**
-   * Returns Number.
-   *
-   * @param key - Input value for the getNumber operation.
-   * @param def - Input value for the getNumber operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  getNumber(key: string, def = 0): number     { return Number(this._values.get(key) ?? def); }
-  /**
-   * Returns Boolean.
-   *
-   * @param key - Input value for the getBoolean operation.
-   * @param def - Input value for the getBoolean operation.
-   * @returns The computed StarMade-Decoder value.
-   */
+  /** Reads a scalar at an unambiguous dotted XML path; literal dots are escaped as backslash-dot. */
+  get(key: string): BehaviorValue | undefined { return this.#document.get(key); }
+  /** Reads a number, returning the explicit fallback only when the path is absent. */
+  getNumber(key: string, def = 0): number { return Number(this.get(key) ?? def); }
+  /** Reads a boolean, returning the explicit fallback only when the path is absent. */
   getBoolean(key: string, def = false): boolean {
-    const v = this._values.get(key);
-    return v === undefined ? def : (v === true || String(v).toLowerCase() === 'true');
+    const value = this.get(key);
+    return value === undefined ? def : value === true || String(value).toLowerCase() === 'true';
   }
-  /**
-   * Returns String.
-   *
-   * @param key - Input value for the getString operation.
-   * @param def - Input value for the getString operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  getString(key: string, def = ''): string    { return String(this._values.get(key) ?? def); }
-
-  /** All flattened entries (key = XML path using '.') */
-  entries(): ReadonlyMap<string, BehaviorValue> { return this._values; }
-
-  // ── Immutable updates ──────────────────────────────────────────────
-
-  /**
-   * Stores the requested value.
-   *
-   * @param key - Input value for the set operation.
-   * @param value - Input value for the set operation.
-   * @returns The computed StarMade-Decoder value.
-   */
+  /** Reads text, returning the explicit fallback only when the path is absent. */
+  getString(key: string, def = ''): string { return String(this.get(key) ?? def); }
+  /** Detached scalar entries; repeated siblings use explicit zero-based indices such as Item[0]. */
+  entries(): ReadonlyMap<string, BehaviorValue> { return this.#document.entries(); }
+  /** Returns an independently edited document; invalid values and ambiguous paths throw. */
   set(key: string, value: BehaviorValue): BlockBehaviorConfig {
-    const newValues = new Map(this._values);
-    newValues.set(key, value);
-    return new BlockBehaviorConfig(newValues, this._rawXml);
+    return new BlockBehaviorConfig(this.#document.set(key, value));
   }
+  /** Exports the complete XML in memory, preserving unchanged source bytes. */
+  toXml(): string { return this.#document.toXml(); }
 
-  // ── Writing ──────────────────────────────────────────────────────────────
-
-  /**
-   * Writes modified values to customBlockBehaviorConfig/customBlockBehaviorConfig.xml
-   */
+  /** Writes only changed XML subtrees to the explicit custom path, preserving extension metadata. */
   saveCustom(config: SMToolConfig, vanilla: BlockBehaviorConfig): void {
+    const xml = this.#document.difference(vanilla.#document);
+    if (!xml) return;
     const customDir = config.paths.custom.blockBehaviorConfig;
     if (!fs.existsSync(customDir)) fs.mkdirSync(customDir, { recursive: true });
-
-    // Write only values that differ from vanilla
-    const diff: Record<string, BehaviorValue> = {};
-    for (const [k, v] of this._values) {
-      if (vanilla.get(k) !== v) diff[k] = v;
-    }
-
-    if (Object.keys(diff).length === 0) return;
-
-    // Build minimal XML with the modified values
-    const xmlObj = BlockBehaviorConfig._buildXmlFromFlat(diff);
-    const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + BUILDER.build(xmlObj);
-    const outPath = path.join(customDir, 'customBlockBehaviorConfig.xml');
-    fs.writeFileSync(outPath, xml, 'utf8');
+    fs.writeFileSync(path.join(customDir, 'customBlockBehaviorConfig.xml'), xml, 'utf8');
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  /** Builds the diagnostic summary; use toXml for a complete export. */
+  toString(): string { return `BlockBehaviorConfig(${this.entries().size} values)`; }
+}
 
-  /** Aplatit l'arbre XML en Map<"key.subkey", value> */
-  private static _flatten(obj: any, prefix = ''): Map<string, BehaviorValue> {
-    const result = new Map<string, BehaviorValue>();
-    if (!obj || typeof obj !== 'object') return result;
-    for (const [k, v] of Object.entries(obj)) {
-      if (k.startsWith('@_')) continue;
-      const fullKey = prefix ? `${prefix}.${k}` : k;
-      if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-        for (const [sk, sv] of BlockBehaviorConfig._flatten(v, fullKey)) {
-          result.set(sk, sv);
-        }
-      } else if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
-        result.set(fullKey, v);
-      }
-    }
-    return result;
-  }
-
-  /** Rebuilds an XML object from flattened keys */
-  private static _buildXmlFromFlat(flat: Record<string, BehaviorValue>): any {
-    const result: any = {};
-    for (const [key, value] of Object.entries(flat)) {
-      const parts = key.split('.');
-      let cur = result;
-      for (let i = 0; i < parts.length - 1; i++) {
-        if (!cur[parts[i]]) cur[parts[i]] = {};
-        cur = cur[parts[i]];
-      }
-      cur[parts[parts.length - 1]] = value;
-    }
-    return result;
-  }
-
-  /**
-   * Builds the diagnostic string representation for this value.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toString(): string { return `BlockBehaviorConfig(${this._values.size} values)`; }
+/** Checks the selected file's byte budget before reading; decoding rejects invalid UTF-8. */
+function readConfig(file: string, options: FormatLimits): XmlConfigDocument {
+  const limits = formatLimits(options);
+  if (fs.statSync(file).size > limits.maxBytes) throw new DecodeError('E_LIMIT', 'Configuration byte budget exceeded');
+  return XmlConfigDocument.fromXml(formatText(fs.readFileSync(file)), limits);
 }

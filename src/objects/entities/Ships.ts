@@ -14,8 +14,10 @@
 import { Tag } from '../../core/Tag.js';
 import { Tags } from '../../core/TagBuilder.js';
 import { TagType } from '../../core/TagType.js';
-import { readFrom } from '../../core/TagParser.js';
-import { SegmentController, type BlockBounds } from './SegmentController.js';
+import type { TagReadOptions } from '../../core/TagParser.js';
+import { TagModelFile, replaceTagField } from '../../core/TagModelFile.js';
+import { DecodeError } from '../../core/DecodeError.js';
+import { SegmentController, segmentControllerIndex, type BlockBounds } from './SegmentController.js';
 import { SectorPosition, EntityTransform } from '../components/Transform.js';
 import { SpawnController } from '../components/SpawnData.js';
 import { ManagerContainer } from '../components/ManagerContainer.js';
@@ -30,18 +32,20 @@ import { ManagerContainer } from '../components/ManagerContainer.js';
  * @returns The computed StarMade-Decoder value.
  */
 function make<T extends SegmentController>(
-  ctor: new (...args: any[]) => T, root: Tag,
+  ctor: Function & {readonly prototype:T}, root: Tag, options: TagReadOptions = {}, source?: TagModelFile,
 ): T {
-  const p = (SegmentController as any)._parse(root);
-  return new ctor(
+  const file=source??new TagModelFile(root,options);
+  const p = (SegmentController as any)._parse(file.root,file.options);
+  const result = Reflect.construct(ctor, [
     p.mass, p.transform, p.sectorPosition, p.factionId, p.owner,
     p.spawnController, p.transformableChildren,
     p.uniqueId, p.realName, p.bounds, p.dockingState, p.controlElementMap,
     p.managerContainer, p.creatorId, p.spawner, p.lastModifier, p.seed,
     p.nonEmptySegments, p.hpState, p.textBlocks, p.scrap, p.vulnerable,
     p.minable, p.factionRights, p.currentOwner, p.lastDockerPlayer,
-    p.lastEditBlocks, p.lastDamageTaken, p.tagVersion, p.rootChildren,
-  );
+    p.lastEditBlocks, p.lastDamageTaken, p.tagVersion, p.rootChildren, file.options, file,
+  ]) as T;
+  return Object.freeze(result);
 }
 
 /**
@@ -51,7 +55,7 @@ function make<T extends SegmentController>(
  */
 function cloneWith<T extends SegmentController>(
   entity: T,
-  ctor: new (...args: any[]) => T,
+  ctor: Function & {readonly prototype:T},
   overrides: Partial<{
     mass: number; transform: EntityTransform;
     sectorPosition: SectorPosition; factionId: number;
@@ -78,57 +82,36 @@ function cloneWith<T extends SegmentController>(
     rootChildren: Tag[];
   }>,
 ): T {
-  const p = (SegmentController as any)._parse(entity.toTag());
-
-  // Patch transformableChildren
-  const tc = [...p.transformableChildren];
-  if (overrides.factionId !== undefined) {
-    const i = tc.findIndex(t => t.name === 'fid');
-    if (i >= 0) tc[i] = Tags.int('fid', overrides.factionId);
+  const file:TagModelFile=(entity as any).sourceFile,root=file.root,index=segmentControllerIndex(root);
+  let sc=index<0?root:root.getStruct()[index];
+  if(overrides.rootChildren!==undefined)sc=Tags.struct(sc.name,overrides.rootChildren);
+  const put=(slot:number,tag:Tag)=>{sc=replaceTagField(sc,slot,tag);};
+  const strings: [keyof typeof overrides,number][]=[['uniqueId',0],['realName',5],['spawner',9],['lastModifier',10],['currentOwner',25],['lastDockerPlayer',26]];
+  for(const [key,slot] of strings)if(overrides[key]!==undefined)put(slot,Tags.string(null,overrides[key] as string));
+  const integers: [keyof typeof overrides,number][]=[['creatorId',8],['nonEmptySegments',20]];
+  for(const [key,slot] of integers)if(overrides[key]!==undefined)put(slot,Tags.int(null,overrides[key] as number));
+  const longs: [keyof typeof overrides,number][]=[['seed',11],['lastEditBlocks',37],['lastDamageTaken',38]];
+  for(const [key,slot] of longs)if(overrides[key]!==undefined)put(slot,Tags.long(null,overrides[key] as bigint));
+  for(const [key,slot] of [['scrap',15],['vulnerable',16],['minable',17]] as const)if(overrides[key]!==undefined){
+    if(typeof overrides[key]!=='boolean')throw new DecodeError('E_RANGE','Controller flag must be boolean');
+    const originalRoot=file.originalRoot,originalIndex=segmentControllerIndex(originalRoot);
+    const original=(originalIndex<0?originalRoot:originalRoot.getStruct()[originalIndex]).getStruct()[slot];
+    put(slot,original?.type===TagType.BYTE&&(original.getByte()>0)===overrides[key]?original:Tags.bool(null,overrides[key]));
   }
-  if (overrides.owner !== undefined) {
-    const i = tc.findIndex(t => t.name === 'own');
-    if (i >= 0) tc[i] = Tags.string('own', overrides.owner);
+  for(const [key,slot] of [['factionRights',18],['tagVersion',40]] as const)if(overrides[key]!==undefined){
+    const value=overrides[key];if(!Number.isInteger(value)||value < -128||value>127)throw new DecodeError('E_RANGE','Controller byte out of range');
+    put(slot,Tags.byte(null,value));
   }
-  if (overrides.sectorPosition !== undefined) {
-    const i = tc.findIndex(t => t.name === 'sPos');
-    const s = overrides.sectorPosition;
-    if (i >= 0) tc[i] = Tags.vector3i('sPos', s.x, s.y, s.z);
+  if(overrides.bounds!==undefined){const value=overrides.bounds;put(1,Tags.vector3i(null,value.minX,value.minY,value.minZ));put(2,Tags.vector3i(null,value.maxX,value.maxY,value.maxZ));}
+  if(Object.prototype.hasOwnProperty.call(overrides,'managerContainer')){
+    // BYTE is the on-disk absent-manager representation; replacing it is an explicit edit.
+    const value=overrides.managerContainer;sc=replaceTagField(sc,7,value?value.toTag():Tags.byte(null,0),[TagType.BYTE,TagType.STRUCT]);
   }
-  if (overrides.mass !== undefined && tc[0]?.type === TagType.FLOAT) {
-    tc[0] = Tags.float(null, overrides.mass);
-  }
-
-  return new ctor(
-    overrides.mass           ?? p.mass,
-    overrides.transform      ?? p.transform,
-    overrides.sectorPosition ?? p.sectorPosition,
-    overrides.factionId      ?? p.factionId,
-    overrides.owner          ?? p.owner,
-    overrides.spawnController ?? p.spawnController,
-    tc,
-    overrides.uniqueId        ?? p.uniqueId,
-    overrides.realName       ?? p.realName,
-    overrides.bounds          ?? p.bounds,
-    p.dockingState, p.controlElementMap,
-    Object.prototype.hasOwnProperty.call(overrides, 'managerContainer') ? overrides.managerContainer ?? null : p.managerContainer,
-    overrides.creatorId      ?? p.creatorId,
-    overrides.spawner        ?? p.spawner,
-    overrides.lastModifier   ?? p.lastModifier,
-    overrides.seed           ?? p.seed,
-    overrides.nonEmptySegments ?? p.nonEmptySegments,
-    p.hpState, p.textBlocks,
-    overrides.scrap          ?? p.scrap,
-    overrides.vulnerable     ?? p.vulnerable,
-    overrides.minable        ?? p.minable,
-    overrides.factionRights  ?? p.factionRights,
-    overrides.currentOwner     ?? p.currentOwner,
-    overrides.lastDockerPlayer ?? p.lastDockerPlayer,
-    overrides.lastEditBlocks   ?? p.lastEditBlocks,
-    overrides.lastDamageTaken  ?? p.lastDamageTaken,
-    overrides.tagVersion       ?? p.tagVersion,
-    overrides.rootChildren ?? p.rootChildren,
-  );
+  const gameKeys=['mass','transform','sectorPosition','factionId','owner','spawnController'] as const;
+  const game=Object.fromEntries(gameKeys.filter(key=>overrides[key]!==undefined).map(key=>[key,overrides[key]]));
+  if(Object.keys(game).length)put(6,(entity as any)._buildTransformableTag(game));
+  const edited=index<0?sc:replaceTagField(root,index,sc),next=file.withRoot(edited);
+  return make(ctor,edited,next.options,next);
 }
 
 // ── Ship ──────────────────────────────────────────────────────────────────────
@@ -145,14 +128,14 @@ export class Ship extends SegmentController {
    * @param root - Input value for the fromTag operation.
    * @returns The computed StarMade-Decoder value.
    */
-  static fromTag(root: Tag): Ship        { return make(Ship, root); }
+  static fromTag(root: Tag, options: TagReadOptions = {}): Ship        { return make(Ship, root, options); }
   /**
    * Creates a value from Buffer.
    *
    * @param data - Input value for the fromBuffer operation.
    * @returns The computed StarMade-Decoder value.
    */
-  static fromBuffer(data: Buffer | Uint8Array): Ship { return Ship.fromTag(readFrom(data)); }
+  static fromBuffer(data: Buffer | Uint8Array, options: TagReadOptions = {}): Ship { const file=TagModelFile.fromBuffer(data,options); return make(Ship,file.root,file.options,file); }
 
   /**
    * Returns a cloned copy of this value.
@@ -177,14 +160,14 @@ export class SpaceStation extends SegmentController {
    * @param root - Input value for the fromTag operation.
    * @returns The computed StarMade-Decoder value.
    */
-  static fromTag(root: Tag): SpaceStation        { return make(SpaceStation, root); }
+  static fromTag(root: Tag, options: TagReadOptions = {}): SpaceStation        { return make(SpaceStation, root, options); }
   /**
    * Creates a value from Buffer.
    *
    * @param data - Input value for the fromBuffer operation.
    * @returns The computed StarMade-Decoder value.
    */
-  static fromBuffer(data: Buffer | Uint8Array): SpaceStation { return SpaceStation.fromTag(readFrom(data)); }
+  static fromBuffer(data: Buffer | Uint8Array, options: TagReadOptions = {}): SpaceStation { const file=TagModelFile.fromBuffer(data,options); return make(SpaceStation,file.root,file.options,file); }
 
   /**
    * Returns a cloned copy of this value.
@@ -209,14 +192,14 @@ export class ShopSpaceStation extends SegmentController {
    * @param root - Input value for the fromTag operation.
    * @returns The computed StarMade-Decoder value.
    */
-  static fromTag(root: Tag): ShopSpaceStation        { return make(ShopSpaceStation, root); }
+  static fromTag(root: Tag, options: TagReadOptions = {}): ShopSpaceStation        { return make(ShopSpaceStation, root, options); }
   /**
    * Creates a value from Buffer.
    *
    * @param data - Input value for the fromBuffer operation.
    * @returns The computed StarMade-Decoder value.
    */
-  static fromBuffer(data: Buffer | Uint8Array): ShopSpaceStation { return ShopSpaceStation.fromTag(readFrom(data)); }
+  static fromBuffer(data: Buffer | Uint8Array, options: TagReadOptions = {}): ShopSpaceStation { const file=TagModelFile.fromBuffer(data,options); return make(ShopSpaceStation,file.root,file.options,file); }
 
   /**
    * Returns a cloned copy of this value.
@@ -241,14 +224,14 @@ export class FloatingRock extends SegmentController {
    * @param root - Input value for the fromTag operation.
    * @returns The computed StarMade-Decoder value.
    */
-  static fromTag(root: Tag): FloatingRock        { return make(FloatingRock, root); }
+  static fromTag(root: Tag, options: TagReadOptions = {}): FloatingRock        { return make(FloatingRock, root, options); }
   /**
    * Creates a value from Buffer.
    *
    * @param data - Input value for the fromBuffer operation.
    * @returns The computed StarMade-Decoder value.
    */
-  static fromBuffer(data: Buffer | Uint8Array): FloatingRock { return FloatingRock.fromTag(readFrom(data)); }
+  static fromBuffer(data: Buffer | Uint8Array, options: TagReadOptions = {}): FloatingRock { const file=TagModelFile.fromBuffer(data,options); return make(FloatingRock,file.root,file.options,file); }
 
   /**
    * Returns a cloned copy of this value.
@@ -269,12 +252,12 @@ export class FloatingRock extends SegmentController {
  * @returns The computed StarMade-Decoder value.
  */
 export function parseSegmentControllerEntity(
-  root: Tag, filename = '',
+  root: Tag, filename = '', options: TagReadOptions = {},
 ): Ship | SpaceStation | ShopSpaceStation | FloatingRock {
   const f = filename.toUpperCase();
-  if (f.includes('ENTITY_SHIP'))         return Ship.fromTag(root);
-  if (f.includes('ENTITY_SPACESTATION')) return SpaceStation.fromTag(root);
-  if (f.includes('ENTITY_SHOP'))         return ShopSpaceStation.fromTag(root);
-  if (f.includes('ENTITY_ASTEROID'))     return FloatingRock.fromTag(root);
-  return Ship.fromTag(root);
+  if (f.includes('ENTITY_SHIP'))         return Ship.fromTag(root,options);
+  if (f.includes('ENTITY_SPACESTATION')) return SpaceStation.fromTag(root,options);
+  if (f.includes('ENTITY_SHOP'))         return ShopSpaceStation.fromTag(root,options);
+  if (f.includes('ENTITY_ASTEROID') || f.includes('ENTITY_FLOATINGROCK'))     return FloatingRock.fromTag(root,options);
+  return Ship.fromTag(root,options);
 }

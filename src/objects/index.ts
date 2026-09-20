@@ -13,13 +13,13 @@
 export { Catalog, CatalogEntry } from './Catalog.js';
 export { FactionManager, Faction, FactionMember, FactionRelation,
          RELATION_WAR, RELATION_NEUTRAL, RELATION_ALLY, RELATION_NAMES } from './Factions.js';
-export { PlayerCharacter } from './PlayerCharacter.js';
+export { PlayerCharacter, PlayerTransformable, type PlayerTransformableFields } from './PlayerCharacter.js';
 export { PlayerState } from './PlayerState.js';
 export { SegmentControllerObject } from './SegmentController.js';
 export { ChatChannelManager, ChatChannel } from './ChatChannels.js';
 export { TradingManager, TradeRoute } from './Trading.js';
 export { NPCFactionManager, SimulationState, SimulationGroup } from './Simulation.js';
-export { FloatingItemsArchive, FloatingItem } from './FloatingItems.js';
+export { FloatingItemsArchive, FloatingItem, FloatingItemSector, type FloatingItemPosition } from './FloatingItems.js';
 export {
   ControlElementMapper, ElementCountMap, NPCFactionNewsEvent,
   LongSet, BlockBuffer, Long2Vector3fMap, Long2TransformMap,
@@ -108,3 +108,12 @@ export * from './components/index.js';
 export * from './entities/index.js';
 // Enriched views (Phase 4)
 export * from './enriched/index.js';
+
+export type { CatalogEntryFields, CatalogOptions } from './Catalog.js';
+export type { FactionFields, FactionMemberFields, FactionRelationFields } from './Factions.js';
+export type { ChatChannelFields } from './ChatChannels.js';
+export type { TradeRouteFields } from './Trading.js';
+export type { SimulationGroupFields, SimulationStateFields } from './Simulation.js';
+export type { NPCRoute } from './Serializables.js';
+
+export type { ControlElementMapperOptions } from './Serializables.js';

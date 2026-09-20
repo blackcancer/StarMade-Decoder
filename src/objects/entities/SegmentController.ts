@@ -57,7 +57,9 @@ import { Tag } from '../../core/Tag.js';
 import { Tags } from '../../core/TagBuilder.js';
 import { TagType } from '../../core/TagType.js';
 import { FINISH_TAG } from '../../core/Tag.js';
-import { readFrom, writeTo } from '../../core/TagParser.js';
+import { writeTo, type TagReadOptions } from '../../core/TagParser.js';
+import { TagModelFile } from '../../core/TagModelFile.js';
+import { DecodeError } from '../../core/DecodeError.js';
 import { GameEntity } from './GameEntity.js';
 import { SectorPosition, EntityTransform } from '../components/Transform.js';
 import { SpawnController } from '../components/SpawnData.js';
@@ -66,7 +68,6 @@ import { HpState } from '../components/HpState.js';
 import { TextBlocks } from '../components/TextBlocks.js';
 import { ManagerContainer } from '../components/ManagerContainer.js';
 import { ControlElementMapper } from '../Serializables.js';
-import type { RawElement } from '../../serializable/Factories.js';
 import {
   buildEditableEntityFields,
   fieldValueAsBigInt,
@@ -85,6 +86,15 @@ import {
   RailControllerState,
 } from '../EntitySlotObjects.js';
 
+/** Locates a positional controller tuple and rejects ambiguous wrappers. */
+export function segmentControllerIndex(root: Tag): number {
+  const children=root.getStruct();
+  if(children[0]?.type===TagType.STRING)return -1;
+  const matches=children.map((tag,index)=>tag.type===TagType.STRUCT&&tag.getStruct()[0]?.type===TagType.STRING?index:-1).filter(index=>index>=0);
+  if(matches.length!==1)throw new DecodeError('E_FORMAT','Missing or ambiguous segment-controller wrapper');
+  return matches[0];
+}
+
 // ── Position blocks ─────────────────────────────────────────────────────────
 
 /**
@@ -101,6 +111,12 @@ export interface BlockBounds {
  * Represents the SegmentController model used by high-level StarMade entity modelling.
  */
 export abstract class SegmentController extends GameEntity {
+  protected readonly sourceFile: TagModelFile;
+  /** Detached controller slots, separate from any enclosing Shop/SpaceStation wrapper. */
+  protected get _rootChildren(): Tag[] {
+    const root=this.sourceFile.root,index=segmentControllerIndex(root);
+    return (index<0?root:root.getStruct()[index]).getStruct().filter(tag=>tag.type!==TagType.FINISH);
+  }
   /**
    * Creates a SegmentController instance.
    *
@@ -135,7 +151,7 @@ export abstract class SegmentController extends GameEntity {
    * @param tagVersion - Input value for the constructor operation.
    * @param _rootChildren - Input value for the constructor operation.
    */
-  constructor(
+  protected constructor(
     // GameEntity
     mass: number, transform: EntityTransform,
     sectorPosition: SectorPosition, factionId: number, owner: string,
@@ -165,10 +181,12 @@ export abstract class SegmentController extends GameEntity {
     readonly lastDamageTaken: bigint,
     readonly tagVersion: number,
     /** Original root Tag — for faithful round-tripping of opaque fields */
-    protected readonly _rootChildren: Tag[],
+    rootChildren: Tag[], options: TagReadOptions, source: TagModelFile,
   ) {
-    super(mass, transform, sectorPosition, factionId, owner, spawnController, _transformableChildren);
-    Object.defineProperty(this, '_rootChildren', { enumerable: false });
+    super(mass, transform, sectorPosition, factionId, owner, spawnController, _transformableChildren, options);
+    this.sourceFile=source;
+    this.bounds=Object.freeze({...bounds});
+    Object.defineProperty(this, 'sourceFile', { enumerable: false });
   }
 
   // Widens _clone to also accept SegmentController-specific overrides
@@ -306,37 +324,37 @@ export abstract class SegmentController extends GameEntity {
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get npcData(): NpcDataState { return new NpcDataState(this._rootChildren[14]); }
+  get npcData(): NpcDataState { return new NpcDataState(this._rootChildren[14], this.options); }
   /**
    * Handles the railController operation used by high-level StarMade entity modelling.
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get railController(): RailControllerState { return new RailControllerState(this._rootChildren[19]); }
+  get railController(): RailControllerState { return new RailControllerState(this._rootChildren[19], this.options); }
   /**
    * Handles the coreTimer operation used by high-level StarMade entity modelling.
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get coreTimer(): CoreTimerState { return new CoreTimerState(this._rootChildren[22]); }
+  get coreTimer(): CoreTimerState { return new CoreTimerState(this._rootChildren[22], this.options); }
   /**
    * Handles the blueprintInfo operation used by high-level StarMade entity modelling.
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get blueprintInfo(): BlueprintInfo { return new BlueprintInfo(this._rootChildren[24]); }
+  get blueprintInfo(): BlueprintInfo { return new BlueprintInfo(this._rootChildren[24], this.options); }
   /**
    * Handles the itemsToSpawnWith operation used by high-level StarMade entity modelling.
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get itemsToSpawnWith(): ItemsToSpawnWith { return new ItemsToSpawnWith(this._rootChildren[28]); }
+  get itemsToSpawnWith(): ItemsToSpawnWith { return new ItemsToSpawnWith(this._rootChildren[28], this.options); }
   /**
    * Handles the quarterManager operation used by high-level StarMade entity modelling.
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get quarterManager(): QuarterManagerState { return new QuarterManagerState(this._rootChildren[41]); }
+  get quarterManager(): QuarterManagerState { return new QuarterManagerState(this._rootChildren[41], this.options); }
 
   // ── SegmentController-specific mutations ─────────────────────────────────
 
@@ -533,12 +551,9 @@ export abstract class SegmentController extends GameEntity {
    * @returns The computed StarMade-Decoder value.
    */
   private _withRootChild(index: number, tag: Tag): this {
-    const children = [...this._rootChildren];
-    while (children.length <= index) children.push(Tags.nothing(null));
-    const current = children[index];
-    children[index] = current?.name !== undefined && tag.name === null
-      ? new Tag(tag.type, current.name, tag.value, tag.listType ?? undefined)
-      : tag;
+    const children = [...this._rootChildren], current = children[index];
+    if(!current)throw new DecodeError('E_INCOMPLETE',`Controller field ${index} is absent; a complete source record is required`);
+    children[index] = Tags.rename(tag, current.name);
     return this._clone({ rootChildren: children });
   }
 
@@ -549,59 +564,10 @@ export abstract class SegmentController extends GameEntity {
    *
    * @returns The computed StarMade-Decoder value.
    */
-  toTag(): Tag {
-    const c = [...this._rootChildren];
+  toTag(): Tag { return this.sourceFile.root; }
 
-    const set = (idx: number, t: Tag) => {
-      if (idx < c.length) c[idx] = t;
-    };
-
-    // Fields that are always present
-    set(0, Tags.string(null, this.uniqueId));
-    set(1, Tags.vector3i(null, this.bounds.minX, this.bounds.minY, this.bounds.minZ));
-    set(2, Tags.vector3i(null, this.bounds.maxX, this.bounds.maxY, this.bounds.maxZ));
-    set(3, this.dockingState.toTag());
-    // [4] ControlElementMap — preserved as-is (SERIALIZABLE)
-    set(5, Tags.string(null, this.realName));
-    set(6, this._buildTransformableTag());
-    if (this.managerContainer && c[7]?.type === TagType.STRUCT) {
-      set(7, this.managerContainer.toTag());
-    }
-    set(8, Tags.int(null, this.creatorId));
-    set(9, Tags.string(null, this.spawner));
-    set(10, Tags.string(null, this.lastModifier));
-    if (c[11]?.type === TagType.LONG) set(11, Tags.long(null, this.seed));
-    // [12] touched — preserved
-    // [13..14] extra/npc — preserved
-    if (c[15]?.type === TagType.STRUCT) set(15, this.textBlocks.toTag());
-    if (c[16]?.type === TagType.BYTE) set(16, Tags.byte(null, this.vulnerable ? 1 : 0));
-    if (c[17]?.type === TagType.BYTE) set(17, Tags.byte(null, this.minable ? 1 : 0));
-    if (c[18]?.type === TagType.BYTE) set(18, Tags.byte(null, this.factionRights));
-    // [19] railTag — preserved unless replaced through RailControllerState
-    if (c[20]?.type === TagType.INT)  set(20, Tags.int(null, this.nonEmptySegments));
-    if (c[21]?.type === TagType.STRUCT) set(21, this.hpState.toTag());
-    if (c[25]?.type === TagType.STRING) set(25, Tags.string(null, this.currentOwner));
-    if (c[26]?.type === TagType.STRING) set(26, Tags.string(null, this.lastDockerPlayer));
-    if (c[37]?.type === TagType.LONG)   set(37, Tags.long(null, this.lastEditBlocks));
-    if (c[38]?.type === TagType.LONG)   set(38, Tags.long(null, this.lastDamageTaken));
-    if (c[40]?.type === TagType.BYTE)   set(40, Tags.byte(null, this.tagVersion));
-
-    return new Tag(TagType.STRUCT, this._rootTag_name(), [...c, FINISH_TAG]);
-  }
-
-  /**
-   * Handles the rootTag_name operation used by high-level StarMade entity modelling.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  protected _rootTag_name(): string | null { return null; }
-
-  /**
-   * Converts this value to Buffer.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toBuffer(): Buffer { return writeTo(this.toTag()); }
+  /** Writes the complete retained file envelope rather than regenerating unrelated component fields. */
+  toBuffer(): Buffer { return this.sourceFile.toBuffer(); }
 
   // ── Parse statique ────────────────────────────────────────────────────────
 
@@ -611,7 +577,7 @@ export abstract class SegmentController extends GameEntity {
    * @param root - Input value for the _parse operation.
    * @returns The computed StarMade-Decoder value.
    */
-  protected static _parse(root: Tag): {
+  protected static _parse(root: Tag, options: TagReadOptions = {}): {
     // GameEntity
     mass: number; transform: EntityTransform;
     sectorPosition: SectorPosition; factionId: number; owner: string;
@@ -627,53 +593,31 @@ export abstract class SegmentController extends GameEntity {
     lastEditBlocks: bigint; lastDamageTaken: bigint; tagVersion: number;
     rootChildren: Tag[];
   } {
-    // Some files have a wrapper (Shop, SpaceStation with a container)
-    let sc = root;
-    if (root.type === TagType.STRUCT) {
-      const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
-      if (!s.some(t => t.name === 'uniqueId' || (t.type === TagType.STRING && s.indexOf(t) === 0))) {
-        // Find a child struct containing uniqueId
-        const wrapper = s.find(sub =>
-          sub.type === TagType.STRUCT &&
-          sub.getStruct().some(t => t.name === null && t.type === TagType.STRING)
-        );
-        if (wrapper) sc = wrapper;
-      }
+    const file=new TagModelFile(root,options),copy=file.root,index=segmentControllerIndex(copy);
+    const sc=index<0?copy:copy.getStruct()[index];
+    const s=sc.getStruct().filter(t=>t.type!==TagType.FINISH);
+    const required=[TagType.STRING,TagType.VECTOR3i,TagType.VECTOR3i,TagType.STRUCT,null,TagType.STRING,TagType.STRUCT,null,TagType.INT,TagType.STRING,TagType.STRING];
+    if(required.some((type,position)=>type!==null&&s[position]?.type!==type))throw new DecodeError('E_FORMAT','Invalid mandatory controller fields');
+
+    const uniqueId=s[0].getString(), minV=s[1].getVector3i(), maxV=s[2].getVector3i();
+    const bounds:BlockBounds={minX:minV.x,minY:minV.y,minZ:minV.z,maxX:maxV.x,maxY:maxV.y,maxZ:maxV.z};
+    const dockingState=DockingState.fromTag(s[3], options);
+    if(![TagType.STRUCT,TagType.BYTE].includes(s[7]?.type))throw new DecodeError('E_FORMAT','Invalid controller manager slot');
+    for(const [position,type] of [[11,TagType.LONG],[16,TagType.BYTE],[17,TagType.BYTE],[18,TagType.BYTE],[20,TagType.INT],
+      [21,TagType.STRUCT],[25,TagType.STRING],[26,TagType.STRING],[37,TagType.LONG],[38,TagType.LONG],[40,TagType.BYTE]]) {
+      if(s[position]&&s[position].type!==TagType.NOTHING&&s[position].type!==type)throw new DecodeError('E_FORMAT',`Invalid controller field ${position}`);
     }
+    if(s[15]&&![TagType.BYTE,TagType.STRUCT,TagType.NOTHING].includes(s[15].type))throw new DecodeError('E_FORMAT','Invalid controller text/scrap slot');
 
-    const s = sc.type === TagType.STRUCT
-      ? sc.getStruct().filter(t => t.type !== TagType.FINISH)
-      : [];
+    const controlElementMap=ControlElementMapper.fromTag(s[4],options);
 
-    const uniqueId    = s[0]?.type === TagType.STRING   ? s[0].getString()   : '';
-    const minV        = s[1]?.type === TagType.VECTOR3i ? s[1].getVector3i() : null;
-    const maxV        = s[2]?.type === TagType.VECTOR3i ? s[2].getVector3i() : null;
-    const bounds: BlockBounds = {
-      minX: minV?.x ?? 0, minY: minV?.y ?? 0, minZ: minV?.z ?? 0,
-      maxX: maxV?.x ?? 0, maxY: maxV?.y ?? 0, maxZ: maxV?.z ?? 0,
-    };
-
-    let dockingState = DockingState.UNDOCKED;
-    if (s[3]?.type === TagType.STRUCT) {
-      try { dockingState = DockingState.fromTag(s[3]); } catch { /* skip */ }
-    }
-
-    // ControlElementMap = SERIALIZABLE id=0
-    let controlElementMap = new ControlElementMapper([]);
-    if (s[4]?.type === TagType.SERIALIZABLE) {
-      const elem = s[4].value as RawElement;
-      if (elem.factoryId === 0) {
-        try { controlElementMap = ControlElementMapper.fromRaw(elem.raw); } catch { /* skip */ }
-      }
-    }
-
-    const realName    = s[5]?.type === TagType.STRING   ? s[5].getString()   : '';
-    const creatorId   = s[8]?.type === TagType.INT      ? s[8].getInt()      : 0;
-    const spawner     = s[9]?.type === TagType.STRING   ? s[9].getString()   : '';
-    const lastModifier = s[10]?.type === TagType.STRING ? s[10].getString()  : '';
+    const realName=s[5].getString();
+    const creatorId=s[8].getInt();
+    const spawner=s[9].getString();
+    const lastModifier=s[10].getString();
     const seed        = s[11]?.type === TagType.LONG    ? s[11].getLong()    : 0n;
     const nonEmptySegments = s[20]?.type === TagType.INT ? s[20].getInt()   : 0;
-    const factionRights    = s[18]?.type === TagType.BYTE ? s[18].getByte() : 0;
+    const factionRights    = s[18]?.type === TagType.BYTE ? s[18].getByte() : -2;
     const scrap       = s[15]?.type === TagType.BYTE    ? s[15].getByte() > 0 : false;
     const vulnerable  = s[16]?.type === TagType.BYTE    ? s[16].getByte() > 0 : true;
     const minable     = s[17]?.type === TagType.BYTE    ? s[17].getByte() > 0 : true;
@@ -685,32 +629,22 @@ export abstract class SegmentController extends GameEntity {
 
     let hpState = HpState.EMPTY;
     if (s[21]?.type === TagType.STRUCT) {
-      try { hpState = HpState.fromTag(s[21]); } catch { /* skip */ }
+      hpState = HpState.fromTag(s[21], options);
     }
 
     let textBlocks = TextBlocks.EMPTY;
     if (s[15]?.type === TagType.STRUCT) {
-      try { textBlocks = TextBlocks.fromTag(s[15]); } catch { /* skip */ }
+      textBlocks = TextBlocks.fromTag(s[15], options);
     }
 
     let managerContainer: ManagerContainer | null = null;
     if (s[7]?.type === TagType.STRUCT) {
-      try { managerContainer = ManagerContainer.fromTag(s[7]); } catch { /* skip */ }
+      managerContainer = ManagerContainer.fromTag(s[7], options);
     }
 
-    // GameEntity — transformable
-    let mass = 0.1, transform = EntityTransform.IDENTITY;
-    let sectorPosition = SectorPosition.ZERO, factionId = 0, owner = '';
-    let spawnController = SpawnController.EMPTY;
-    let transformableChildren: Tag[] = [];
-
-    if (s[6]?.type === TagType.STRUCT) {
-      const parsed = GameEntity.parseTransformable(s[6]);
-      mass = parsed.mass; transform = parsed.transform;
-      sectorPosition = parsed.sectorPosition; factionId = parsed.factionId;
-      owner = parsed.owner; spawnController = parsed.spawnController;
-      transformableChildren = parsed.children;
-    }
+    const parsed=GameEntity.parseTransformable(s[6],options);
+    const {mass,transform,sectorPosition,factionId,owner,spawnController}=parsed;
+    const transformableChildren=parsed.children;
 
     return {
       mass, transform, sectorPosition, factionId, owner, spawnController, transformableChildren,

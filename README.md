@@ -4,15 +4,19 @@ TypeScript SDK for reading, inspecting, and rewriting **StarMade** save files an
 
 The SDK implements the Java `org.schema.schine.resource.tag.Tag` binary format and higher-level helpers for entities, blueprints and configuration files.
 
-`main` contains the **1.7.0 format-class candidate**, including bounded block/blueprint models,
-editable block definitions, position-indexed inventories and complete archive/folder writers. [Unreleased in the changelog](CHANGELOG.md#unreleased)
-records implemented changes awaiting a versioned release. Pushing these changes to
-GitHub does not publish an npm package.
+The **2.0.0 SDK** provides dedicated models for every supported format family,
+including auxiliary files, configuration, entities, inventories and blueprints.
+Models validate stored values, retain opaque data and expose caller-selected limits.
+See the [format matrix](docs/FORMAT_MODELS.md#coverage-of-supported-formats) for
+supported versions and the [V2 migration notes](docs/INTEGRITY_AND_MIGRATION.md#upgrading-to-200)
+for corrected schemas and API changes. Updating GitHub does not publish to npm.
 
-**Upgrading from 1.4.0:** read [Data integrity and migration](docs/INTEGRITY_AND_MIGRATION.md). Strict error handling, Java modified UTF-8 and v7 LZ4 serialization correct earlier incompatible behavior. Back up source files before migration.
+Rendering and 3D calculations belong to StarMade-3D; database engine access belongs
+to StarMade-DB. This package provides format operations for those consumers.
 
 ## Features
 
+- Read, create and edit `.smskin` ZIP archives with `SkinDocument`, preserving PNG bytes
 - Read and write StarMade Tag files (`.ent`, `.fac`, `.cat`, `.tag`, `.sim`)
 - Preserve unchanged Tag files byte-for-byte with `TagDocument`, and retain their
   compression, version and trailing data when editing
@@ -27,7 +31,9 @@ GitHub does not publish an npm package.
 - Load StarMade configuration files, inspect BlockConfig element information, and save custom overrides safely
 - Read and write HSQLDB binary columns for fleet commands/remotes, sector items,
   trade prices and system data, including Java fleet-remotes object streams
-- Read and write auxiliary `.seed`, `.smdat`, `.sbv` and `systemNames.syl` files
+- Read, edit and write auxiliary files with `WorldSeedDocument`,
+  `PersistentObjectDocument`, `SubtitleDocument`, `SystemNamesDocument` and `BlueprintModMappings`
+- Preserve XML comments, attributes, repeated elements and unknown extensions with `XmlConfigDocument`
 - Use strict blueprint/database decoding, bounded Tag traversal and explicit
   diagnostics for opted-in blueprint and fleet-remotes recovery
 - Fetch and test public retrocompatibility samples from StarMadeDock
@@ -158,10 +164,11 @@ src/
   types/         vector and matrix primitives
   serializable/  StarMade SERIALIZABLE factory registry and raw elements
   entity/        legacy typed parsers by file type
-  objects/       high-level business objects and entity classes
+  objects/       immutable format objects, components and entity classes
   config/        StarMade config loaders and immutable editors
   db/            HSQLDB binary codecs, business objects and auxiliary save files
   smd3/          blueprint and segment parsers/writers
+  skin/          immutable SMSKIN archives with opaque texture resources
 test/            mirrors src/ directories; cross-module contracts use index.* suites
 scripts/         coverage gates, package checks, Python/LZ4 oracles and sample helpers
 ```
@@ -172,7 +179,6 @@ scripts/         coverage gates, package checks, Python/LZ4 oracles and sample h
 npm run build
 npm run source:check
 npm run docs:check
-npm run source:check
 npm run coverage:check
 node scripts/test-coverage-gate.mjs
 npm run test:interop   # Requires Python 3
@@ -199,16 +205,9 @@ STARMADE_TEST_DIR=/srv/StarMade npm run coverage:check
 Once these installation tests are enabled, missing required configuration or
 auxiliary files fail the run. Installation files are read only.
 
-The local **1.7.0 qualification on 2026-09-20** passed **1,233 tests, zero
-pending and zero failing**, including the installation checks. Every one of the
-**110 production modules** reached **30,246/30,246 lines** and **7,599/7,599
-branches**, with no exclusions and exact blocking checks. Function coverage is
-reported separately: 1,934/1,972 (98.07%). Build, source/layout guards, JSDoc,
-installed-package runtime/types, independent Python binary/LZ4 checks and the
-production dependency audit passed. All 1,516 definitions from the local game
-catalogue also survived an in-memory XML/type-map export/reparse unchanged.
-See [format-class qualification](docs/FORMAT_MODELS.md#reference-and-qualification)
-for scope and limits; earlier results remain in the dated audit/blueprint reports.
+See the [V2 qualification report](docs/V2_QUALIFICATION.md) for measured results,
+fixture scope, independent checks and remaining qualification limits. Earlier
+measurements remain in the dated audit and changelog entries.
 
 ## Exact coverage acceptance
 

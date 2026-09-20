@@ -1,211 +1,105 @@
-/**
- * @fileoverview Transform
- *
- * Defines reusable domain components used by StarMade entity object models.
- *
- * @author InitSysRev
- * @version 1.0.0
- */
-
-/**
- * SectorPosition — StarMade sector coordinates.
- *
- * A sector is a universe region identified by (x, y, z) en int32.
- * Port of sector Vector3i in SimpleTransformableSendableObject.
- */
-
+/** @fileoverview Immutable serialized sector coordinates and full 16-component entity matrices; no geometry calculations. */
 import { Tag } from '../../core/Tag.js';
 import { Tags } from '../../core/TagBuilder.js';
 import { TagType } from '../../core/TagType.js';
-import { FINISH_TAG } from '../../core/Tag.js';
+import type { TagReadOptions } from '../../core/TagParser.js';
+import { TagModelFile } from '../../core/TagModelFile.js';
+import { DecodeError } from '../../core/DecodeError.js';
+import { Matrix4f } from '../../types/Matrices.js';
 
-/**
- * Represents the SectorPosition model used by high-level entity component modelling.
- */
+/** Named matrix slots in the persisted row-major order, including the four previously discarded values. */
+const slots = ['m00','m01','m02','m03','m10','m11','m12','m13','m20','m21','m22','m23','originX','originY','originZ','m33'] as const;
+/** Serializable edits; these are stored coordinates, with no normalization or matrix arithmetic. */
+export type EntityTransformChanges = Partial<Record<typeof slots[number], number>>;
+/** Checks the finite float32 representation before serialization can round an overflow to infinity. */
+function float(value: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(Math.fround(value))) throw new DecodeError('E_RANGE', 'Transform requires finite float32 values');
+  return Math.fround(value);
+}
+/** Converts a full row-major array into the wire matrix object. */
+function matrix(values: readonly number[]): Matrix4f { return new Matrix4f(...values); }
+/** Keeps a source name unless the caller explicitly requests a different one. */
+function renamed(tag: Tag, name?: string | null): Tag { return name === undefined ? tag : Tags.rename(tag, name); }
+
+/** An immutable signed-int32 sector coordinate retaining its source name and limits. */
 export class SectorPosition {
-  /**
-   * Creates a SectorPosition instance.
-   *
-   * @param x - Input value for the constructor operation.
-   * @param y - Input value for the constructor operation.
-   * @param z - Input value for the constructor operation.
-   */
-  constructor(
-    readonly x: number,
-    readonly y: number,
-    readonly z: number,
-  ) {}
-
-  static ZERO = new SectorPosition(0, 0, 0);
-
-  /**
-   * Creates a value from Tag.
-   *
-   * @param tag - Input value for the fromTag operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromTag(tag: Tag): SectorPosition {
-    if (tag.type !== TagType.VECTOR3i) throw new TypeError('SectorPosition: expected VECTOR3i');
-    const v = tag.getVector3i();
-    return new SectorPosition(v.x, v.y, v.z);
+  #file: TagModelFile;
+  readonly x: number; readonly y: number; readonly z: number;
+  /** Creates a validated coordinate; an internal source carries the original name across edits. */
+  constructor(x: number, y: number, z: number, options: TagReadOptions = {}, source?: TagModelFile) {
+    this.#file = source ?? new TagModelFile(Tags.vector3i(null, x, y, z), options);
+    const value = this.#file.root.getVector3i(); this.x = value.x; this.y = value.y; this.z = value.z; Object.freeze(this);
   }
-
-  /**
-   * Creates a value from Values.
-   *
-   * @param x - Input value for the fromValues operation.
-   * @param y - Input value for the fromValues operation.
-   * @param z - Input value for the fromValues operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromValues(x: number, y: number, z: number): SectorPosition {
-    return new SectorPosition(x, y, z);
+  static readonly ZERO = new SectorPosition(0, 0, 0);
+  /** Snapshots a VECTOR3i Tag, rejecting wrong types and out-of-range coordinates. */
+  static fromTag(tag: Tag, options: TagReadOptions = {}): SectorPosition {
+    return new SectorPosition(0, 0, 0, options, new TagModelFile(tag, options));
   }
-
-  /**
-   * Converts this value to Tag.
-   *
-   * @param name - Input value for the toTag operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  toTag(name: string | null = null): Tag {
-    return Tags.vector3i(name, this.x, this.y, this.z);
+  /** Creates a coordinate from three signed-int32 values. */
+  static fromValues(x: number, y: number, z: number, options: TagReadOptions = {}): SectorPosition { return new SectorPosition(x, y, z, options); }
+  /** Returns a detached Tag, retaining its name unless explicitly overridden. */
+  toTag(name?: string | null): Tag { return renamed(this.#file.root, name); }
+  /** Changes only supplied coordinate values and retains source naming and resource limits. */
+  with(changes: Partial<{x: number; y: number; z: number}>): SectorPosition {
+    const value = {x:this.x, y:this.y, z:this.z};
+    for (const key of ['x','y','z'] as const) if (changes[key] !== undefined) value[key] = changes[key];
+    return SectorPosition.fromTag(Tags.vector3i(this.#file.root.name, value.x, value.y, value.z), this.#file.options);
   }
-
-  /**
-   * Handles the equals operation used by high-level entity component modelling.
-   *
-   * @param other - Input value for the equals operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  equals(other: SectorPosition): boolean {
-    return this.x === other.x && this.y === other.y && this.z === other.z;
-  }
-
-  /**
-   * Builds the diagnostic string representation for this value.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
+  /** Compares serialized coordinates. */
+  equals(other: SectorPosition): boolean { return this.x === other.x && this.y === other.y && this.z === other.z; }
+  /** Diagnostic representation. */
   toString(): string { return `SectorPosition(${this.x}, ${this.y}, ${this.z})`; }
 }
 
-// ── EntityTransform ────────────────────────────────────────────────────────────
-
-/**
- * EntityTransform — position and orientation in StarMade space.
- *
- * Port of com.bulletphysics.linearmath.Transform :
- *   origin : Vector3f (absolute position in the sector)
- *   basis  : Matrix3f (matrice de rotation 3×3)
- *
- * In Tags, the transform is stored as a LIST of 16 floats
- * (Matrix4f row-major) in SimpleTransformableSendableObject.toTagStructure().
- * Or directly as MATRIX4f in some contexts.
- *
- * Source: TransformTools.serializeFully = Matrix3f (9f) + Vector3f (3f)
- */
-
+/** Immutable LIST/FLOAT or MATRIX4f value preserving all sixteen wire components. */
 export class EntityTransform {
-  /**
-   * Creates a EntityTransform instance.
-   *
-   * @param originX - Input value for the constructor operation.
-   * @param originY - Input value for the constructor operation.
-   * @param originZ - Input value for the constructor operation.
-   * @param m00 - Input value for the constructor operation.
-   * @param m01 - Input value for the constructor operation.
-   * @param m02 - Input value for the constructor operation.
-   * @param m10 - Input value for the constructor operation.
-   * @param m11 - Input value for the constructor operation.
-   * @param m12 - Input value for the constructor operation.
-   * @param m20 - Input value for the constructor operation.
-   * @param m21 - Input value for the constructor operation.
-   * @param m22 - Input value for the constructor operation.
-   */
-  constructor(
-    /** Position in local sector coordinates */
-    readonly originX: number,
-    readonly originY: number,
-    readonly originZ: number,
-    /** Matrice de rotation 3×3 (row-major) */
-    readonly m00: number, readonly m01: number, readonly m02: number,
-    readonly m10: number, readonly m11: number, readonly m12: number,
-    readonly m20: number, readonly m21: number, readonly m22: number,
-  ) {}
-
-  static IDENTITY = new EntityTransform(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1);
-
-  /**
-   * Parses from a LIST de 16 floats (Matrix4f format in PlayerCharacter/SimpleTransformable).
-   * Ordre row-major : [m00,m01,m02,m03, m10,m11,m12,m13, m20,m21,m22,m23, tx,ty,tz,1]
-   */
-  static fromMatrix4fList(tag: Tag): EntityTransform {
+  #file: TagModelFile;
+  #values: readonly number[];
+  readonly originX!: number; readonly originY!: number; readonly originZ!: number;
+  readonly m00!: number; readonly m01!: number; readonly m02!: number; readonly m03!: number;
+  readonly m10!: number; readonly m11!: number; readonly m12!: number; readonly m13!: number;
+  readonly m20!: number; readonly m21!: number; readonly m22!: number; readonly m23!: number; readonly m33!: number;
+  /** Creates the existing twelve-value projection with canonical remaining values (0,0,0,1). */
+  constructor(originX: number, originY: number, originZ: number,
+    m00: number, m01: number, m02: number, m10: number, m11: number, m12: number,
+    m20: number, m21: number, m22: number, options: TagReadOptions = {}, source?: TagModelFile) {
+    this.#file = source ?? new TagModelFile(Tags.list(null, [m00,m01,m02,0,m10,m11,m12,0,m20,m21,m22,0,originX,originY,originZ,1].map(value => Tags.float(null, float(value)))), options);
+    const root = this.#file.root;
+    if (root.type === TagType.LIST) {
+      if (root.listType !== TagType.FLOAT || root.getList().length !== 16) throw new DecodeError('E_FORMAT', 'EntityTransform requires exactly 16 FLOAT values');
+      this.#values = Object.freeze(root.getList().map(value => float(value.getFloat())));
+    } else {
+      const m = root.getMatrix4f(); this.#values = Object.freeze(Array.from({length:16}, (_, index) => float(m[`m${Math.floor(index / 4)}${index % 4}` as keyof Matrix4f] as number)));
+    }
+    slots.forEach((key,index) => Object.defineProperty(this,key,{value:this.#values[index],enumerable:true}));
+    Object.freeze(this);
+  }
+  static readonly IDENTITY = new EntityTransform(0,0,0,1,0,0,0,1,0,0,0,1);
+  /** Copies a strictly typed sixteen-float LIST. */
+  static fromMatrix4fList(tag: Tag, options: TagReadOptions = {}): EntityTransform {
     if (tag.type !== TagType.LIST) throw new TypeError('EntityTransform: expected LIST');
-    const floats = tag.getList().map(t => t.getFloat());
-    if (floats.length < 16) return EntityTransform.IDENTITY;
-    // Matrix4f layout : row-major
-    // [0..3]=row0, [4..7]=row1, [8..11]=row2, [12..15]=row3
-    // Translation = column 3 of the transpose = row3 x,y,z
-    return new EntityTransform(
-      floats[12], floats[13], floats[14],   // origin (tx, ty, tz)
-      floats[0],  floats[1],  floats[2],    // row0 → col0 of the rotation
-      floats[4],  floats[5],  floats[6],    // row1 → col1
-      floats[8],  floats[9],  floats[10],   // row2 → col2
-    );
+    return EntityTransform.read(tag, options);
   }
-
-  /** Parses from a direct MATRIX4f Tag. */
-  static fromMatrix4fTag(tag: Tag): EntityTransform {
+  /** Copies a MATRIX4f without changing its four non-projected components. */
+  static fromMatrix4fTag(tag: Tag, options: TagReadOptions = {}): EntityTransform {
     if (tag.type !== TagType.MATRIX4f) throw new TypeError('EntityTransform: expected MATRIX4f');
-    const m = tag.getMatrix4f();
-    return new EntityTransform(
-      m.m30, m.m31, m.m32,
-      m.m00, m.m01, m.m02,
-      m.m10, m.m11, m.m12,
-      m.m20, m.m21, m.m22,
-    );
+    return EntityTransform.read(tag, options);
   }
-
-  /** Rebuilds the 16-float LIST. */
-  toMatrix4fList(name: string | null = null): Tag {
-    const floats = [
-      this.m00, this.m01, this.m02, 0,
-      this.m10, this.m11, this.m12, 0,
-      this.m20, this.m21, this.m22, 0,
-      this.originX, this.originY, this.originZ, 1,
-    ].map(f => Tags.float(null, f));
-    return Tags.list(name, floats);
+  /** Constructs a validated projection around an immutable complete wire value. */
+  private static read(tag: Tag, options: TagReadOptions): EntityTransform { return new EntityTransform(0,0,0,1,0,0,0,1,0,0,0,1,options,new TagModelFile(tag, options)); }
+  /** Emits the original wire variant, with a detached mutable Tag tree. */
+  toTag(name?: string | null): Tag { return renamed(this.#file.root, name); }
+  /** Explicitly converts all sixteen stored values to a FLOAT LIST. */
+  toMatrix4fList(name?: string | null): Tag { return Tags.list(name === undefined ? this.#file.root.name : name, this.#values.map(value => Tags.float(null,value))); }
+  /** Explicitly converts all sixteen stored values to MATRIX4f. */
+  toMatrix4fTag(name?: string | null): Tag { return Tags.matrix4f(name === undefined ? this.#file.root.name : name, matrix(this.#values)); }
+  /** Changes supplied scalar components while retaining every other value and the source wire variant. */
+  with(changes: EntityTransformChanges): EntityTransform {
+    const values = [...this.#values];
+    slots.forEach((key,index) => { if (changes[key] !== undefined) values[index] = float(changes[key]); });
+    const root = this.#file.root;
+    return EntityTransform.read(root.type === TagType.LIST ? Tags.list(root.name, values.map(value => Tags.float(null,value))) : Tags.matrix4f(root.name,matrix(values)), this.#file.options);
   }
-
-  /**
-   * Returns a copy updated with the requested value.
-   *
-   * @param overrides - Input value for the with operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  with(overrides: Partial<{
-    originX: number; originY: number; originZ: number;
-    m00: number; m01: number; m02: number;
-    m10: number; m11: number; m12: number;
-    m20: number; m21: number; m22: number;
-  }>): EntityTransform {
-    return new EntityTransform(
-      overrides.originX ?? this.originX,
-      overrides.originY ?? this.originY,
-      overrides.originZ ?? this.originZ,
-      overrides.m00 ?? this.m00, overrides.m01 ?? this.m01, overrides.m02 ?? this.m02,
-      overrides.m10 ?? this.m10, overrides.m11 ?? this.m11, overrides.m12 ?? this.m12,
-      overrides.m20 ?? this.m20, overrides.m21 ?? this.m21, overrides.m22 ?? this.m22,
-    );
-  }
-
-  /**
-   * Builds the diagnostic string representation for this value.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toString(): string {
-    return `EntityTransform(origin=(${this.originX.toFixed(2)},${this.originY.toFixed(2)},${this.originZ.toFixed(2)}))`;
-  }
+  /** Diagnostic representation. */
+  toString(): string { return `EntityTransform(origin=(${this.originX.toFixed(2)},${this.originY.toFixed(2)},${this.originZ.toFixed(2)}))`; }
 }

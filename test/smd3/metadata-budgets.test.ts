@@ -5,15 +5,21 @@ import path from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { assert } from 'chai';
 import AdmZip from 'adm-zip';
-import { BufferWriter, Tags, writeTo, parseSment, parseBlueprintFolder, parseSmbpm } from '../../src/index.js';
+import { BufferWriter, Tags, writeTo, parseSment, parseBlueprintFolder, parseSmbpm, ManagerContainer, ThrustConfig, registerAllFactories } from '../../src/index.js';
 import type { BlueprintParseOptions } from '../../src/smd3/BlueprintReadContext.js';
 
-const plainTag = writeTo(Tags.struct(null, [Tags.string('payload', 'x'.repeat(4096))]));
-const gzipTag = gzipSync(plainTag.subarray(2));
+registerAllFactories();
+const payload = Tags.string('payload', 'x'.repeat(4096));
+const plainTag = writeTo(Tags.struct(null, [payload]));
+const managerTag = ManagerContainer.EMPTY.toTag(), thrustTag = ThrustConfig.DEFAULT.toTag();
+const managerPlainTag = writeTo(Tags.struct(managerTag.name, [...managerTag.getStruct().slice(0, -1), payload]));
+const thrustPlainTag = writeTo(Tags.struct(thrustTag.name, [...thrustTag.getStruct().slice(0, -1), payload]));
+/** Typed sections carry their real schema; the opaque suffix supplies the inflation load. */
+function sectionPlainTag(kind: number): Buffer { return kind === 2 ? managerPlainTag : kind === 9 ? thrustPlainTag : plainTag; }
 const inflatedBytes = plainTag.length - 2;
 
 /** Constructs each independently specified metadata section around exact Tag bytes. */
-function metadata(kind: number, tag = gzipTag): Buffer {
+function metadata(kind: number, tag = gzipSync(sectionPlainTag(kind).subarray(2))): Buffer {
   const writer = new BufferWriter();
   writer.writeInt32BE(5); writer.writeInt8(kind);
   if (kind === 4) {
@@ -64,13 +70,14 @@ describe('Audit metadata — aggregate nested inflation budgets', () => {
       it(`bounds embedded GZIP section ${kind} before inflation (${format})`, () => {
         const files = { 'Root/header.smbph': Buffer.alloc(36), 'Root/meta.smbpm': metadata(kind) };
         const entryBytes = Object.values(files).reduce((total, bytes) => total + bytes.length, 0);
+        const sectionInflatedBytes = sectionPlainTag(kind).length - 2;
         for (const mode of ['strict', 'recover'] as const) {
           const error = assert.throws(() => parseFiles(format, files, {
-            mode, maxTotalBytes: entryBytes + inflatedBytes - 1,
+            mode, maxTotalBytes: entryBytes + sectionInflatedBytes - 1,
           })) as any;
           assert.equal(error.code, 'E_LIMIT');
           assert.match(error.path, /Root\/meta\.smbpm$/);
-          assert.isTrue(parseFiles(format, files, { mode, maxTotalBytes: entryBytes + inflatedBytes }).complete);
+          assert.isTrue(parseFiles(format, files, { mode, maxTotalBytes: entryBytes + sectionInflatedBytes }).complete);
         }
       });
     }
@@ -103,7 +110,7 @@ describe('Audit metadata — aggregate nested inflation budgets', () => {
     });
 
     it(`does not charge already-read plain Tag bytes twice (${format})`, () => {
-      const files = { 'Root/header.smbph': Buffer.alloc(36), 'Root/meta.smbpm': metadata(2, plainTag) };
+      const files = { 'Root/header.smbph': Buffer.alloc(36), 'Root/meta.smbpm': metadata(2, managerPlainTag) };
       const maxTotalBytes = Object.values(files).reduce((total, bytes) => total + bytes.length, 0);
       assert.isTrue(parseFiles(format, files, { maxTotalBytes }).complete);
     });

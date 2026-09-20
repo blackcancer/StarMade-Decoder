@@ -25,8 +25,15 @@ describe('Final boundaries — complete error envelopes and optional data', () =
   });
 
   it('uses the integer ID of an unwrapped faction entry', () => {
-    const factions = parseFactions(Tags.struct(null, [Tags.byte(null, 0), Tags.struct(null, [Tags.int(null, 99), Tags.string(null, 'Guild')])]));
+    const roles = Tags.struct('0', [Tags.int(null, 99), Tags.struct(null, Array.from({ length: 5 }, () => Tags.long(null, 0n))),
+      Tags.struct(null, ['One', 'Two', 'Three', 'Four', 'Five'].map(value => Tags.string(null, value)))]);
+    const faction = Tags.struct('f0', [Tags.string(null, ''), Tags.string(null, 'Guild'), Tags.string(null, ''), Tags.long(null, 0n),
+      Tags.struct(null, []), Tags.byte(null, 0), roles, Tags.string(null, ''), Tags.string(null, ''), Tags.int('id', 99),
+      Tags.byte(null, 0), Tags.byte(null, 0), Tags.vector3i(null, 0, 0, 0)]);
+    const factions = parseFactions(Tags.struct('factions-v0', [Tags.struct(null, [faction]), Tags.struct(null, []),
+      Tags.struct(null, []), Tags.struct(null, []), Tags.struct(null, [])]));
     assert.equal(factions.factions[0].id, 99);
+    assert.equal(factions.factions[0].name, 'Guild');
   });
 
   for (const kind of [2, 5, 9]) {

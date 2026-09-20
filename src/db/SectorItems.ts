@@ -52,21 +52,23 @@ export interface FreeItem {
  * Decodes `SECTORS_ITEMS.ITEMS` (VARBINARY).
  *
  * Returns an empty array for null/empty input.
- * Trailing zero-bytes (padding) are ignored.
+ * Entirely zero records and trailing zero-byte padding are ignored.
+ * Other records, including type zero with metadata or signed-zero floats, are preserved.
  */
 export function decodeSectorItems(data: Buffer | Uint8Array | null | undefined): FreeItem[] {
   if (!data || data.length === 0) return [];
   return readDatabase(data, 'SECTORS_ITEMS.ITEMS', r => {
   const items: FreeItem[] = [];
   while (r.remaining() >= FREE_ITEM_BYTE_SIZE) {
+    const start = r.offset;
     const blockType = r.readInt16BE();
-    // Zero blockType with zero count = padding sentinel — skip
     const count = r.readInt32BE();
     const posX  = r.readFloat32BE();
     const posY  = r.readFloat32BE();
     const posZ  = r.readFloat32BE();
     const metaId = r.readInt32BE();
-    if (blockType === 0 && count === 0) continue;
+    // A gameplay view may ignore type zero; this codec preserves every meaningful byte.
+    if (data.subarray(start, start + FREE_ITEM_BYTE_SIZE).every(byte => byte === 0)) continue;
     items.push({ blockType, count, posX, posY, posZ, metaId });
   }
   readZeroPadding(r);

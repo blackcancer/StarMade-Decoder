@@ -662,7 +662,7 @@ describe('ManagerContainer — shields / inventories / toTag', function() {
     if (!hasSamples) { this.skip(); return; }
     const root = load('ENTITY_SHIP_Traders Homerl110.ent');
     const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
-    const containerTag = s.find(t => t.name === 'container' || t.type === TagType.STRUCT);
+    const containerTag = s.find(t => t.name === 'container' && t.type === TagType.STRUCT);
     if (!containerTag) { this.skip(); return; }
     const mc = ManagerContainer.fromTag(containerTag);
     assert.isNumber(mc.initialShields);
@@ -695,17 +695,13 @@ describe('PowerAndThrust — withBattery / ThrustConfig', () => {
     assert.equal(updated.initialPower, 100);
   });
 
-  it('ThrustConfig.fromTag returns EMPTY/default when no valid tag', () => {
-    // fromTag with a minimal byte-only tag (missing fields) returns defaults
-    const emptyTag = Tags.struct(null, []);
-    const tc = ThrustConfig.fromTag(emptyTag);
-    assert.instanceOf(tc, ThrustConfig);
-    assert.equal(tc.version, 0);
+  it('ThrustConfig.fromTag rejects a missing saved schema', () => {
+    assert.throws(() => ThrustConfig.fromTag(Tags.struct(null, [])));
   });
 
   it('ThrustConfig.fromTag parses a struct', () => {
     const tag = Tags.struct(null, [
-      Tags.byte(null, 1),   // version
+      Tags.byte(null, 0),   // saved version
       Tags.byte(null, 1),   // automaticDampeners
       Tags.byte(null, 0),   // automaticReactivateDampeners
       Tags.vector3f(null, 0.5, 0.5, 0.5),
@@ -714,7 +710,7 @@ describe('PowerAndThrust — withBattery / ThrustConfig', () => {
       Tags.byte(null, 0),
     ]);
     const tc = ThrustConfig.fromTag(tag);
-    assert.equal(tc.version, 1);
+    assert.equal(tc.version, 0);
     assert.isTrue(tc.automaticDampeners);
   });
 });
@@ -731,7 +727,7 @@ describe('SpawnData — toTag full payload', () => {
   });
 
   it('SpawnController with markers', () => {
-    const marker = new SpawnMarker(new SpawnPoint('', SectorPosition.ZERO, 0,0,0,0,0,0), 0n, 0, 0, 0);
+    const marker = new SpawnMarker(0n, 0, 0, 0);
     const sc = new SpawnController([marker]);
     const tag = sc.toTag(null);
     const rt = SpawnController.fromTag(tag);
@@ -846,12 +842,8 @@ describe('Factions — edge cases', function() {
     const factions = mgr.all;
     if (factions.length === 0) { this.skip(); return; }
     const fac = factions[0];
-    const modified = mgr.setFaction(new Faction(
-      fac.id, fac.name + ' v2', fac.description, fac.dateCreated,
-      fac.members, fac.openToJoin, fac.homebaseUID, fac.password,
-      fac.allyNeutral, fac.attackNeutral, fac.factionPoints,
-      fac.factionMode, fac.showInHub, fac.isNPC,
-    ));
+    const replacement = fac.with({ name: fac.name + ' v2' });
+    const modified = mgr.setFaction(replacement);
     const got = modified.get(fac.id);
     assert.isDefined(got);
     assert.include(got!.name, 'v2');
@@ -983,7 +975,7 @@ describe('Simulation — toTag minimal', function() {
   });
 
   it('SimulationGroup round-trip', () => {
-    const group = new SimulationGroup(0, 1, ['player1'], 1000n, null, 0);
+    const group = new SimulationGroup(0, 1, ['player1'], 1000n, { x: 0, y: 0, z: 0 }, 0);
     const tag = group.toTag();
     const rt = SimulationGroup.fromTag(tag);
     assert.equal(rt.type, 1);
@@ -996,11 +988,11 @@ describe('Simulation — toTag minimal', function() {
 describe('TradingManager — edge cases', function() {
   this.timeout(10_000);
 
-  it('removeRoute when not found does not throw', function() {
+  it('removeRoute rejects absent indices', function() {
     if (!hasSamples) { this.skip(); return; }
     const root = load('TRADING.tag');
     const mgr = TradingManager.fromTag(root);
-    assert.doesNotThrow(() => mgr.removeRoute(999999n));
+    assert.throws(() => mgr.removeRoute(999999));
   });
 });
 
@@ -1071,6 +1063,7 @@ describe('SimParser — non-empty groups', () => {
       Tags.long(null, 1000n),
       Tags.vector3i(null, 0, 0, 0),
       Tags.int(null, 0),
+      Tags.byte(null, 0),
     ]);
     const root = Tags.struct('SimulationState', [
       Tags.byte(null, 0),
@@ -1114,12 +1107,8 @@ describe('SmbphWriter — explicit gameVersion / classification', function() {
 
 describe('SmbmmParser — non-empty branch', () => {
   it('parseSmbmm with non-empty mapping', () => {
-    // Build a minimal smbmm: short count + (short from + short to) pairs
-    const w = new BufferWriter();
-    w.writeInt16BE(2);      // 2 mappings
-    w.writeInt16BE(100); w.writeInt16BE(200);
-    w.writeInt16BE(300); w.writeInt16BE(400);
-    const smbmm = parseSmbmm(w.toBuffer());
+    const smbmm = parseSmbmm(Buffer.from('Example~Hull~100\nExample~Glass~200\n'));
+    assert.deepEqual(smbmm.namespacedMappings!.map(item => item.id), [100,200]);
     assert.isFalse(smbmm.isEmpty);
     assert.isAbove(smbmm.raw.length, 0);
   });

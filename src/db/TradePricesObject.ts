@@ -23,7 +23,9 @@ export { type TradePriceEntry };
  */
 export class TradePricesObject {
   readonly entDbId: bigint;
-  readonly entries: ReadonlyArray<TradePriceEntry>;
+  readonly #entries: TradePriceEntry[];
+  /** Detached price entries; editing a snapshot does not edit the price list. */
+  get entries(): ReadonlyArray<TradePriceEntry> { return this.#entries.map(entry => ({ ...entry })); }
 
   /**
    * Creates a TradePricesObject instance.
@@ -32,15 +34,17 @@ export class TradePricesObject {
    * @param entries - Input value for the constructor operation.
    */
   private constructor(entDbId: bigint, entries: TradePriceEntry[]) {
+    encodeTradeNodeItems({ entDbId, entries });
     this.entDbId = entDbId;
-    this.entries = Object.freeze([...entries]);
+    this.#entries = entries.map(entry => ({ ...entry }));
+    Object.freeze(this);
   }
 
   // ── Named constructors ─────────────────────────────────────────────────────
 
   /**
    * Decodes TRADE_NODES.ITEMS bytes.
-   * Returns null for null / empty / malformed input.
+   * Returns null for absent/empty input; malformed input throws.
    */
   static fromBytes(data: Buffer | Uint8Array | null | undefined): TradePricesObject | null {
     const raw = decodeTradeNodeItems(data);
@@ -60,14 +64,14 @@ export class TradePricesObject {
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get size(): number { return this.entries.length; }
+  get size(): number { return this.#entries.length; }
 
   /**
    * Reports whether isEmpty is true for the current value.
    *
    * @returns The computed StarMade-Decoder value.
    */
-  get isEmpty(): boolean { return this.entries.length === 0; }
+  get isEmpty(): boolean { return this.#entries.length === 0; }
 
   /** All buy orders (station buys from player). */
   get buyOrders(): TradePriceEntry[] {
@@ -91,7 +95,7 @@ export class TradePricesObject {
 
   /** All distinct block types with at least one entry. */
   get blockTypes(): number[] {
-    return [...new Set(this.entries.map(e => e.blockType))];
+    return [...new Set(this.#entries.map(e => e.blockType))];
   }
 
   // ── Immutable mutations ────────────────────────────────────────────────────
@@ -101,7 +105,8 @@ export class TradePricesObject {
    * type stored as -blockType per Java convention.
    */
   withBuyOrder(blockType: number, amount: number, price: number, limit = -1): TradePricesObject {
-    const rest = this.entries.filter(e => !(e.isBuyOrder && e.blockType === blockType));
+    if (!Number.isInteger(blockType) || blockType < 1 || blockType > 32768) throw new RangeError('Buy block type must be an integer in [1, 32768]');
+    const rest = this.#entries.filter(e => !(e.isBuyOrder && e.blockType === blockType));
     const entry: TradePriceEntry = { type: -blockType, isBuyOrder: true, blockType, amount, price, limit };
     return new TradePricesObject(this.entDbId, [...rest, entry]);
   }
@@ -111,7 +116,8 @@ export class TradePricesObject {
    * type stored as +blockType per Java convention.
    */
   withSellOrder(blockType: number, amount: number, price: number, limit = -1): TradePricesObject {
-    const rest = this.entries.filter(e => !(!e.isBuyOrder && e.blockType === blockType));
+    if (!Number.isInteger(blockType) || blockType < 1 || blockType > 32767) throw new RangeError('Sell block type must be an integer in [1, 32767]');
+    const rest = this.#entries.filter(e => !(!e.isBuyOrder && e.blockType === blockType));
     const entry: TradePriceEntry = { type: blockType, isBuyOrder: false, blockType, amount, price, limit };
     return new TradePricesObject(this.entDbId, [...rest, entry]);
   }
@@ -133,7 +139,7 @@ export class TradePricesObject {
 
   /** Changes the entity DB ID (e.g. after entity relocation). */
   withEntDbId(id: bigint): TradePricesObject {
-    return new TradePricesObject(id, [...this.entries]);
+    return new TradePricesObject(id, [...this.#entries]);
   }
 
   /** Removes all entries. */
@@ -145,7 +151,12 @@ export class TradePricesObject {
 
   /** Encodes to VARBINARY bytes for TRADE_NODES.ITEMS. */
   toBytes(): Buffer {
-    return encodeTradeNodeItems({ entDbId: this.entDbId, entries: [...this.entries] });
+    return encodeTradeNodeItems({ entDbId: this.entDbId, entries: [...this.#entries] });
+  }
+
+  /** JSON projection preserving the exact signed 64-bit entity ID as decimal text. */
+  toJSON(): { entDbId: string; entries: ReadonlyArray<TradePriceEntry> } {
+    return { entDbId: this.entDbId.toString(), entries: this.entries };
   }
 
   /**

@@ -11,7 +11,7 @@ import tarfile
 import zipfile
 
 FORBIDDEN = ('.java', '.class', '.jar', '.war')
-ARCHIVES = ('.zip', '.tgz', '.tar.gz', '.tar')
+ARCHIVES = ('.zip', '.sment', '.smskin', '.tgz', '.tar.gz', '.tar')
 
 
 def inspect(name, read, depth=0):
@@ -25,7 +25,7 @@ def inspect(name, read, depth=0):
         raise ValueError('Archive nesting exceeds eight levels: ' + name)
     data = read()
     matches = []
-    if lowered.endswith('.zip'):
+    if lowered.endswith(('.zip', '.sment', '.smskin')):
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             for member in archive.infolist():
                 if not member.is_dir():

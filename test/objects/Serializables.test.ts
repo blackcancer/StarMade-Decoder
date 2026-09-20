@@ -172,8 +172,8 @@ describe('NPCFactionNewsEvent (factoryId=2)', function () {
 
   it('create every type and round-trip', () => {
     const cases: NPCFactionNewsEvent[] = [
-      new NPCFactionNewsEvent('TRADING', 12345678n, 1),
-      new NPCFactionNewsEvent('WAR', 9999n, 2),
+      new NPCFactionNewsEvent('TRADING', 12345678n, 1, undefined, undefined, { from: { x: 1, y: 2, z: 3 }, to: { x: -1, y: -2, z: -3 } }),
+      new NPCFactionNewsEvent('WAR', 9999n, 2, undefined, 'enemy'),
       new NPCFactionNewsEvent('GROWN', 1000n, 3, { x: 10, y: 20, z: 30 }),
       new NPCFactionNewsEvent('LOST_TERRITORY', 2000n, 4, { x: -5, y: 0, z: 5 }),
       new NPCFactionNewsEvent('ALLIES', 3000n, 5, undefined, 'ENTITY_SHIP_test'),

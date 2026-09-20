@@ -30,6 +30,7 @@ import { ElementCountMap }         from '../src/objects/Serializables.js';
 
 import { PlayerStateEntity, FactionMembership } from '../src/objects/entities/PlayerStateEntity.js';
 import { ManagerContainer } from '../src/objects/components/ManagerContainer.js';
+import { ThrustConfig } from '../src/objects/components/PowerAndThrust.js';
 import { parseSegmentControllerEntity } from '../src/objects/entities/Ships.js';
 
 import { parseSmbmm }              from '../src/smd3/SmbmmParser.js';
@@ -158,25 +159,11 @@ describe('SpawnPoint.with() partial override', () => {
 describe('PlayerStateEntity — withCreativeMode line 122 branch', function() {
   this.timeout(10_000);
 
-  it('withCreativeMode when [10] is not BYTE (returns same)', function() {
-    // Build a PlayerState root where index [10] is not BYTE
-    const root = Tags.struct('PlayerState', [
-      Tags.long('credits', 1000n),
-      Tags.struct(null, []),  // [1] spawnData
-      Tags.struct(null, []),  // [2] inventory
-      Tags.vector3i('sector', 1,2,3), // [3]
-      Tags.vector3f(null, 0,0,0), // [4]
-      Tags.vector3i(null, 0,0,0), // [5]
-      Tags.struct(null, []),  // [6] faction
-      Tags.long(null, 0n),    // [7] lastLogin
-      Tags.long(null, 0n),    // [8] lastLogout
-      Tags.struct(null, []),  // [9] ips
-      Tags.string(null, 'not_a_byte'), // [10] NOT a BYTE — withCreativeMode should no-op
-    ]);
-    const buf = writeTo(root);
-    const ps = PlayerStateEntity.fromTag(readFrom(buf));
-    const updated = ps.withCreativeMode(true);
-    assert.isDefined(updated); // doesn't crash
+  it('rejects a creative-mode field with the wrong persisted type', function() {
+    const original = load('ENTITY_PLAYERSTATE_InitSysRev.ent'), children = [...original.getStruct()];
+    children[10] = Tags.string(null, 'not_a_byte');
+    const root = new Tag(TagType.STRUCT, original.name, children);
+    assert.throws(() => PlayerStateEntity.fromTag(root), /Invalid optional player field/);
   });
 });
 
@@ -190,7 +177,7 @@ describe('SimulationState — addGroup / removeGroup / toString', function() {
     const root = load('SIMULATION_STATE.sim');
     const sim = SimulationState.fromTag(root);
 
-    const group = new SimulationGroup(0, 1, ['player1', 'player2'], 1000n, null, 0);
+    const group = new SimulationGroup(0, 1, ['player1', 'player2'], 1000n, { x: 0, y: 0, z: 0 }, 0);
     const withGroup = sim.addGroup(group);
     assert.equal(withGroup.groups.length, sim.groups.length + 1);
 
@@ -199,7 +186,7 @@ describe('SimulationState — addGroup / removeGroup / toString', function() {
   });
 
   it('SimulationGroup.toString', () => {
-    const g = new SimulationGroup(0, 1, ['p1'], 0n, null, 0);
+    const g = new SimulationGroup(0, 1, ['p1'], 0n, { x: 0, y: 0, z: 0 }, 0);
     assert.include(g.toString(), 'SimulationGroup');
   });
 
@@ -222,7 +209,7 @@ describe('TradingManager — addRoute / removeRoute / updateRoute / routesBetwee
     const mgr = TradingManager.fromTag(root);
     const route = new TradeRoute(
       new ElementCountMap([]), 0n, 0n, 0n, 0n, 0n, 0n, 0,
-      null, null, null, 0, 0, '', '', '', '', null, [],
+      {x:0,y:0,z:0}, {x:0,y:0,z:0}, {x:0,y:0,z:0}, 0, 0, '', '', '', '', {x:0,y:0,z:0}, [],
     );
     const updated = mgr.addRoute(route);
     assert.equal(updated.routes.length, mgr.routes.length + 1);
@@ -236,12 +223,12 @@ describe('TradingManager — addRoute / removeRoute / updateRoute / routesBetwee
     const mgr = TradingManager.fromTag(root);
     const route = new TradeRoute(
       new ElementCountMap([]), 1n, 1n, 1n, 1n, 1n, 1n, 1,
-      null, null, null, 1, 1, 'from', 'to', 'fs', 'ts', null, [],
+      {x:0,y:0,z:0}, {x:0,y:0,z:0}, {x:0,y:0,z:0}, 1, 1, 'from', 'to', 'fs', 'ts', {x:0,y:0,z:0}, [],
     );
     const withRoute = mgr.addRoute(route);
     const updatedRoute = new TradeRoute(
       new ElementCountMap([]), 99n, 99n, 99n, 1n, 1n, 1n, 1,
-      null, null, null, 1, 1, 'from', 'to', 'fs', 'ts', null, [],
+      {x:0,y:0,z:0}, {x:0,y:0,z:0}, {x:0,y:0,z:0}, 1, 1, 'from', 'to', 'fs', 'ts', {x:0,y:0,z:0}, [],
     );
     const updated = withRoute.updateRoute(withRoute.routes.length - 1, updatedRoute);
     assert.equal(updated.routes[updated.routes.length - 1].blockPrice, 99n);
@@ -345,7 +332,7 @@ describe('SmbpmParser — binary format edge cases', () => {
   });
 
   it('parses THRUST_CONFIG_BYTE section', () => {
-    const tagBuf = writeTo(Tags.struct('thrust', [Tags.byte(null, 1)]));
+    const tagBuf = writeTo(ThrustConfig.DEFAULT.toTag());
     const w = new BufferWriter();
     w.writeInt32BE(5);     // metaVersion
     w.writeInt8(9);        // THRUST_CONFIG_BYTE
@@ -513,8 +500,8 @@ describe('PlayerStateEntity — lsector / lspawn parsing', function() {
   it('parses lsector and lspawn named fields', function() {
     const root = Tags.struct('PlayerState', [
       Tags.long('credits', 12345n),
-      Tags.struct(null, []),  // [1] spawnData
-      Tags.struct(null, []),  // [2] inventory
+      Tags.vector3f(null, 0, 0, 0), // [1] real legacy spawnData
+      Inventory.EMPTY.toTag(),  // [2] real inventory
       Tags.vector3i('sector', 1,2,3),
       Tags.vector3f('lspawn', 1.0, 2.0, 3.0),
       Tags.vector3i('lsector', 4,5,6),
@@ -534,13 +521,13 @@ describe('PlayerStateEntity — lsector / lspawn parsing', function() {
 describe('SmbmmParser — isEmpty branch', () => {
   it('isEmpty=true for zero-length buffer', () => {
     const buf = Buffer.alloc(0);
-    const result = parseSmbmm(buf);
+    const result = parseSmbmm(buf, {mode:'preserve'});
     assert.isTrue(result.isEmpty);
   });
 
   it('isEmpty=false for non-zero buffer (covers line 30)', () => {
     const buf = Buffer.from([0x42, 0x43]);
-    const result = parseSmbmm(buf);
+    const result = parseSmbmm(buf, {mode:'preserve'});
     assert.isFalse(result.isEmpty); // covers: isEmpty: buf.length === 0 → false
     assert.equal(result.size, 2);
   });

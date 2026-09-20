@@ -185,13 +185,7 @@ describe('FactionManager — business object', function () {
     assert.isDefined(faction);
 
     const originalName = faction.name;
-    const modified = new Faction(
-      faction.id, 'NEW TEST NAME', faction.description,
-      faction.dateCreated, faction.members, faction.openToJoin,
-      faction.homebaseUID, faction.password, faction.allyNeutral,
-      faction.attackNeutral, faction.factionPoints, faction.factionMode,
-      faction.showInHub, faction.isNPC,
-    );
+    const modified = faction.with({ name: 'NEW TEST NAME' });
 
     const fm2 = fm.setFaction(modified);
     const factionTag = fm2.toTag();
@@ -247,14 +241,7 @@ describe('FactionManager — business object', function () {
     const faction = fm.all[0];
 
     const newMember = new FactionMember('NewPlayer', 0);
-    const updatedFaction = new Faction(
-      faction.id, faction.name, faction.description,
-      faction.dateCreated,
-      [...faction.members, newMember],
-      faction.openToJoin, faction.homebaseUID, faction.password,
-      faction.allyNeutral, faction.attackNeutral, faction.factionPoints,
-      faction.factionMode, faction.showInHub, faction.isNPC,
-    );
+    const updatedFaction = faction.with({ members: [...faction.members, newMember] });
 
     const fm2 = fm.setFaction(updatedFaction);
     const fm3 = FactionManager.fromTag(fm2.toTag());

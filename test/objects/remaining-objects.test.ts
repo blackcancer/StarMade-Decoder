@@ -14,6 +14,7 @@ import path from 'path';
 import { assert } from 'chai';
 import { registerAllFactories } from '../../src/serializable/Factories.js';
 import { readFrom, writeTo } from '../../src/core/TagParser.js';
+import { Tags } from '../../src/core/TagBuilder.js';
 import { PlayerCharacter } from '../../src/objects/PlayerCharacter.js';
 import { ChatChannelManager, ChatChannel } from '../../src/objects/ChatChannels.js';
 import { TradingManager, TradeRoute } from '../../src/objects/Trading.js';
@@ -243,21 +244,24 @@ describe('FloatingItemsArchive — business object', function () {
   it('addItem + round-trip', () => {
     const fia = FloatingItemsArchive.fromBuffer(loadB('FLOATING_ITEMS_ARCHIVE.ent'));
     const original = fia.items.length;
-    const modified = fia.addItem(new FloatingItem(999, 42));
+    const modified = fia.addItem({ x: -1, y: 2, z: 3 }, new FloatingItem(fia.nextId, -3, Tags.byteArray(null, [4, 2])));
     const rt = FloatingItemsArchive.fromTag(modified.toTag());
     assert.equal(rt.items.length, original + 1);
-    const found = rt.byType(999);
+    const found = rt.item(fia.nextId);
     assert.isDefined(found);
-    assert.equal(found!.count, 42);
-    console.log('    addItem round-trip: ok (type=999, count=42)');
+    assert.equal(found!.blockType, -3);
+    assert.deepEqual([...found!.payload.getByteArray()], [4, 2]);
+    assert.equal(rt.nextId, fia.nextId + 1);
+    assert.equal(fia.items.length, original);
   });
 
   it('removeItem + round-trip', () => {
     const fia = FloatingItemsArchive.fromBuffer(loadB('FLOATING_ITEMS_ARCHIVE.ent'));
-    const withItem = fia.addItem(new FloatingItem(888, 10));
-    const without = withItem.removeItem(888);
+    const withItem = fia.addItem({ x: 0, y: 0, z: 0 }, new FloatingItem(fia.nextId, -3, Tags.string(null, 'metadata')));
+    const without = withItem.removeItem(fia.nextId);
     const rt = FloatingItemsArchive.fromTag(without.toTag());
-    assert.isUndefined(rt.byType(888));
+    assert.isUndefined(rt.item(fia.nextId));
+    assert.equal(withItem.item(fia.nextId)!.payload.getString(), 'metadata');
     console.log('    removeItem round-trip: ok');
   });
 });

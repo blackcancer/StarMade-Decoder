@@ -23,6 +23,8 @@
 import fs from 'fs';
 import path from 'path';
 import type { SMToolConfig } from './SMToolConfig.js';
+import { DecodeError } from '../core/DecodeError.js';
+import { formatLimits, formatBytes, formatText, checkEntryCount, type FormatLimits } from '../core/FormatLimits.js';
 
 // ── Metadata by key (type + default) — port ServerConfig.java ────────────
 
@@ -239,6 +241,10 @@ export const SERVER_CONFIG_SCHEMA: Readonly<Record<string, ConfigEntryMeta>> = {
   MAX_EXPLOSION_POOL:                        { type: 'number',  default: -1 },
 };
 
+// Schema metadata is public read-only data, never an alternate mutation path.
+for (const metadata of Object.values(SERVER_CONFIG_SCHEMA)) Object.freeze(metadata);
+Object.freeze(SERVER_CONFIG_SCHEMA);
+
 // ── Entry value ───────────────────────────────────────────────────────
 
 /**
@@ -259,6 +265,7 @@ export class ServerConfig {
   private readonly _values: Map<string, ConfigValue>;
   /** Raw lines with comments — used for faithful rewriting */
   private readonly _lines: string[];
+  private readonly _limits: Required<FormatLimits>;
 
   /**
    * Creates a ServerConfig instance.
@@ -266,9 +273,13 @@ export class ServerConfig {
    * @param values - Input value for the constructor operation.
    * @param lines - Input value for the constructor operation.
    */
-  private constructor(values: Map<string, ConfigValue>, lines: string[]) {
-    this._values = values;
-    this._lines  = lines;
+  private constructor(values: Map<string, ConfigValue>, lines: string[], limits: Required<FormatLimits>) {
+    checkEntryCount(values.size, limits);
+    formatBytes(lines.join('\n'), limits);
+    this._values = new Map(values);
+    this._lines = [...lines];
+    this._limits = limits;
+    Object.freeze(this);
   }
 
   // ── Loading ────────────────────────────────────────────────────────────
@@ -277,7 +288,7 @@ export class ServerConfig {
    * Loads server.cfg from starmadeDir.
    * If missing, loads the template from data/config/defaultSettings/server.cfg.
    */
-  static load(config: SMToolConfig): ServerConfig {
+  static load(config: SMToolConfig, options: FormatLimits = {}): ServerConfig {
     const live     = config.paths.serverCfg;
     const template = path.join(config.paths.defaultSettings, 'server.cfg');
 
@@ -286,14 +297,17 @@ export class ServerConfig {
       throw new Error(`server.cfg not found: ${live} (template also missing: ${template})`);
     }
 
-    const raw   = fs.readFileSync(filePath, 'utf8');
-    const lines = raw.split('\n');
-    return ServerConfig._parse(lines);
+    const limits = formatLimits(options);
+    if (fs.statSync(filePath).size > limits.maxBytes) throw new DecodeError('E_LIMIT', 'Server config byte budget exceeded');
+    return ServerConfig.fromString(formatText(fs.readFileSync(filePath)), limits);
   }
 
   /** Loads directly from a Buffer or string for tests and mocks. */
-  static fromString(content: string): ServerConfig {
-    return ServerConfig._parse(content.split('\n'));
+  static fromString(content: string, options: FormatLimits = {}): ServerConfig {
+    if (typeof content !== 'string') throw new TypeError('Server config must be a string');
+    const limits = formatLimits(options);
+    formatBytes(content, limits);
+    return ServerConfig._parse(content.split('\n'), limits);
   }
 
   // ── Typed reads ─────────────────────────────────────────────────────────
@@ -301,7 +315,7 @@ export class ServerConfig {
   /** Returns a key value typed according to the schema. */
   get(key: string): ConfigValue {
     if (this._values.has(key)) return this._values.get(key)!;
-    const meta = SERVER_CONFIG_SCHEMA[key];
+    const meta = Object.hasOwn(SERVER_CONFIG_SCHEMA, key) ? SERVER_CONFIG_SCHEMA[key] : undefined;
     return meta ? meta.default : '';
   }
 
@@ -335,13 +349,13 @@ export class ServerConfig {
   getFloat(key: string):   number  { return parseFloat(String(this.get(key))); }
 
   /** All values (key → value). */
-  entries(): ReadonlyMap<string, ConfigValue> { return this._values; }
+  entries(): ReadonlyMap<string, ConfigValue> { return new Map(this._values); }
 
   /** Keys present in the file; may include unknown keys. */
   keys(): string[] { return [...this._values.keys()]; }
 
   /** Checks whether a key is known by the schema. */
-  isKnown(key: string): boolean { return key in SERVER_CONFIG_SCHEMA; }
+  isKnown(key: string): boolean { return typeof key === 'string' && Object.hasOwn(SERVER_CONFIG_SCHEMA, key); }
 
   // ── Immutable updates ──────────────────────────────────────────────
 
@@ -350,15 +364,16 @@ export class ServerConfig {
    * The key must be known by the schema; otherwise TypeError is thrown.
    */
   set(key: string, value: ConfigValue): ServerConfig {
-    if (!(key in SERVER_CONFIG_SCHEMA)) {
+    if (!this.isKnown(key)) {
       throw new TypeError(`Unknown ServerConfig schema key: "${key}"`);
     }
+    ServerConfig._validateValue(key, value);
     const newValues = new Map(this._values);
     newValues.set(key, value);
 
     // Update the matching line in _lines
     const newLines = ServerConfig._updateLine(this._lines, key, value);
-    return new ServerConfig(newValues, newLines);
+    return new ServerConfig(newValues, newLines, this._limits);
   }
 
   /** Updates multiple keys at once. */
@@ -389,12 +404,12 @@ export class ServerConfig {
    * @param lines - Input value for the _parse operation.
    * @returns The computed StarMade-Decoder value.
    */
-  private static _parse(lines: string[]): ServerConfig {
+  private static _parse(lines: string[], limits: Required<FormatLimits>): ServerConfig {
     const values = new Map<string, ConfigValue>();
 
     for (const line of lines) {
       const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
+      if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) continue;
 
       // Format: KEY = value // optional comment
       const eqIdx = trimmed.indexOf('=');
@@ -405,10 +420,12 @@ export class ServerConfig {
       const commentIdx = rest.indexOf('//');
       const rawValue = (commentIdx >= 0 ? rest.slice(0, commentIdx) : rest).trim();
 
+      if (!key) throw new TypeError('Server config key must not be empty');
       values.set(key, ServerConfig._castValue(key, rawValue));
+      checkEntryCount(values.size, limits);
     }
 
-    return new ServerConfig(values, [...lines]);
+    return new ServerConfig(values, lines, limits);
   }
 
   /**
@@ -419,14 +436,32 @@ export class ServerConfig {
    * @returns The computed StarMade-Decoder value.
    */
   private static _castValue(key: string, raw: string): ConfigValue {
-    const meta = SERVER_CONFIG_SCHEMA[key];
+    const meta = Object.hasOwn(SERVER_CONFIG_SCHEMA, key) ? SERVER_CONFIG_SCHEMA[key] : undefined;
     if (!meta) return raw; // unknown key → raw string
 
-    switch (meta.type) {
-      case 'boolean': return raw.toLowerCase() === 'true';
-      case 'number':  return parseInt(raw, 10);
-      case 'float':   return parseFloat(raw);
-      default:        return raw;
+    let value: ConfigValue = raw;
+    if (meta.type === 'boolean') {
+      if (!/^(true|false)$/i.test(raw)) throw new TypeError(`Invalid boolean for ${key}`);
+      value = raw.toLowerCase() === 'true';
+    } else if (meta.type === 'number' || meta.type === 'float') {
+      if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(raw)) throw new TypeError(`Invalid number for ${key}`);
+      value = Number(raw);
+    }
+    ServerConfig._validateValue(key, value);
+    return value;
+  }
+
+  /** Rejects values that would change type or inject records when reparsed. */
+  private static _validateValue(key: string, value: ConfigValue): void {
+    const type = SERVER_CONFIG_SCHEMA[key].type;
+    if (type === 'boolean') {
+      if (typeof value !== 'boolean') throw new TypeError(`${key} requires a boolean`);
+    } else if (type === 'string') {
+      if (typeof value !== 'string' || value.trim() !== value || /[\r\n]/.test(value) || value.includes('//') || Buffer.from(value).toString('utf8') !== value) {
+        throw new TypeError(`${key} requires text representable on one server.cfg line`);
+      }
+    } else if (typeof value !== 'number' || !Number.isFinite(value) || (type === 'number' && !Number.isSafeInteger(value))) {
+      throw new TypeError(`${key} requires a finite ${type === 'number' ? 'safe integer' : 'number'}`);
     }
   }
 
@@ -440,6 +475,7 @@ export class ServerConfig {
    */
   private static _updateLine(lines: string[], key: string, value: ConfigValue): string[] {
     const newLines = [...lines];
+    let found = false;
     for (let i = 0; i < newLines.length; i++) {
       const line = newLines[i];
       const eqIdx = line.indexOf('=');
@@ -451,11 +487,12 @@ export class ServerConfig {
       const rest = line.slice(eqIdx + 1);
       const commentIdx = rest.indexOf('//');
       const comment = commentIdx >= 0 ? ' ' + rest.slice(commentIdx).trim() : '';
-      newLines[i] = `${key} = ${value}${comment}`;
-      return newLines;
+      const ending = line.endsWith('\r') ? '\r' : '';
+      newLines[i] = `${key} = ${value}${comment}${ending}`;
+      found = true;
     }
     // Missing key → append at the end
-    newLines.push(`${key} = ${value}`);
+    if (!found) newLines.push(`${key} = ${value}`);
     return newLines;
   }
 }

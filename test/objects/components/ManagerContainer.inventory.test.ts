@@ -54,7 +54,7 @@ describe('ManagerContainer inventories', () => {
     const created = ManagerContainer.EMPTY.withInventoryAt(position, contents);
     assert.equal(created.inventoryEntries[0].kind, 3); assert.equal(created.getInventory(3).countOf(5), 4);
     const changedKind = created.withInventoryAt(position, contents, 1); assert.equal(changedKind.inventoryEntries[0].kind, 1);
-    assert.equal(changedKind.getInventory(1).countOf(5), 4); assert.strictEqual(changedKind.getInventory(3), Inventory.EMPTY);
+    assert.equal(changedKind.getInventory(1).countOf(5), 4); assert.equal(changedKind.getInventory(3).size, 0);
     assert.equal(changedKind.withoutInventoryAt(position).inventoryEntries.length, 0);
     assert.strictEqual(changedKind.withoutInventoryAt({ x: 0, y: 0, z: 0 }), changedKind);
     assert.throws(() => created.withInventoryAt(position, contents, -1));
@@ -62,8 +62,9 @@ describe('ManagerContainer inventories', () => {
     assert.throws(() => created.withoutInventoryAt({ x: 0, y: NaN, z: 0 }));
     const compatibility = created.withInventory(3, Inventory.EMPTY.add(5, 9));
     assert.equal(ManagerContainer.fromTag(compatibility.toTag()).getInventoryAt(position)!.countOf(5), 9);
-    const origin = ManagerContainer.EMPTY.withInventory(3, contents);
-    assert.throws(() => origin.withInventory(1, contents), 'Origin');
+    assert.throws(() => ManagerContainer.EMPTY.withInventory(3, contents), 'withInventoryAt');
+    const origin = ManagerContainer.EMPTY.withInventoryAt({ x: 0, y: 0, z: 0 }, contents, 3);
+    assert.throws(() => origin.withInventory(1, contents), 'withInventoryAt');
     assert.throws(() => origin.withInventory(-1, contents));
     const view = origin.inventories as Map<number, Inventory>; view.clear(); assert.equal(origin.getInventory(3).countOf(5), 4);
   });
@@ -81,17 +82,17 @@ describe('ManagerContainer inventories', () => {
     assert.equal(inventoryManager.inventoryEntries.length, 1);
   });
 
-  it('persists explicit compatibility edits while retaining unrelated raw entries', () => {
+  it('rejects malformed raw entries and requires positions when constructing a legacy map', () => {
     const raw = Tags.struct('inventories', [Tags.byte('unrecognized', 7),
       Tags.struct(null, [Tags.string('kind', 'future')]),
       Tags.struct('legacy', [Tags.int(null, 2), Tags.nothing(null), Tags.nothing(null)])]);
-    const original = new ManagerContainer(new Map(), 0, PowerState.EMPTY, TextBlocks.EMPTY, SlotAssignment.EMPTY, PullPermission.ALL, [raw]);
-    const edited = original.withInventory(2, Inventory.EMPTY.add(5, 7));
-    assert.equal(edited.getInventory(2).countOf(5), 7);
-    assert.equal(edited.toTag().getStruct()[0].getStruct()[0].getByte(), 7);
-    assert.equal(edited.toTag().getStruct()[0].getStruct()[1].getStruct()[0].getString(), 'future');
+    assert.throws(() => new ManagerContainer(new Map(), 0, PowerState.EMPTY, TextBlocks.EMPTY, SlotAssignment.EMPTY, PullPermission.ALL, [raw]), 'Invalid inventory entry');
     const map = new Map([[2, Inventory.EMPTY]]);
-    const snapshot = new ManagerContainer(map, 0, PowerState.EMPTY, TextBlocks.EMPTY, SlotAssignment.EMPTY, PullPermission.ALL, []);
-    map.clear(); assert.equal(snapshot.inventories.size, 1);
+    assert.throws(() => new ManagerContainer(map, 0, PowerState.EMPTY, TextBlocks.EMPTY, SlotAssignment.EMPTY, PullPermission.ALL, []), 'positions are required');
+    assert.equal(map.size, 1);
+    const original = manager([entry(1, 10, 2)]), snapshot = new ManagerContainer(new Map([[2, original.getInventory(2)]]),
+      original.initialShields, original.powerState, original.texts, original.slotAssignment, original.pullPermission,
+      original.toTag().getStruct().filter(tag => tag.type !== TagType.FINISH));
+    assert.equal(snapshot.getInventory(2).countOf(5), 10); assert.equal(snapshot.inventoryEntries[0].key, '1,16,-17');
   });
 });

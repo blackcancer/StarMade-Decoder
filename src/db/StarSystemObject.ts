@@ -32,10 +32,17 @@ export {
  * Represents the StarSystem model used by StarMade database object parsing.
  */
 export class StarSystem {
-  /** Non-VOID sector entries. Full 16³ grid is reconstructed on encode. */
-  readonly sectors: ReadonlyArray<SectorInfo>;
-  /** Resource densities (index 0–18). */
-  readonly resources: ReadonlyArray<SystemResource>;
+  readonly #sectors: SectorInfo[];
+  readonly #resources: SystemResource[];
+  readonly #includeVoid: boolean;
+
+  /** Detached sector view; VOID entries are hidden unless includeVoid was requested. */
+  get sectors(): ReadonlyArray<SectorInfo> {
+    return this.#sectors.filter(sector => this.#includeVoid || sector.sectorType !== 'VOID').map(sector => ({ ...sector }));
+  }
+
+  /** Detached resource densities in index order (0–18), including absent resources. */
+  get resources(): ReadonlyArray<SystemResource> { return this.#resources.map(resource => ({ ...resource })); }
 
   /**
    * Creates a StarSystem instance.
@@ -43,9 +50,12 @@ export class StarSystem {
    * @param sectors - Input value for the constructor operation.
    * @param resources - Input value for the constructor operation.
    */
-  private constructor(sectors: SectorInfo[], resources: SystemResource[]) {
-    this.sectors   = Object.freeze([...sectors]);
-    this.resources = Object.freeze([...resources]);
+  private constructor(sectors: SectorInfo[], resources: SystemResource[], includeVoid = false) {
+    this.#sectors = sectors.map(sector => ({ ...sector }));
+    this.#resources = RESOURCE_ITEM_IDS.map(meta => ({ index: meta.index, itemId: meta.id, name: meta.name,
+      density: resources.find(resource => resource.index === meta.index)?.density ?? 0 }));
+    this.#includeVoid = includeVoid;
+    Object.freeze(this);
   }
 
   // ── Named constructors ─────────────────────────────────────────────────────
@@ -60,19 +70,15 @@ export class StarSystem {
     options: { includeVoid?: boolean } = {},
   ): StarSystem | null {
     if (!infos || infos.length === 0) return null;
-    const sectors = decodeSystemInfos(infos, options);
+    // Keep the complete wire grid independently of the caller's filtered view.
+    const sectors = decodeSystemInfos(infos, { includeVoid: true });
     const res = decodeSystemResources(resources, { includeAbsent: true });
-    return new StarSystem(sectors, res);
+    return new StarSystem(sectors, res, options.includeVoid);
   }
 
   /** Creates a fully-VOID empty star system with zero resources. */
   static empty(): StarSystem {
-    return new StarSystem([], new Array(RESOURCE_COUNT).fill(null).map((_, i) => ({
-      index: i,
-      itemId: RESOURCE_ITEM_IDS[i].id,
-      name:   RESOURCE_ITEM_IDS[i].name,
-      density: 0,
-    })));
+    return new StarSystem([], []);
   }
 
   // ── Sector accessors ───────────────────────────────────────────────────────
@@ -127,7 +133,7 @@ export class StarSystem {
 
   /** Resource density by index (0–18). 0 = absent. */
   getResourceDensity(index: number): number {
-    return this.resources[index]?.density ?? 0;
+    return this.#resources[index]?.density ?? 0;
   }
 
   /** Resource density by item ID. */
@@ -148,9 +154,13 @@ export class StarSystem {
    * Replaces if already present; adds otherwise.
    */
   withSector(info: SectorInfo): StarSystem {
-    const rest = this.sectors.filter(s => s.x !== info.x || s.y !== info.y || s.z !== info.z);
-    const sectors = info.sectorType === 'VOID' ? rest : [...rest, info];
-    return new StarSystem(sectors, [...this.resources]);
+    validateSectorInfo(info);
+    const rest = this.#sectors.filter(sector => sector.index !== info.index);
+    const entry = { ...info };
+    if (info.sectorType === 'PLANET' || info.sectorType === 'GAS_PLANET') {
+      entry.planetType = PLANET_TYPES[Math.min(PLANET_TYPES.length - 1, info.metadata)];
+    }
+    return new StarSystem([...rest, entry], this.#resources, this.#includeVoid);
   }
 
   /**
@@ -165,27 +175,20 @@ export class StarSystem {
     if (ordinal === -1) throw new RangeError(`Unknown sector type: ${type}`);
     const index = systemCoordsToIndex(x, y, z);
     const info: SectorInfo = { x, y, z, index, sectorTypeOrdinal: ordinal, sectorType: type, metadata };
-    if (type === 'PLANET' || type === 'GAS_PLANET') {
-      info.planetType = (PLANET_TYPES[Math.min(PLANET_TYPES.length - 1, metadata)] ?? 'UNKNOWN') as PlanetType;
-    }
     return this.withSector(info);
   }
 
   /** Clears a sector to VOID. */
   withoutSector(x: number, y: number, z: number): StarSystem {
-    return new StarSystem(
-      this.sectors.filter(s => s.x !== x || s.y !== y || s.z !== z),
-      [...this.resources],
-    );
+    return this.withSectorType(x, y, z, 'VOID');
   }
 
   /** Sets the density of a resource by index. */
   withResourceDensity(index: number, density: number): StarSystem {
-    if (index < 0 || index >= RESOURCE_COUNT) throw new RangeError(`Resource index out of range: ${index}`);
-    const resources = this.resources.map((r, i) =>
-      i === index ? { ...r, density: Math.max(0, Math.min(255, density)) } : r,
-    );
-    return new StarSystem([...this.sectors], resources);
+    validateSystemInteger(index, RESOURCE_COUNT - 1, 'Resource index');
+    validateSystemInteger(density, 255, 'Resource density');
+    const resources = this.#resources.map((resource, i) => i === index ? { ...resource, density } : resource);
+    return new StarSystem(this.#sectors, resources, this.#includeVoid);
   }
 
   /** Sets the density of a resource by item ID. */
@@ -199,12 +202,17 @@ export class StarSystem {
 
   /** Encodes to SYSTEMS.INFOS bytes (8192 bytes, VOID-filled). */
   infosToBytes(): Buffer {
-    return encodeSystemInfos([...this.sectors]);
+    return encodeSystemInfos(this.#sectors);
   }
 
   /** Encodes to SYSTEMS.RESOURCES bytes (19 bytes). */
   resourcesToBytes(): Buffer {
-    return encodeSystemResources([...this.resources]);
+    return encodeSystemResources(this.#resources);
+  }
+
+  /** Complete detached JSON projection, including VOID metadata hidden by the sector view. */
+  toJSON(): { sectors: SectorInfo[]; resources: ReadonlyArray<SystemResource> } {
+    return { sectors: this.#sectors.map(sector => ({ ...sector })), resources: this.resources };
   }
 
   /**
@@ -218,4 +226,22 @@ export class StarSystem {
     const res    = this.presentResources.map(r => r.name).join(', ') || 'none';
     return `StarSystem(sun=${sun}, planets=${planet}, sectors=${this.sectors.length}, resources=[${res}])`;
   }
+}
+
+/** Checks unsigned integer fields before the low-level codec's byte writes. */
+function validateSystemInteger(value: number, maximum: number, label: string): void {
+  if (!Number.isInteger(value) || value < 0 || value > maximum) throw new RangeError(`${label} must be an integer in [0, ${maximum}]`);
+}
+
+/** Rejects contradictory derived fields while preserving unknown wire ordinals. */
+function validateSectorInfo(info: SectorInfo): void {
+  for (const coordinate of [info.x, info.y, info.z]) validateSystemInteger(coordinate, SYSTEM_SIZE - 1, 'Sector coordinate');
+  validateSystemInteger(info.sectorTypeOrdinal, 255, 'Sector type ordinal');
+  validateSystemInteger(info.metadata, 255, 'Sector metadata');
+  if (info.index !== systemCoordsToIndex(info.x, info.y, info.z)) throw new RangeError('Sector index does not match its coordinates');
+  const type = SECTOR_TYPES[info.sectorTypeOrdinal] ?? 'UNKNOWN';
+  if (info.sectorType !== type) throw new RangeError('Sector type does not match its ordinal');
+  const planetType = type === 'PLANET' || type === 'GAS_PLANET'
+    ? PLANET_TYPES[Math.min(PLANET_TYPES.length - 1, info.metadata)] : undefined;
+  if (info.planetType !== undefined && info.planetType !== planetType) throw new RangeError('Planet type does not match sector metadata');
 }

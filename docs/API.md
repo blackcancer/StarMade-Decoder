@@ -1,8 +1,8 @@
 # StarMade-Decoder API Reference
 
-> **1.5.0 integrity update:** [Read the migration contract](INTEGRITY_AND_MIGRATION.md) for strict parsing, v7 LZ4, TagDocument, geometry context and changed error handling. Older examples using `writeTo` serialize only the root Tag, not its complete file envelope.
+This reference describes the current SDK source. See the [migration contract](INTEGRITY_AND_MIGRATION.md) for incompatible format corrections, strict parsing and file-preservation guarantees.
 
-StarMade-Decoder is an ESM TypeScript SDK. After build, public symbols are exported from `starmade-decoder`. During development and tests, import directly from `./src/index.js` via `tsx`.
+StarMade-Decoder is an ESM TypeScript SDK. After build, public symbols are exported from `starmade-decoder`. Examples below use the package entry point; internal helper modules are not part of the documented API.
 
 ```ts
 import { readFrom, writeTo, Ship, BlockRegistry } from 'starmade-decoder';
@@ -51,7 +51,7 @@ These objects keep the original binary slot privately so unchanged data can stil
 
 ## Core Tag API
 
-### `readFrom(data: Buffer | Uint8Array): Tag`
+### `readFrom(data: Buffer | Uint8Array, options?: TagReadOptions): Tag`
 
 Parses a StarMade binary Tag file. Automatically detects GZIP compression (magic `0x1F 0x8B`) and decompresses before parsing. Non-GZIP files start with a `short version` prefix that is consumed silently.
 
@@ -59,7 +59,7 @@ Parses a StarMade binary Tag file. Automatically detects GZIP compression (magic
 const root = readFrom(fs.readFileSync('FACTIONS.fac'));
 ```
 
-### `writeTo(tag: Tag): Buffer`
+### `writeTo(tag: Tag, options?: TagReadOptions): Buffer`
 
 Serializes a Tag tree to canonical non-GZIP bytes with the `short version = 0` prefix. This does not preserve an input file’s compression, version or trailing bytes. Use `readTagDocument(data)` and `document.toBuffer()` when those must be retained.
 
@@ -67,11 +67,30 @@ Serializes a Tag tree to canonical non-GZIP bytes with the `short version = 0` p
 fs.writeFileSync('FACTIONS.fac', writeTo(root));
 ```
 
+### `TagDocument` and explicit limits
+
+`readTagDocument(data, options?)` returns a document with `root`, `version`,
+`compressed` and `trailingData`. `document.toBuffer(root = document.root)`
+returns detached bytes, retaining the source envelope and exact original bytes
+when the semantic tree is unchanged or restored. Use a model's `fromBuffer`
+and `toBuffer` methods when that model manages the envelope itself.
+
+`TagReadOptions` supports `maxInputBytes`, `maxInflatedBytes`, `maxDepth`,
+`maxNodes`, `maxListLength`, `allowTrailingBytes`, `sharedNodeBudget` and
+`sharedInflationBudget`. The shared budget shapes are `{ remainingNodes }` and
+`{ remainingBytes }`. Defaults are 256 MiB input/inflated bytes, depth 64 and
+1,000,000 nodes/list entries. Invalid limits and exhausted budgets fail.
+
+`FormatLimits` supplies `maxBytes` and `maxEntries` for format-specific
+collections; defaults are 16 MiB and 100,000 entries. Where listed below,
+models retain supplied limits across immutable edits. `DecodeError` exposes a
+`code`; recovery-enabled parsers also return `DecodeDiagnostic` records.
+
 ---
 
 ### `Tag`
 
-Immutable representation of one StarMade tag. Every tag has a `type` (`TagType` enum), an optional `name`, and a typed `value`.
+Low-level representation of one StarMade tag. Header properties are readonly, but nested arrays, vectors and payloads can be mutable. Every tag has a `type` (`TagType` enum), an optional `name`, and a typed `value`.
 
 **Typed accessors** — each throws `TypeError` if the tag type does not match:
 
@@ -122,7 +141,7 @@ Immutable representation of one StarMade tag. Every tag has a `type` (`TagType` 
 
 ### `Tags` — factory namespace
 
-Concise static factories for creating tags. All methods return a new immutable `Tag`.
+Concise static factories for creating tags. Factories return `Tag` values. They do not provide a deep immutable snapshot.
 
 **Primitives:**
 
@@ -158,7 +177,7 @@ Tags.list(name, items)               // TAG_List — all items must share the sa
 Tags.listOfStructs(name, items)      // convenience alias for list() with STRUCT items
 ```
 
-**Structural updates** — all return a new immutable Tag:
+**Structural updates** — return a new Tag wrapper; unchanged nested values may be shared:
 
 ```ts
 Tags.setField(struct, fieldName, newTag)
@@ -205,7 +224,7 @@ const tag = new StructBuilder('PlayerCharacter')
 - `add(tag)` — appends a child tag.
 - `addIf(condition, tag)` — appends conditionally.
 - `addAll(tags)` — appends multiple tags.
-- `build()` — returns the final immutable STRUCT Tag with an appended `FINISH_TAG`.
+- `build()` — returns the final STRUCT Tag with an appended `FINISH_TAG`.
 
 ### `ListBuilder`
 
@@ -256,7 +275,7 @@ Both have a `toString()` method printing a formatted grid.
 
 ## Serializable payloads
 
-SERIALIZABLE tags carry a 1-byte `factoryId` and a binary payload. Known factories are decoded automatically; unknown ones are stored as raw bytes.
+SERIALIZABLE tags carry a 1-byte `factoryId` and a binary payload. A registered factory is required to determine the payload length. Unknown or unregistered IDs fail; the format has no general length prefix allowing an unknown factory to be skipped safely.
 
 ### `registerAllFactories(): void`
 
@@ -274,7 +293,7 @@ Registers all 7 known StarMade factories. **Must be called once before parsing a
 
 ### `RawElement`
 
-Default implementation of `SerializableTagElement` for unknown or unregistered factory IDs. Stores the raw bytes intact for round-trip serialization.
+Implementation of `SerializableTagElement` retaining the bytes consumed by a known registered factory. It can also wrap caller-supplied bytes; this does not make an unknown factory decodable.
 
 - `factoryId: number`
 - `raw: Uint8Array`
@@ -317,7 +336,7 @@ Lightweight parser functions that extract semantic fields from a root Tag withou
 | `parseCatalog(root)` | `CATALOG.cat` | `CatalogData` |
 | `parseFloatingItems(root)` | `FLOATING_ITEMS_ARCHIVE.ent` | `FloatingItemsData` |
 
-All functions throw `TypeError` when the root tag type is not `STRUCT`.
+These projections validate their recognized schemas. They do not retain a complete editable file envelope; use the corresponding object/document model for edits.
 
 ---
 
@@ -327,89 +346,67 @@ High-level objects combine typed field access, immutable updates, and full Tag r
 
 ### Catalog
 
-Represents `CATALOG.cat`. Contains player entries and NPC/system entries.
+`Catalog.fromTag(root, options?)` and `Catalog.fromBuffer(bytes, options?)`
+read `cv0` catalogs. `CatalogOptions` combines `TagReadOptions` and
+`FormatLimits`. The `pv0` section holds permission entries; `r0` contains
+independent per-blueprint, per-user ratings.
 
-```ts
-const catalog = Catalog.fromTag(root);
-```
+- `new Catalog(entries?, ratings?, options?)` accepts immutable entries and nested rating maps.
+- `entries` / `all`: all permission entries. There is no separate `systemEntries` collection.
+- `ratings`: detached `ReadonlyMap<string, ReadonlyMap<string, number>>`.
+- `find(uid)`, `byOwner(ownerUID)`, `byType(type)` query entries.
+- `addEntry(entry)`, `removeEntry(uid)`, `updateEntry(uid, entry)` return new catalogs; duplicate UIDs and missing update targets fail.
+- `withRating(uid, user, rating)` changes one signed-byte vote. Removing an entry retains its ratings.
+- `toTag()`, `toBuffer()`, `toJSON()` export the complete model. Parsed file envelopes and unrelated sections are retained.
 
-**Read:**
-- `catalog.all` — all entries (player + system).
-- `catalog.entries` — player-owned entries only.
-- `catalog.systemEntries` — NPC/system entries only.
-- `catalog.find(uid)` — returns `CatalogEntry | undefined`.
-- `catalog.byOwner(ownerUID)` — filters by owner UID.
-- `catalog.byType(type)` — filters by blueprint type string (`'SHIP'`, `'SPACE_STATION'`, etc.).
+Prefer `CatalogEntry.create(fields, options?)` and `entry.with(changes)` over
+positional construction. Its fields are:
 
-**Mutate (returns new `Catalog`):**
-- `catalog.addEntry(entry)` — appends to player entries.
-- `catalog.removeEntry(uid)` — removes by UID.
-- `catalog.updateEntry(uid, entry)` — replaces an existing entry.
+| Field | Type / wire meaning |
+| --- | --- |
+| `uid`, `ownerUID`, `description` | Strings |
+| `price`, `dateCreated` | `bigint`, signed LONG; legacy INT prices remain unchanged until edited |
+| `permission` | Signed INT flags supplied by the caller |
+| `timesSpawned` | Signed INT spawn counter |
+| `mass` | Finite float32 |
+| `blueprintType` | A `BLUEPRINT_TYPE` name, or retained `UNKNOWN(ordinal)` |
+| `classification` | Signed BYTE ordinal |
+| `wavePermissions` | Detached complete `Tag[]` payloads |
 
-**Serialize:**
-- `catalog.toTag()` — rebuilds the root Tag.
-
-**`CatalogEntry` fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `uid` | `string` | Blueprint name and unique identifier |
-| `ownerUID` | `string` | Owner player UID |
-| `price` | `bigint` | Price in credits |
-| `description` | `string` | Free-text description |
-| `mass` | `number` | Total blueprint mass |
-| `blueprintType` | `string` | `'SHIP'`, `'SPACE_STATION'`, `'ASTEROID'`, etc. |
-| `dateCreated` | `bigint` | Creation timestamp (ms) |
-| `timeSpawned` | `bigint` | Last spawn timestamp (ms) |
-| `classification` | `number` | `BlueprintClassification` ordinal |
-
----
+`timeSpawned` is a deprecated bigint alias for the spawn counter, not a date.
+`CatalogEntry.fromTag(tag, options?)`, `toTag()` and `toJSON()` preserve entry
+extensions, field names and unedited historical representations.
 
 ### FactionManager
 
-Represents `FACTIONS.fac`. Manages all factions and inter-faction relations.
+`FactionManager.fromTag(root, options?)` / `fromBuffer(bytes, options?)`
+accept `TagReadOptions`. Supported source roots are `factions-v0`,
+`factions-v1` and `factions-v2`; they retain their respective layouts.
 
-```ts
-const manager = FactionManager.fromTag(root);
-```
+- `factions`, `all`, `relations`: detached collections of immutable models.
+- `get(id)`, `getRelation(a, b)`, `getRelationsOf(id)` query identities and undirected relations.
+- `playerFactions`, `npcFactions`: filters using the actual NPC interval `-10000000 <= id < -10000`.
+- `setFaction(faction)`, `removeFaction(id)`, `setRelation(a, b, code)`, `withLastUpdate(bigint)` return new managers.
+- `removeFaction` removes modeled relations involving that faction; unrelated opaque policy sections remain preserved.
+- `toTag()` / `toBuffer()` retain invitations, roles, policy sections, extensions and the parsed file envelope.
 
-**Read:**
-- `manager.all` — all `Faction[]`.
-- `manager.get(id)` — returns `Faction | undefined`.
-- `manager.playerFactions` — non-NPC factions.
-- `manager.npcFactions` — NPC factions (id < 0).
-- `manager.getRelation(a, b)` — returns `FactionRelation | undefined` between faction `a` and `b`.
-- `manager.getRelationsOf(id)` — all relations involving faction `id`.
+Relation constants are **`RELATION_NEUTRAL = 0`, `RELATION_WAR = 1`,
+`RELATION_ALLY = 2`**. `FactionRelation` exposes `factionA`, `factionB`,
+`relation`, `relationName`, `isWar`, `isNeutral`, `isAlly`, `with(changes)` and
+`toTag()`; unknown signed-byte codes remain explicit.
 
-**Mutate (returns new `FactionManager`):**
-- `manager.setFaction(faction)` — adds or replaces a faction.
-- `manager.removeFaction(id)` — removes a faction by id.
-- `manager.addMember(factionId, playerUID)` — adds a member to a faction.
-- `manager.setRelation(a, b, relation)` — sets relation using `RELATION_WAR`, `RELATION_NEUTRAL`, or `RELATION_ALLY`.
+`Faction.create(fields, options?)` requires the full `FactionFields`,
+including explicit `roles: Tag` and `code: string`. Other fields are `id`,
+`name`, `description`, `dateCreated: bigint`, `members`, `openToJoin`,
+`homebaseUID`, `password`, `allyNeutral`, `attackNeutral`, `factionPoints`,
+`factionMode` and `showInHub`. `faction.with(changes)` preserves the source;
+`members` and `roles` are defensive projections. `Faction.fromTag(tag, id,
+options?)` reads a single saved faction record.
 
-**Serialize:**
-- `manager.toTag()` — rebuilds the root Tag.
-
-**`Faction` fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `number` | Faction ID (negative = NPC) |
-| `name` | `string` | Faction display name |
-| `description` | `string` | Faction lore/description |
-| `members` | `FactionMember[]` | List of member players |
-| `isNPC` | `boolean` | True when NPC-controlled |
-| `factionPoints` | `number` | Current faction points |
-| `openToJoin` | `boolean` | Whether players can join freely |
-| `homebaseUID` | `string` | Home base entity UID |
-
-**`FactionRelation` fields:**
-- `factionA`, `factionB: number` — the two faction IDs.
-- `relation: number` — `-1` (WAR), `0` (NEUTRAL), `1` (ALLY).
-- `relationName: string` — human-readable string.
-- `isWar`, `isNeutral`, `isAlly: boolean` — convenience booleans.
-
-**Relation constants:** `RELATION_WAR = -1`, `RELATION_NEUTRAL = 0`, `RELATION_ALLY = 1`, `RELATION_NAMES`.
+`new FactionMember(playerUID, role, options?)` stores the actual BYTE role.
+Update members through `faction.with({ members: [...] })`, then
+`manager.setFaction(faction)`. `member.with({ role })` retains activity and
+last-seen extensions. There is no manager-level `addMember` method.
 
 ---
 
@@ -417,17 +414,17 @@ const manager = FactionManager.fromTag(root);
 
 Entity classes parse complete `.ent` files and expose typed fields and immutable update methods.
 
-#### `parseSegmentControllerEntity(root, filename?): Ship | SpaceStation | ShopSpaceStation | FloatingRock`
+#### `parseSegmentControllerEntity(root, filename?, options?): Ship | SpaceStation | ShopSpaceStation | FloatingRock`
 
-Auto-detects the entity type from the file name prefix or Tag content.
+Selects the entity class from the filename, falling back to `Ship` when no recognized filename is supplied. Options are `TagReadOptions`.
 
 #### `Ship`, `SpaceStation`, `ShopSpaceStation`, `FloatingRock`
 
 All extend `SegmentController` which extends `GameEntity`.
 
 **Parse:**
-- `Ship.fromBuffer(data)` — reads from a binary Buffer.
-- `Ship.fromTag(root)` — parses from a root Tag.
+- `Ship.fromBuffer(data, options?)` — reads from a binary Buffer.
+- `Ship.fromTag(root, options?)` — parses from a root Tag.
 
 **`GameEntity` fields (all entity types):**
 
@@ -441,7 +438,9 @@ All extend `SegmentController` which extends `GameEntity`.
 | `isNPC` | `boolean` | True when factionId < 0 |
 | `entityType` | `string` | `'SHIP'`, `'SPACE_STATION'`, etc. |
 
-**`GameEntity` updates (return `this`):**
+`GameEntity.isNPC` retains the legacy negative-ID category; `Faction.isNPC` uses the narrower NPC interval documented above.
+
+**`GameEntity` updates (return a new instance of the same subtype):**
 - `withFactionId(fid)` — changes the faction.
 - `withOwner(uid)` — changes the owner.
 - `withSector(pos)` — moves to a new sector.
@@ -472,17 +471,17 @@ All extend `SegmentController` which extends `GameEntity`.
 
 Represents `ENTITY_PLAYERSTATE_*.ent`.
 
-**Parse:** `PlayerStateEntity.fromBuffer(data)` or `fromTag(root)`.
+**Parse:** `PlayerStateEntity.fromBuffer(data, options?)` or `fromTag(root, options?)`, with `TagReadOptions`.
 
 **Fields:**
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `credits` | `bigint` | Credit balance |
-| `faction` | `FactionMembership` | Faction ID and rank |
+| `faction` | `FactionMembership` | Faction ID and persisted suspension state |
 | `currentSector` | `SectorPosition \| null` | Current sector |
 | `logoutSector` | `SectorPosition \| null` | Sector at last logout |
-| `logoutLocalPos` | `Vector3f \| null` | Local position at logout |
+| `logoutLocalX/Y/Z` | `number` | Local position at logout |
 | `lastLogin` | `bigint` | Login timestamp (ms) |
 | `lastLogout` | `bigint` | Logout timestamp (ms) |
 | `hasCreativeMode` | `boolean` | Creative mode flag |
@@ -495,14 +494,19 @@ Represents `ENTITY_PLAYERSTATE_*.ent`.
 - `withCredits(credits)` — sets the credit balance.
 - `withCreativeMode(enabled)` — toggles creative mode.
 - `withHealth(health)` — sets health.
-- `withFaction(id, rank?)` — changes faction membership.
-- `withInventory(inventory)` — replaces the main inventory.
+- `withFaction(id, suspended?)` — changes membership and suspension. The implementation retains the historical parameter name `rank`; it does not represent a faction role.
+- `withInventory(inventory)` — replaces contents while retaining the original inventory envelope.
+
+`FactionMembership.suspended` is the real field; `rank` is its deprecated alias.
+`toTag()` returns a detached tree, and `toBuffer()` preserves the original file
+envelope. Present corrupt fields fail; historical absent fields are retained,
+and edits requiring an absent slot fail explicitly.
 
 #### `PlayerCharacterEntity`
 
 Represents `ENTITY_PLAYERCHARACTER_*.ent` (character position and movement data).
 
-**Parse:** `PlayerCharacterEntity.fromBuffer(data)` or `fromTag(root)`.
+**Parse:** `PlayerCharacterEntity.fromBuffer(data, options?)` or `fromTag(root, options?)`, with `TagReadOptions`.
 
 **Fields:** `id`, `speed`, `stepHeight`, `factionId`, `owner`, `sectorPosition`, `noAI`, `spawnController`.
 
@@ -514,21 +518,21 @@ Represents `ENTITY_PLAYERCHARACTER_*.ent` (character position and movement data)
 
 #### `PlayerCharacter` (legacy business object)
 
-- `fromTag(root)`, `fromBuffer(data)`
+- `fromTag(root, options?)`, `fromBuffer(data, options?)` (options: `TagReadOptions`)
 - Fields: `id`, `speed`, `stepHeight`, `sectorPosition`, `factionId`, `owner`
 - Updates: `withId()`, `withSpeed()`, `withStepHeight()`, `withFactionId()`, `withOwner()`
 
 #### `PlayerState` (legacy business object)
 
-- `fromTag(root)`, `fromBuffer(data)`
-- Fields: `credits`, `currentSector`, `logoutSector`, `hasCreativeMode`, `lastEnteredEntity`, `factionId`, `factionRank`
-- Updates: `withCredits()`, `withCreativeMode()`, `withFaction(id, rank?)`
+- `fromTag(root, options?)`, `fromBuffer(data, options?)` (options: `TagReadOptions`)
+- Fields: `credits`, `currentSector`, `logoutSector`, `hasCreativeMode`, `lastEnteredEntity`, `factionId`, `factionSuspended` (`factionRank` is a deprecated alias)
+- Updates: `withCredits()`, `withCreativeMode()`, `withFaction(id, suspended?)`
 
 #### `SegmentControllerObject` (legacy)
 
 Lighter alternative to the entity class hierarchy when only Tag-level access is needed.
 
-- `fromTag(root)`, `fromBuffer(data)`
+- `fromTag(root, options?)`, `fromBuffer(data, options?)` (options: `TagReadOptions`)
 - Fields: `uniqueId`, `realName`, `factionCode`, `owner`, `sectorPosition`, `creatorId`, `seed`, `nonEmptySegments`
 - Computed accessors: `controlElementMapper`, `elementCountMap`, `long2Vector3fMaps`, `long2TransformMaps`
 - Updates: `withName()`, `withRealName()`, `withFactionCode()`
@@ -537,7 +541,7 @@ Lighter alternative to the entity class hierarchy when only Tag-level access is 
 
 Represents `chatchannels.tag`.
 
-- `fromTag(root)`, `fromBuffer(data)`
+- `fromTag(root, options?)`, `fromBuffer(data, options?)` (options: `TagReadOptions`)
 - `manager.channels: ChatChannel[]`
 - `manager.find(uid)` — `ChatChannel | undefined`
 - `manager.permanentChannels`, `manager.publicChannels` — filtered arrays
@@ -547,41 +551,79 @@ Represents `chatchannels.tag`.
 
 #### `TradingManager`
 
-Represents `TRADING.tag`.
+`TradingManager.fromTag(root, options?)` / `fromBuffer(data, options?)` accept
+`TagReadOptions`. `new TradingManager(0, routes, options?)` creates a version-zero
+manager. `routes`, `routesFrom(factionId)`, `routesTo(factionId)` and
+`routesBetween(a, b)` query the saved routes; the filters use faction IDs.
+`addRoute`, `removeRoute(index)` and `updateRoute(index, route)` return new
+managers. `toTag`, `toBuffer` and `toJSON` export the result.
 
-- `fromTag(root)`, `fromBuffer(data)`
-- `manager.routes: TradeRoute[]`
-- `manager.routesBetween(fromId, toId)` — `TradeRoute[]`
-- `manager.routesFrom(fromId)`, `manager.routesTo(toId)`
-- `manager.addRoute(route)`, `manager.removeRoute(idx)`, `manager.updateRoute(idx, route)` — return new manager
+`TradeRoute.create(fields, options?)`, `fromTag(tag, options?)` and
+`with(changes)` use the complete `TradeRouteFields`:
 
-**`TradeRoute` key fields:** `blocks` (ElementCountMap), `blockPrice`, `deliveryPrice`, `startTime`, `fromId`, `toId`, `fromPlayer`, `toPlayer`, `fromStation`, `toStation`.
+- `blocks: ElementCountMap`, preserving every row, including duplicate IDs and zero/negative quantities.
+- `blockPrice`, `deliveryPrice`, `startTime`, `fromId`, `toId`, `fleetId`: signed LONG `bigint` values.
+- `volume`: finite DOUBLE; `fromFactionId`, `toFactionId`: signed INT.
+- `startSystem`, `targetSystem`, `currentSector`, `startSector`: integer `{ x, y, z }` coordinates.
+- `fromPlayer`, `toPlayer`, `fromStation`, `toStation`: strings.
+- `sectorWayPoints`: ordered integer coordinates.
+
+The wire record is `[BYTE version, STRUCT payload]`; its payload has nineteen
+required slots. Edits retain the enclosing names, waypoint names, unknown
+fields and file envelope. No price, routing or administrative policy is inferred.
 
 #### `SimulationState`
 
-Represents `SIMULATION_STATE.sim`.
+`SimulationState.fromTag(root, options?)` / `fromBuffer(data, options?)` accept
+`TagReadOptions`; `new SimulationState(0, groups, uniqueGroups, options?)`
+constructs a version-zero state. `uniqueGroups: bigint` is the group-ID
+counter. Deprecated `lastUpdate` / `withLastUpdate` aliases refer to that
+counter, never to a timestamp.
 
-- `fromTag(root)`, `fromBuffer(data)`
-- `state.groups: SimulationGroup[]`, `state.lastUpdate: bigint`
-- `state.addGroup(group)`, `state.removeGroup(idx)` — return new state
-- `state.toTag()`
+Use `with({ groups, uniqueGroups })`, `addGroup(group)`, `removeGroup(index)`
+and `withUniqueGroups(bigint)`. `toTag()` / `toBuffer()` retain source fields
+and the file envelope.
 
-**`SimulationGroup` fields:** `version`, `type`, `members: string[]`, `startTime`, `startSector`, `programId`.
+`SimulationGroup` stores the actual sequence `[BYTE version, INT type,
+STRUCT STRING-members, LONG startTime, VECTOR3i startSector, INT programId,
+metadata]`. Its constructor takes these seven semantic arguments followed by
+optional `TagReadOptions`; `fromTag(tag, options?)` and `with(changes)` provide
+source-preserving reads and edits. Versions 0/1 and types 0/1/2 are supported.
+The required `startSector` is independent of subtype metadata:
+
+| Group type | Metadata |
+| --- | --- |
+| 0 | `VECTOR3i` target sector |
+| 1 | Opaque Tag; the constructor default is BYTE zero |
+| 2 | STRUCT beginning with `VECTOR3i` and `STRING`, with extensions retained |
+
+Negative program IDs denote no program; nonnegative supported IDs are 0/1.
 
 #### `NPCFactionManager`
 
-Represents `NPCFACTIONS_*.tag`. Parsed and re-serialized as a raw Tag.
-
-- `fromTag(root)`, `fromBuffer(data)`, `toTag()`
+`fromTag(root, options?)`, `fromBuffer(data, options?)`, `with({ version })`,
+`toTag()` and `toBuffer()` expose the supported version-zero wrapper while
+retaining its unmodeled fields. Options are `TagReadOptions`.
 
 #### `FloatingItemsArchive`
 
-Represents `FLOATING_ITEMS_ARCHIVE.ent`.
+This is the metadata-object archive, distinct from the database's sector-item
+stacks. A modern `moi` root holds a BYTE version, an INT `nextId` counter and
+sector records. `totalCount` counts objects; it is independent of `nextId`.
 
-- `fromTag(root)`, `fromBuffer(data)`
-- `archive.totalCount: number`
-- `archive.byType(type)` — `FloatingItem | undefined`
-- `archive.toTag()`
+- `FloatingItemsArchive.fromTag(root)` / `fromBuffer(bytes)` read modern or genuine historical sector-root layouts.
+- `FloatingItemsArchive.create(nextId?)` creates an empty modern archive.
+- `sectors`, `items`, `item(id)`, `sector({x,y,z})`, `itemsOfType(blockType)` expose complete records. `byType` returns only the first match.
+- `addItem(position, item)`, `updateItem(item)`, `removeItem(id)`, `removeSector(position)` return new archives.
+- `withNextId(value)` edits a modern counter; `toModern(nextId?)` explicitly migrates a historical archive.
+- `toTag()` / `toBuffer()` preserve source records and file envelopes.
+
+`new FloatingItem(id, blockType, payload, subObjectId?)` requires the complete
+opaque metadata `Tag`; it has no quantity field. Methods are `withId`,
+`withBlockType`, `withPayload`, `withSubObjectId` and `toTag`.
+`FloatingItemSector` exposes `position`, `items`, `withPosition` and
+`withItems`. IDs are unique across sectors, and a modern counter must exceed
+every saved ID.
 
 ---
 
@@ -591,45 +633,45 @@ Reusable components shared between entity classes.
 
 ### `SectorPosition`
 
-Absolute position in the universe grid.
-
-- `new SectorPosition(x, y, z)` or `SectorPosition.fromValues(x, y, z)`
-- `SectorPosition.ZERO` — `(0, 0, 0)`
-- `SectorPosition.fromTag(tag)` — parses from a `VECTOR3i` Tag.
-- `pos.toTag(name?)` — builds a `VECTOR3i` Tag.
-- `pos.equals(other)` — positional equality.
+Immutable signed-int32 coordinates: `new SectorPosition(x, y, z, options?)`,
+`fromValues(x, y, z, options?)`, `fromTag(tag, options?)`, `with({x,y,z})`,
+`equals(other)`, `toTag(name?)`. Options are `TagReadOptions`; omitted output
+names retain the source name. `ZERO` is the immutable zero coordinate.
 
 ### `EntityTransform`
 
-Local position and orientation within a sector.
+Stores all sixteen float32 components of a matrix without geometric
+calculations. `fromMatrix4fList(tag, options?)` requires exactly sixteen FLOATs;
+`fromMatrix4fTag(tag, options?)` reads the MATRIX4f variant. Both accept
+`TagReadOptions` and retain names and all four formerly omitted components.
 
-- `EntityTransform.IDENTITY` — zero position, identity rotation.
-- `EntityTransform.fromMatrix4fList(tag)` — parses from a `LIST` of 16 `float32` values.
-- `EntityTransform.fromMatrix4fTag(tag)` — parses from a `TAG_MATRIX4f`.
-- `transform.toMatrix4fList(name?)` — rebuilds the 16-float LIST.
-- `transform.with(overrides)` — immutable partial update: `{ originX?, originY?, originZ?, m00?, ... }`.
-- Fields: `originX`, `originY`, `originZ` (position), `m00..m22` (3×3 rotation matrix).
+- Projection fields: `originX/Y/Z`, `m00/m01/m02`, `m10/m11/m12`, `m20/m21/m22`.
+- Additional retained fields: `m03`, `m13`, `m23`, `m33`.
+- `with(changes)` preserves unspecified values and the source variant.
+- `toTag(name?)` emits that variant; `toMatrix4fList(name?)` / `toMatrix4fTag(name?)` explicitly select an encoding.
+- `IDENTITY` and the historical twelve-number constructor use remaining components `0, 0, 0, 1`.
 
 ### `DockingState`
 
-- `DockingState.UNDOCKED` — singleton for undocked state.
-- `state.isDocked` — `true` when `dockedTo !== 'NONE'`.
-- `state.undock()` — returns a new undocked state.
-- `state.toTag()` / `DockingState.fromTag(tag)`.
-- Fields: `dockedTo` (host UID), `posX/Y/Z` (docking block position), `sizeX/Y/Z` (area), `orientation`.
+`fromTag(tag, options?)`, `toTag()`, `with(changes)`, `dockTo(uid, x, y, z,
+orientation?)` and `undock()` retain opaque fields. Names are `dockPosX/Y/Z`,
+`sizeX/Y/Z`, `localOrientation`, `dockedTo`, `quaternion`,
+`legacyLandedTo` and `legacyLandedPosition`. `isDocked` excludes both `NONE`
+and the empty host string. `DockingStateOptions` extends `TagReadOptions`
+with the quaternion and two historical Tags; no orientation conversion is applied.
 
 ### `HpState`
 
-Hit point state for ships and stations.
+`fromTag(tag, options?)`, `with(changes)`, `withHp`, `withMaxHp` and `toTag()`
+retain source names, the complete `currentHPMatch` SERIALIZABLE and
+`rebootRecover`. HP, maximum HP, armor HP, maximum armor HP, reboot start and
+reboot time are exposed as `bigint`; `isAlive`, `hpPercent` and `isRebooting`
+are computed getters.
 
-- `HpState.EMPTY` — zero HP singleton.
-- `HpState.CLASS_INT = 0`, `HpState.CLASS_LONG = 1` — encoding format.
-- `state.isAlive` — `hp > 0n`.
-- `state.hpPercent` — `Number(hp * 100n / maxHp)`, or `100` when maxHp is 0.
-- `state.isRebooting` — `rebootStarted > 0n`.
-- `state.withHp(hp)`, `state.withMaxHp(maxHp)` — immutable updates.
-- `HpState.fromTag(tag)` / `state.toTag()`.
-- Fields: `classId`, `hp`, `maxHp`, `armorHp`, `maxArmorHp`, `rebootStarted`, `rebootTime` (all `bigint`).
+The saved class byte is **1**. `CLASS_INT = 0` / `CLASS_LONG = 1` are legacy
+constructor width selectors, not alternative class IDs. `HpStateOptions`
+extends `TagReadOptions` with independent `hpType` and `armorType`
+(`TagType.INT` or `TagType.LONG`). Existing source widths are retained.
 
 ### `Inventory`
 
@@ -639,8 +681,8 @@ envelope, wrapper fields and opaque item metadata when editing its contents.
 
 - `Inventory.EMPTY` — empty inventory with no caller-supplied slot limit.
 - `new Inventory(slots, maxSlots?)` — constructs from a `ReadonlyMap<number, ItemStack>`; each map key must equal its item's slot.
-- `Inventory.fromTag(tag, { maxSlots }?)` / `inventory.toTag()` — reads and writes the game representation.
-- `Inventory.fromLegacyTag(tag)` / `inventory.toLegacyTag()` — explicit compatibility with obsolete anonymous SDK tuples. These tuples are not the current game representation; the legacy reader retains its historical fallbacks, and the writer rejects grouped items and opaque metadata payloads.
+- `Inventory.fromTag(tag, options?: InventoryReadOptions)` / `inventory.toTag()` — reads and writes the game representation.
+- `Inventory.fromLegacyTag(tag, options?)` / `inventory.toLegacyTag()` — explicit compatibility with obsolete anonymous SDK tuples. These tuples are not the current game representation; the legacy reader retains its historical fallbacks, and the writer rejects grouped items and opaque metadata payloads.
 - `inventory.get(slot)` — `ItemStack | undefined`.
 - `inventory.has(slot)` — whether the slot is occupied.
 - `inventory.set(item)` — adds or replaces a slot; a zero-count stack removes it.
@@ -659,6 +701,7 @@ envelope, wrapper fields and opaque item metadata when editing its contents.
 - `inventory.assertCapacity({ maximum, volumeOf })` — checks a caller-supplied volume limit and returns the same inventory; `transferTo` can apply this policy to its resulting target.
 - `inventory.toJSON()` — `{ items: ItemStackJSON[], maxSlots: number | null }`; `null` denotes the absence of a caller-supplied slot limit.
 
+`InventoryReadOptions` combines `TagReadOptions` with `maxSlots`.
 `maxSlots` defaults to `Infinity` and limits the **number of occupied slots**,
 not the largest slot index or the game's storage volume. Inventory edits retain
 an explicit limit; this caller policy is not serialized and must be supplied
@@ -691,29 +734,31 @@ the kind. Multiple inventories may share the same kind.
 
 ### `PowerState`
 
-Reactor power state.
-
-- `PowerState.EMPTY` — zero power.
-- `PowerState.fromTag(tag)` — parses from a STRUCT with two DOUBLE fields.
-- `PowerState.fromTagOld(tag)` — backward-compatible: accepts a DOUBLE directly or falls back to `fromTag`.
-- `state.withPower(power)`, `state.withBattery(battery)` — immutable updates.
-- Fields: `initialPower: number`, `initialBatteryPower: number`.
+`fromTag(tag, options?)` reads the two-DOUBLE STRUCT; `fromTagOld(tag,
+options?)` also accepts the historical scalar DOUBLE. `toTag()` retains that
+variant until an edit needs the full record. Fields are `initialPower` and
+`initialBatteryPower`; edits use `with(changes)`, `withPower` and `withBattery`.
+`PowerStateOptions` extends `TagReadOptions` with `legacy?: boolean`.
 
 ### `ThrustConfig`
 
-Thrust and dampener configuration for ships.
+`fromTag(tag, options?)` reads the current version-zero tuple;
+`fromTagOld(tag, options?)` explicitly reads the historical timer-based
+variant. `ThrustConfigOptions` combines `TagReadOptions` with `legacy` and
+`legacyTimer`. `toTag()` retains the original variant, names and extensions.
 
-- `ThrustConfig.DEFAULT` — default settings (dampeners on, no sharing, balanced).
-- `ThrustConfig.fromTag(tag)` / `config.toTag()`.
-- `config.withDampeners(enabled)`, `config.withThrustSharing(enabled)`, `config.withRepulsorBalance(v)`.
-- Fields: `version`, `automaticDampeners`, `automaticReactivateDampeners`, `thrustBalanceX/Y/Z`, `rotationBalance`, `automaticDampenersOnExit`, `thrustSharing`, `repulsorBalance`.
+Fields are `version`, `automaticDampeners`, `automaticReactivateDampeners`,
+`thrustBalanceX/Y/Z`, `rotationBalance`, `automaticDampenersOnExit`,
+`thrustSharing` and `repulsorBalance`. Use `with(changes)`,
+`withDampeners(enabled)` or `withThrustSharing(enabled)`; change repulsor
+balance with `with({ repulsorBalance })`.
 
 ### `ManagerContainer`
 
 Container for all module state (power, shields, inventories, texts, slot assignments).
 
 - `ManagerContainer.EMPTY` — empty singleton.
-- `ManagerContainer.fromTag(tag)` / `mc.toTag()`.
+- `ManagerContainer.fromTag(tag, options?: TagReadOptions)` / `mc.toTag()`.
 - `mc.inventoryEntries` — the complete position-indexed collection as `readonly InventoryLocation[]`; malformed entries and duplicate positions fail explicitly.
 - `mc.getInventoryAt(position)` — the inventory at one block position, or `undefined`.
 - `mc.withInventoryAt(position, inventory, kind?)` — inserts or replaces one location, retaining existing wrapper metadata. Omitted `kind` preserves the existing kind or defaults a new entry to stash kind `3`.
@@ -724,6 +769,7 @@ Container for all module state (power, shields, inventories, texts, slot assignm
 - `mc.relevantElementCountMap` — block count ECM from index [7], or `null`.
 - `mc.withInventory(kind, inventory)` — compatibility update by kind; rejects ambiguous kinds. If the kind is absent, creates an entry at the origin only when that position is free; otherwise use `withInventoryAt` with an explicit position.
 - `mc.withPower(powerState)`, `mc.withInitialShields(value)`, `mc.withTexts(texts)`, `mc.withSlotAssignment(sa)`, `mc.withPullPermission(perm)` — immutable field updates.
+- `mc.powerReactor` / `withPowerReactor(value)` retain the separate PowerInterface tree at slot 15; `mc.shieldAddOn` / `withShieldAddOn(value)` expose slot 3. `powerState` is the separate slot-2 value; `initialShields` is the legacy scalar projection of slot 3.
 - **Other fields:** `initialShields: number`, `powerState: PowerState`, `texts: TextBlocks`, `slotAssignment: SlotAssignment`, `pullPermission: PullPermission`.
 - **`PullPermission` enum:** `ALL = 0`, `SELF = 1`, `NONE = 2`.
 
@@ -733,44 +779,51 @@ manager fields.
 
 ### `SpawnPoint`
 
-A single spawn location (entity UID + sector + local position + gravity).
-
-- `SpawnPoint.ZERO` — empty spawn point.
-- `SpawnPoint.fromTag(tag)` / `sp.toTag()`.
-- `sp.with(overrides)` — immutable partial update: `{ entityUID?, sector?, localX/Y/Z?, gravX/Y/Z? }`.
-- Fields: `entityUID`, `sector: SectorPosition`, `localX/Y/Z: number`, `gravX/Y/Z: number`.
+`fromTag(tag, options?)`, `toTag()` and `with(changes)` retain the source
+point, including `absolutePosBackup: Vector3f | null` and unknown suffix
+fields. Other fields are `entityUID`, `sector: SectorPosition`,
+`localX/Y/Z` and `gravX/Y/Z`. `SpawnPointChanges` supports all these values,
+including an explicit backup vector. Options are `TagReadOptions`.
 
 ### `PlayerSpawnData`
 
-Death and logout spawn points for a player.
+`fromTag(tag, options?)` reads death/logout `SpawnPoint` records, retains the
+version BYTE and validates the optional pre-special vectors or BYTE-zero
+absence markers. The reader uses their types, not a version-based guess.
+`preSpecialSector` and `preSpecialOrigin` are nullable; compatibility scalar
+origin getters return zero when no origin is stored.
 
-- `PlayerSpawnData.EMPTY` — empty spawn data.
-- `PlayerSpawnData.fromTag(tag)` / `psd.toTag()`.
-- `psd.withDeathSpawn(spawn)`, `psd.withLogoutSpawn(spawn)` — immutable updates.
-- Fields: `version`, `deathSpawn: SpawnPoint`, `logoutSpawn: SpawnPoint`, `preSpecialSector?: SectorPosition`, `preSpecialOriginX/Y/Z: number`.
+Use `with({ deathSpawn, logoutSpawn, preSpecialSector, preSpecialOrigin })`,
+`withDeathSpawn`, `withLogoutSpawn` and `toTag`. Source layouts, names and
+extensions survive edits; null writes/restores an absent pre-special value.
 
 ### `SpawnMarker` and `SpawnController`
 
-NPC spawn marker list attached to an entity.
+`SpawnMarker.fromTag(tag, options?)` retains `[STRUCT spawner, LONG
+lastSpawned, VECTOR3i position]` and extensions. The `spawner` getter returns
+a detached complete payload. `new SpawnMarker(time, x, y, z, spawner?,
+options?)` uses the real empty DefaultSpawner when no payload is supplied.
+`with(changes)` edits `lastSpawned`, `sectorX/Y/Z` or `spawner`.
 
-- `SpawnController.EMPTY`, `SpawnController.fromTag(tag)`, `sc.toTag(name?)`.
-- `sc.addMarker(marker)` — immutable append.
-- `SpawnMarker.fromTag(tag)` / `marker.toTag()`.
-- **`SpawnMarker` fields:** `lastSpawned: bigint`, `sectorX/Y/Z: number`.
+`SpawnController.fromTag(tag, options?)`, `markers`, `withMarkers(markers)`,
+`addMarker(marker)` and `toTag()` retain the container and marker-list names.
+Corrupt records fail instead of being skipped. Options are `TagReadOptions`.
 
 ### `TextBlocks`
 
-Text panel content from screens and info blocks.
-
-- `TextBlocks.EMPTY`
-- `TextBlocks.fromTag(tag)` / `tb.toTag()`.
+`TextBlocks.EMPTY`, `fromTag(tag, options?)`, `size`, `has(position)`,
+`get(position)`, `entries()`, `positions()`, `set(position, text)`,
+`delete(position)`, `toTag()` and `toJSON()` expose immutable panel text.
+Position keys are signed-int64 `bigint`; `positions()` also returns decoded
+integer block coordinates. Options are `TagReadOptions`.
 
 ### `SlotAssignment`
 
-Logic slot-to-block assignments.
-
-- `SlotAssignment.EMPTY`
-- `SlotAssignment.fromTag(tag)` / `sa.toTag()`.
+`new SlotAssignment(version, slots, options?)`, `fromTag(tag, options?)`,
+`slots`, `assign(slot, position)`, `unassign(slot)`, `toTag()` and `toJSON()`
+retain stored BYTE slot IDs and LONG packed positions. `SlotAssignmentOptions`
+extends `TagReadOptions` with `minSlot` / `maxSlot`: these constrain new
+assignments, defaulting to 0..9. Decoding retains all valid signed-byte keys.
 
 ---
 
@@ -798,30 +851,14 @@ Entry point for all StarMade installation paths.
 
 ### `ServerConfig`
 
-Reads and writes `server.cfg` while preserving all comments and blank lines.
+`load(config, options?)` and `fromString(text, options?)` accept
+`FormatLimits`. The model retains comments, blank lines and unknown keys.
 
-**Parse:**
-- `ServerConfig.load(config: SMToolConfig)` — reads the live `server.cfg` or falls back to the default template in `data/config/defaultSettings/`.
-- `ServerConfig.fromString(content)` — parses directly from a string, useful for mocks.
-
-**Read:**
-- `sc.getString(key, def?)` — typed string value.
-- `sc.getNumber(key, def?)` — typed numeric value (integer or float per schema).
-- `sc.getBoolean(key, def?)` — typed boolean value.
-- `sc.getDefault(key)` — schema default value.
-- `sc.values` — all key/value pairs as a plain object.
-- `sc.keys` — array of all present keys.
-- `sc.has(key)` — whether the key is in the schema.
-
-**Mutate (return new `ServerConfig`):**
-- `sc.set(key, value)` — replaces one key. Throws `TypeError` for unknown keys.
-- `sc.setMany(entries)` — replaces multiple keys at once. Throws on first unknown key.
-
-**Serialize:**
-- `sc.save(config)` — writes back to `server.cfg` with all comments preserved.
-- `sc.toString()` — full file content as a string.
-
-**`SERVER_CONFIG_SCHEMA`** — exported `Record<string, ConfigEntryMeta>` with 196 known server keys, each with `type` (`'string' | 'boolean' | 'number' | 'float'`) and `default`.
+- `get(key)`, `getString(key)`, `getNumber(key)`, `getBoolean(key)`, `getFloat(key)` read values using the accessor's conversion; `get` falls back to the schema default or an empty string.
+- `entries()` returns a detached map; `keys()` lists keys; `isKnown(key)` tests schema membership.
+- `set(key, value)` / `setMany(values)` return immutable edits, validating known-key types and rejecting writes to unknown schema keys. Unknown text read from a file remains retained.
+- `toString()` exports the file in memory; `save(config)` writes `server.cfg`.
+- `SERVER_CONFIG_SCHEMA` exposes each known key's type and default. Read `SERVER_CONFIG_SCHEMA[key]?.default` for schema metadata.
 
 ### `BlockConfig`
 
@@ -950,8 +987,8 @@ Process-wide singleton for fast block name and property lookups. Must be initial
 
 Reads `blockBehaviorConfig.xml` (engine, shield, and gameplay multipliers).
 
-- `BlockBehaviorConfig.load(config)` — loads from the StarMade installation.
-- `BlockBehaviorConfig.fromXml(xml)` — parses from XML string.
+- `BlockBehaviorConfig.load(config, options?: FormatLimits)` — loads from the StarMade installation.
+- `BlockBehaviorConfig.fromXml(xml, options?: FormatLimits)` — parses from XML string.
 - `bc.getNumber(key, def?)`, `bc.getBoolean(key, def?)`, `bc.getString(key, def?)` — dot-notation key access (e.g. `'BlockBehaviorConfig.General.BasicValues.ShieldCapacityInitial'`).
 - `bc.set(key, value)` — immutable update.
 - `bc.saveCustom(config, vanilla)` — writes only diffs to `customBlockBehaviorConfig/customBlockBehaviorConfig.xml`.
@@ -960,11 +997,118 @@ Reads `blockBehaviorConfig.xml` (engine, shield, and gameplay multipliers).
 
 Reads `FactionConfig.xml` (faction activity and scoring parameters).
 
-- `FactionConfig.load(config)` — loads vanilla + custom override.
-- `FactionConfig.fromXml(xml)` — parses from XML string.
+- `FactionConfig.load(config, options?: FormatLimits)` — loads vanilla + custom override.
+- `FactionConfig.fromXml(xml, options?: FormatLimits)` — parses from XML string.
 - `fc.getNumber(key, def?)`, `fc.getBoolean(key, def?)`, `fc.getString(key, def?)`.
 - `fc.set(key, value)` — immutable update.
 - `fc.saveCustom(config, vanilla)` — writes only diffs to `customFactionConfig/FactionConfig.xml`.
+
+---
+
+## Additional file documents
+
+These models own snapshots of caller data. Collection getters and exported
+buffers are detached; edits return new models. `fromBuffer` retains exact
+source bytes for unchanged semantic data and for edits that restore the full
+original semantic state. Text formats may use canonical formatting after an
+edit. All examples use exports from `starmade-decoder`.
+
+### `WorldSeedDocument`
+
+Models the world's `.seed` file: exactly eight bytes containing one signed
+big-endian int64.
+
+- `new WorldSeedDocument(seed: bigint, options?: FormatLimits)`.
+- `WorldSeedDocument.fromBuffer(bytes, options?)`.
+- `seed`, `withSeed(bigint)`, `toBuffer()`, `toJSON(): { seed: string }`.
+
+Use bigint literals or decimal strings converted with `BigInt`; the document
+does not accept imprecise JavaScript number seeds. Lower-level
+`parseWorldSeed` / `writeWorldSeed` are also exported.
+
+### `PersistentObjectDocument`
+
+Models StarLoader `.smdat` class-grouped JSON without instantiating application
+classes. `PersistentObjectEntry` is `{ className: string, objects: unknown[] }`.
+
+- `new PersistentObjectDocument(entries?, options?: PersistentObjectLimits)`.
+- `fromBuffer(textOrBytes, options?)`, `entries`, `objectsFor(className)`.
+- `withClass(className, objects)` replaces all blocks of that class at its first occurrence; `withoutClass(className)` removes them.
+- `toBuffer()`, `toJSON()`.
+
+Repeated class blocks are retained on read. `PersistentObjectLimits` adds
+aggregate `maxNodes` (default 100,000) and `maxDepth` (default 64) to
+`FormatLimits`. Values must be JSON-compatible: unsafe integer numbers,
+non-finite values, sparse arrays and non-JSON objects are rejected. Lower-level
+`parsePersistentObjects` / `writePersistentObjects` remain available.
+
+### `SystemNamesDocument`
+
+Models `systemNames.syl` tokens and flags without implementing the game's name
+generation algorithm. Each `SystemNameSyllable` is `{ value, flags: string[] }`.
+
+- `new SystemNamesDocument(syllables?, options?: FormatLimits)`.
+- `fromBuffer(textOrBytes, options?)`, `syllables`, `withFlag(flag)`.
+- `set(index, syllable)` replaces an entry or appends at the current length; `remove(index)` removes one existing entry.
+- `toBuffer()`, `toJSON()`.
+
+`withFlag` is a filter returning syllables, not an editing method. Unchanged
+input retains comments and original line endings; edited output is canonical.
+The lower-level helpers are `parseSystemNames` / `writeSystemNames`.
+
+### `SubtitleDocument`
+
+Models SBV cues `{ startMs, endMs, lines }` in source order. Timestamps are
+nonnegative safe integer milliseconds; each cue requires text and an end no
+earlier than its start. At least one cue is required.
+
+- `new SubtitleDocument(cues, options?: FormatLimits)`.
+- `fromBuffer(textOrBytes, options?)`, `cues`, `at(timeMs)`.
+- `set(index, cue)`, `remove(index)`, `shift(milliseconds)` return new documents; removing the final cue fails.
+- `toBuffer()`, `toJSON()`.
+
+`at` returns all overlapping cues in source order with half-open intervals
+`[startMs, endMs)`. `parseSbvSubtitles`, `writeSbvSubtitles`,
+`parseSbvTimeCode` and `formatSbvTimeCode` provide lower-level conversions.
+
+### `XmlConfigDocument`
+
+`XmlConfigDocument.fromXml(xml, options?: FormatLimits)` parses an ordered XML
+document while preserving attributes, comments, repeated elements, CDATA and
+unknown extension nodes. DTDs are unsupported. `XmlConfigValue` is
+`string | number | boolean`.
+
+- `get(path)` returns a scalar or `undefined`; requesting a container fails.
+- `entries()` returns a detached map of scalar paths and values.
+- `set(path, value)` returns an edited document; `merge(custom)` overlays another document with the same root.
+- `toXml()` exports the complete document; `difference(vanilla)` exports changed subtrees for an overlay.
+
+Paths use dots and explicit zero-based sibling indices, for example
+`Config.Item[1].Enabled`. Escape a literal dot as `\.` in the path
+(`'Config.Some\\.Name'` in a JavaScript string). An unindexed repeated name is
+ambiguous and fails. Scalar edits retain leaf attributes and sibling nodes;
+repeated groups in an overlay are replaced as groups. This is the public
+primitive also used by `BlockBehaviorConfig` and `FactionConfig`.
+
+## Database binary values
+
+The SDK exposes codecs and immutable value models for individual VARBINARY
+columns; it does not open a database connection or apply changes to a server.
+
+| Model | Read/create | Main edits and output |
+| --- | --- | --- |
+| `FleetCommandObject` | `fromBytes(bytes)`, `create(fleetDbId, commandType, args?)` | `withFleetDbId`, `withCommand`, `withArgs`, `toBytes(padTo?)`, `toJSON` |
+| `FleetRemotesObject` | `fromBytes(bytes, options?)`, `empty()` | `withRemote`, `withToggle`, `withoutRemote`, `toBytes()`, `toJSON` |
+| `SectorItemsObject` | `fromBytes(bytes)`, `from(items)`, `empty()` | `withItem`, `withoutType`, `withMerged`, `toBytes`, `toJSON` |
+| `TradePricesObject` | `fromBytes(bytes)`, `empty(entDbId)` | `withBuyOrder`, `withSellOrder`, `withoutBuyOrder`, `withoutSellOrder`, `toBytes`, `toJSON` |
+| `StarSystem` | `fromBytes(infos, resources, { includeVoid }?)`, `empty()` | `withSector`, `withSectorType`, `withResourceDensity`, `infosToBytes`, `resourcesToBytes`, `toJSON` |
+
+Corresponding raw helpers are `decodeFleetCommand` / `encodeFleetCommand`,
+`decodeFleetRemotes` / `encodeFleetRemotes`, `decodeSectorItems` /
+`encodeSectorItems`, `decodeTradeNodeItems` / `encodeTradeNodeItems`,
+`decodeSystemInfos` / `encodeSystemInfos`, and `decodeSystemResources` /
+`encodeSystemResources`. Nullable command/price input may produce `null`;
+consult the model's declared return type before editing.
 
 ---
 
@@ -1004,7 +1148,7 @@ using the document's limits. Edits flow into the existing document writers.
 import { parseSmd3, writeSmd3, emptySegment, emptySmd3File, getBlock, posToIndex, indexToPos } from 'starmade-decoder';
 ```
 
-- `parseSmd3(data)` — parses a `.smd3` file into `Smd3File`.
+- `parseSmd3(data, options?: Smd3ParseOptions)` — parses a `.smd3` file into `Smd3File`.
 - `writeSmd3(file, segVersion?)` — encodes a validated, complete region to `Buffer`; defaults to version 7 with four-byte block words and raw LZ4. Version 6 data can be migrated; incomplete recovery results and unsupported historical migrations are rejected.
 - `emptySegment(x?, y?, z?)` — creates an empty `SegmentData` at the given coordinates.
 - `emptySmd3File()` — creates an empty `Smd3File` with no segments.
@@ -1016,12 +1160,18 @@ import { parseSmd3, writeSmd3, emptySegment, emptySmd3File, getBlock, posToIndex
 **`SegmentData` fields:** `version`, `x, y, z` (entity block coordinates aligned to 32), `lastChanged: bigint`, `blockCount`, `blocks: BlockData[]` (length `BLOCK_COUNT = 32768`). Writers recalculate derived block counts.
 **`BlockData` fields:** `type: number` (`0` is air; v7 supports `0..8191`), `hp: number` (stored `0..127`), `active: boolean`, `orientation: number` (`0..31`), and optional `extra: number` (`0..63`, reserved bits 26–31). Missing `extra` means zero; decoding and writing preserve these bits.
 
+`Smd3ParseOptions` selects `mode: 'strict' | 'recover'`, `maxInputBytes`,
+`maxBlocks` and explicit `sideNormals` for geometry-dependent records.
+`legacyV7ZlibBigEndian` is an explicit compatibility flag for old SDK output.
+Recovery returns diagnostics and may set `complete: false`; writers reject
+incomplete recovered data instead of silently publishing omitted records.
+
 **Constants:** `CHUNK_DIM = 32`, `BLOCK_COUNT = 32768`, `VERSION_4BYTE = 7`, `DATA_AVAILABLE`, `DATA_EMPTY`, `DATA_SINGLE`, `DATA_BITMAP`, `DATA_SINGLE_SIDE_EDGE`.
 
 ### `.sment` blueprint archives
 
-- `parseSment(data)` — parses a `.sment` ZIP archive into a `BlueprintArchive`.
-- `parseBlueprintFolder(folderPath)` — parses an extracted blueprint directory into the same `BlueprintArchive` view.
+- `parseSment(data, options?: BlueprintParseOptions)` — parses a `.sment` ZIP archive into a `BlueprintArchive`.
+- `parseBlueprintFolder(folderPath, options?: BlueprintParseOptions)` — parses an extracted blueprint directory into the same `BlueprintArchive` view.
 - `BLUEPRINT_TYPE` — array of valid blueprint type strings in ordinal order.
 - `BLUEPRINT_CLASSIFICATION` — array of valid `BlueprintClassification` names in ordinal order.
 
@@ -1042,7 +1192,10 @@ import { parseSmd3, writeSmd3, emptySegment, emptySmd3File, getBlock, posToIndex
 - `document.toBuffer(options?)`, `writeFolder(destination, options?)` — exports.
 - `new Smd3Document(bytes, segmentOptions?)` — `file` and `toBuffer(replacementFile?)` preserve original region allocation and unchanged records.
 
-`BlueprintWriteOptions` extends `BlueprintParseOptions` with `overwrite?: boolean`.
+`BlueprintParseOptions` includes `mode`, `maxInputBytes`, `maxEntryBytes`,
+`maxTotalBytes`, `maxEntries`, `maxEntities`, `maxDepth`, `maxBlocks`,
+`maxTagNodes` and `segmentOptions`. Document writers require a complete model.
+`BlueprintWriteOptions` extends these options with `overwrite?: boolean`.
 See [guarantees, model updates, Java reference and qualification](BLUEPRINT_EDITING.md).
 
 ### `.smbph` header files
@@ -1057,7 +1210,8 @@ See [guarantees, model updates, Java reference and qualification](BLUEPRINT_EDIT
 
 ### `.smtpl` template files
 
-- `parseSmtpl(data)` — parses a `.smtpl` file into `BlueprintTemplate`.
+- `parseSmtpl(data)` — parses a `.smtpl` file into `SmtplFile`.
+- `normalizeBlueprintTemplate(file)` or `new BlueprintTemplate(file)` — supplies the typed editing helpers below.
 - `writeSmtpl(template)` — encodes a `BlueprintTemplate` or compatible high-level object to `Buffer`.
 - `templatePositionKey(position)` / `templatePositionFromKey(key)` — convert StarMade template position keys to `{ x, y, z }`.
 
@@ -1086,11 +1240,31 @@ The parser preserves binary fallback data internally for unchanged round-trips, 
 
 ### `.smbmm` mod-mapping files
 
-- `parseSmbmm(data)` — `SmbmmFile` with `isEmpty: boolean`, `size: number`, `raw: Uint8Array`.
+`BlueprintModMappings` models the actual `modName~blockName~shortId` text,
+including legacy zlib compression and empty vanilla files.
+
+- `new BlueprintModMappings(mappings?, options?: ModMappingOptions)`; each mapping is `{ modName, blockName, id }` with a signed-short ID.
+- `fromBuffer(bytes, options?: FormatLimits)`, `mappings`, `size`, `compression`, `get(id)`, `idOf(modName, blockName)`.
+- `withMapping(record)`, `withoutId(id)` return immutable edits; conflicting IDs or namespaces fail.
+- `translationTo(target)` returns an explicit source-ID to target-ID map; missing target namespaces fail.
+- `toBuffer()` retains original bytes/compression after no-op or semantic revert; `toJSON()` returns detached records.
+
+`ModMappingOptions` adds `compression: 'none' | 'zlib'` to `FormatLimits`.
+The lower-level `parseSmbmm(data, options?)` / `writeSmbmm(file, options?)`
+use `SmbmmFile`, including `namespacedMappings`, `format`, `raw`, `size` and
+`isEmpty`. `SmbmmParseOptions` explicitly selects `legacyInt32Pairs` for the
+obsolete SDK pair layout, or `mode: 'preserve'` for opaque unsupported data;
+strict namespace parsing is the default.
 
 ### Simulation files
 
-- `parseSim(data)` — `SimFile` with `version`, `groups: SimGroup[]`, `lastUpdate?: bigint`.
+`parseSim(data, options?: TagReadOptions)` returns a mutable `SimFile` DTO
+with `version`, `groups`, `uniqueGroups` and the deprecated `lastUpdate`
+counter alias. Each group carries `metadata` and a source `raw` Tag to retain
+extensions. Its `simulation` accessor produces an immutable `SimulationState`
+from current DTO edits; assigning a state replaces that projection.
+`rootTag` is a detached view. `writeSim(file, options?)` emits the current
+state and retains the parsed envelope. Conflicting counter aliases fail.
 
 ---
 
@@ -1154,3 +1328,37 @@ const rich = new RichSegmentController(ship);
 - `rich.blockStats` — `BlockCountStats | null` from the entity's `ElementCountMap`.
 - `rich.analyzeSmd3(smd3File)` — `SegmentStats[]` for each segment of the given file.
 - `rich.summary()` — compact object with `{ uniqueId, realName, entityType, sector, factionId, controlLinks, topControlTypes }`.
+
+## SkinDocument (`.smskin`)
+
+`SkinDocument` is a source-preserving ZIP document, with four indexed opaque PNG
+resources. Import all symbols from `starmade-decoder`.
+
+```ts
+SkinDocument.fromBuffer(input: Uint8Array, options?: SkinOptions): SkinDocument
+SkinDocument.create(textures: SkinTextures, options?: SkinOptions): SkinDocument
+```
+
+`SkinTexture` is `'mainDiffuse' | 'mainEmission' | 'helmetDiffuse' | 'helmetEmission'`.
+`SkinTextures` maps all four roles to `Uint8Array`. `SKIN_TEXTURE_FILES` maps the
+roles to the canonical `skin_main_diff.png`, `skin_main_em.png`,
+`skin_helmet_diff.png`, and `skin_helmet_em.png` names.
+
+| Member | Contract |
+| --- | --- |
+| `texture(role)` | Detached `Buffer` containing the original PNG bytes |
+| `textureInfo(role)` | `SkinTextureInfo`: actual stored `name` and `byteLength` |
+| `files` | Detached `Map<string, Buffer \| null>`; null means an explicit directory |
+| `withTexture(role, png)` | Immutable replacement, retaining its stored filename |
+| `withFile(name, bytesOrNull)` | Immutable resource add/replace, preserving other entries |
+| `withoutFile(name)` | Remove an ancillary resource; required textures cannot be removed |
+| `toBuffer()` | Exact source bytes for unchanged/reverted data; retained untouched ZIP records on edits |
+| `toJSON()` | Texture descriptions and sorted filenames, without embedded image data |
+
+`SkinOptions` has `maxInputBytes`, `maxOutputBytes`, `maxEntryBytes`, `maxTotalBytes`
+and `maxEntries`. Defaults are 16 MiB input/output/total, 4 MiB per entry and 64
+entries. Archive limits propagate to every revision. Four unambiguous root-level
+texture suffixes and PNG signatures are required. ZIP structure, paths, CRCs and
+resource budgets are validated through the existing ZIP codec. PNG pixels and
+image dimensions are not decoded or validated. Unknown resources are retained;
+custom prefixes follow client lookup, without implying server upload acceptance.

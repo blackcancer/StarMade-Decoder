@@ -75,6 +75,7 @@ export const Tags = {
 
   /** Creates a TAG_Long (int64). */
   long(name: string | null, value: bigint | number): Tag {
+    if (typeof value === 'number' && !Number.isSafeInteger(value)) throw new RangeError('LONG number inputs must be safe integers; use bigint');
     return new Tag(TagType.LONG, name, typeof value === 'number' ? BigInt(value) : value);
   },
 

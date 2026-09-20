@@ -1,71 +1,50 @@
 /**
- * @fileoverview Floating Items
- *
- * Provides legacy typed parsers for StarMade entity files and related domain structures.
- *
+ * @fileoverview Typed projection of archived metadata objects grouped by sector.
+ * Delegates validation to the lossless archive model so both APIs use the game's
+ * INT identifier, SHORT type, opaque Tag payload and optional SHORT subtype.
  * @author InitSysRev
- * @version 1.0.0
- */
-
-/**
- * FloatingItems — parser for FLOATING_ITEMS_ARCHIVE.ent
- *
- * Structure :
- *   STRUCT [
- *     BYTE  version
- *     INT   count
- *     STRUCT "floatingItems" [
- *       items...
- *     ]
- *   ]
+ * @version 2.0.0
  */
 
 import { Tag } from '../core/Tag.js';
 import { TagType } from '../core/TagType.js';
+import { FloatingItemsArchive, type FloatingItemPosition } from '../objects/FloatingItems.js';
 
-/**
- * Describes the FloatingItemEntry data shape used by legacy typed entity parsing.
- */
+/** A distinct metadata object and its containing sector; the payload is detached. */
 export interface FloatingItemEntry {
-  type?: number;
-  count?: number;
+  id: number;
+  type: number;
+  subObjectId: number;
+  payload: Tag;
+  sector: FloatingItemPosition;
 }
 
-/**
- * Describes the FloatingItemsData data shape used by legacy typed entity parsing.
- */
-export interface FloatingItemsData {
-  version: number;
-  declaredCount: number;
+/** One archived sector, including sectors that currently contain no objects. */
+export interface FloatingItemSectorData {
+  position: FloatingItemPosition;
   items: FloatingItemEntry[];
 }
 
-/**
- * Parses a root tag from FLOATING_ITEMS_ARCHIVE.ent
- */
+/** Semantic archive projection; nextId is an identifier counter, never a quantity. */
+export interface FloatingItemsData {
+  version: number;
+  nextId: number;
+  format: 'modern' | 'legacy';
+  sectors: FloatingItemSectorData[];
+  items: FloatingItemEntry[];
+}
+
+/** Parses a complete metadata archive and returns a detached typed projection. */
 export function parseFloatingItems(root: Tag): FloatingItemsData {
   if (root.type !== TagType.STRUCT) {
     throw new TypeError(`FloatingItems: expected STRUCT root, got ${root.type}`);
   }
 
-  const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
-
-  const version        = s[0]?.type === TagType.BYTE ? s[0].getByte() : 0;
-  const declaredCount  = s[1]?.type === TagType.INT  ? s[1].getInt()  : 0;
-
-  const items: FloatingItemEntry[] = [];
-  const itemsStruct = s.find(t => t.name === 'floatingItems' && t.type === TagType.STRUCT);
-  if (itemsStruct) {
-    for (const item of itemsStruct.getStruct().filter(t => t.type !== TagType.FINISH)) {
-      if (item.type === TagType.STRUCT) {
-        const fs = item.getStruct().filter(t => t.type !== TagType.FINISH);
-        items.push({
-          type:  fs[0]?.type === TagType.SHORT ? fs[0].getShort() : undefined,
-          count: fs[1]?.type === TagType.INT   ? fs[1].getInt()   : undefined,
-        });
-      }
-    }
-  }
-
-  return { version, declaredCount, items };
+  const archive = FloatingItemsArchive.fromTag(root);
+  const sectors = archive.sectors.map(group => ({ position: group.position,
+    items: group.items.map(item => ({ id: item.id, type: item.blockType, subObjectId: item.subObjectId,
+      payload: item.payload, sector: group.position })),
+  }));
+  return { version: archive.version, nextId: archive.nextId, format: archive.format,
+    sectors, items: sectors.flatMap(group => group.items) };
 }

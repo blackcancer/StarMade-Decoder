@@ -1,300 +1,206 @@
 /**
- * @fileoverview Simulation
- *
- * Defines high-level StarMade domain objects with typed accessors, mutation helpers, and round-trip serialization support.
- *
- * @author InitSysRev
- * @version 1.1.0
+ * @fileoverview Immutable simulation records retaining opaque fields and complete Tag file envelopes.
+ * Contract inspected locally in StarMade-Open decf3a1: SimulationManager, SimulationGroup,
+ * TargetSectorSimulationGroup, AttackSingleEntitySimulationGroup, SimPrograms and NPCFactionManager.
  */
-
-/**
- * NPCFactionManager — business object for NPCFACTIONS_*.tag
- *
- * Tag structure (NPCFactionManager.toTagStructure — Java source):
- *   STRUCT [
- *     BYTE  version  (= 0)
- *     FINISH
- *   ]
- *
- * Note: NPC factions are not stored here — they live in FACTIONS.fac as
- * regular Faction entries with isNPC()==true. This file only carries the
- * manager version byte written by the server at shutdown.
- *
- * SimulationGroup structure (SimulationGroup.toTagStructure):
- *   STRUCT [
- *     BYTE     version
- *     INT      type
- *     STRUCT   members — STRING list
- *     LONG     startTime
- *     VECTOR3i startSector
- *     INT      programId
- *     FINISH
- *   ]
- *
- * SimulationState structure (SimulationManager.toTagStructure):
- *   STRUCT SimulationState [
- *     BYTE    version
- *     STRUCT  groups — SimulationGroup list
- *     LONG    lastUpdate
- *     FINISH
- *   ]
- *
- * Source: NPCFactionManager.java, SimulationManager.java
- */
-
 import { Tag } from '../core/Tag.js';
 import { Tags } from '../core/TagBuilder.js';
 import { TagType } from '../core/TagType.js';
-import { FINISH_TAG } from '../core/Tag.js';
-import { readFrom, writeTo } from '../core/TagParser.js';
+import { readTagDocument, writeTo, type TagDocument, type TagReadOptions } from '../core/TagParser.js';
+import { copyTagModel, inheritTagModel, rememberTagModel, renderTagModel, tagModelOptions, type TagModelFields } from '../core/TagModel.js';
+import { DecodeError } from '../core/DecodeError.js';
 import type { Vector3i } from '../types/Vectors.js';
 
-// ── SimulationGroup ────────────────────────────────────────────────────────────
-
-/**
- * Represents the SimulationGroup model used by high-level StarMade object modelling.
- */
-export class SimulationGroup {
-  /**
-   * Creates a SimulationGroup instance.
-   *
-   * @param version - Input value for the constructor operation.
-   * @param type - Input value for the constructor operation.
-   * @param members - Input value for the constructor operation.
-   * @param startTime - Input value for the constructor operation.
-   * @param startSector - Input value for the constructor operation.
-   * @param programId - Input value for the constructor operation.
-   */
-  constructor(
-    public version: number,
-    public type: number,
-    public members: string[],
-    public startTime: bigint,
-    public startSector: Vector3i | null,
-    public programId: number,
-  ) {}
-
-  /**
-   * Creates a value from Tag.
-   *
-   * @param tag - Input value for the fromTag operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromTag(tag: Tag): SimulationGroup {
-    const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
-    const version     = s[0]?.type === TagType.BYTE    ? s[0].getByte()     : 0;
-    const type        = s[1]?.type === TagType.INT     ? s[1].getInt()      : 0;
-    const members: string[] = [];
-    if (s[2]?.type === TagType.STRUCT) {
-      for (const m of s[2].getStruct().filter(t => t.type !== TagType.FINISH)) {
-        if (m.type === TagType.STRING) members.push(m.getString());
-      }
-    }
-    const startTime   = s[3]?.type === TagType.LONG     ? s[3].getLong()     : 0n;
-    const startSector = s[4]?.type === TagType.VECTOR3i ? s[4].getVector3i() : null;
-    const programId   = s[5]?.type === TagType.INT      ? s[5].getInt()      : 0;
-    return new SimulationGroup(version, type, members, startTime, startSector, programId);
-  }
-
-  /**
-   * Converts this value to Tag.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toTag(): Tag {
-    const memberTags = [...this.members.map(m => Tags.string(null, m)), FINISH_TAG];
-    const children: Tag[] = [
-      Tags.byte(null, this.version),
-      Tags.int(null, this.type),
-      new Tag(TagType.STRUCT, null, memberTags),
-      Tags.long(null, this.startTime),
-    ];
-    if (this.startSector) {
-      children.push(Tags.vector3i(null, this.startSector.x, this.startSector.y, this.startSector.z));
-    }
-    children.push(Tags.int(null, this.programId));
-    return Tags.struct(null, children);
-  }
-
-  /**
-   * Builds the diagnostic string representation for this value.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toString(): string {
-    return `SimulationGroup(type=${this.type}, members=${this.members.length}, sector=${JSON.stringify(this.startSector)})`;
+/** Private file envelopes are shared only between immutable snapshots. */
+const documents = new WeakMap<object, TagDocument>();
+/** Positional children without the mandatory terminator. */
+function children(tag: Tag): Tag[] { return tag.getStruct().filter(value => value.type !== TagType.FINISH); }
+/** Rejects required fields with an absent or incorrect wire type. */
+function required(parts: Tag[], types: TagType[]): void {
+  if (types.some((type, index) => parts[index]?.type !== type)) throw new DecodeError('E_FORMAT', 'Invalid simulation field types');
+}
+/** Validates a known version or ordinal before interpreting version-specific fields. */
+function supported(value: number, allowed: readonly number[], label: string): void {
+  if (!allowed.includes(value)) throw new DecodeError('E_UNSUPPORTED', `Unsupported simulation ${label}: ${value}`);
+}
+/** Carries private source fields and the file envelope into a validated immutable edit. */
+function inherited<T extends object>(previous: object, next: T): T {
+  inheritTagModel(previous, next); const document = documents.get(previous);
+  if (document) documents.set(next, document);
+  return next;
+}
+/** Serializes a complete document while retaining compression, version and trailing data. */
+function encoded(model: object, root: Tag, options: TagReadOptions): Buffer {
+  const document = documents.get(model);
+  return document ? document.toBuffer(root) : writeTo(root, options);
+}
+/** Checks subtype-specific metadata without discarding its extension fields. */
+function metadataFor(type: number, tag: Tag): void {
+  if (tag.type === TagType.FINISH) throw new DecodeError('E_FORMAT', 'Simulation metadata must occupy slot 6');
+  if (type === 0 && tag.type !== TagType.VECTOR3i) throw new DecodeError('E_FORMAT', 'Target-sector metadata requires VECTOR3i');
+  if (type === 2) {
+    if (tag.type !== TagType.STRUCT) throw new DecodeError('E_FORMAT', 'Attack metadata requires STRUCT');
+    required(children(tag), [TagType.VECTOR3i, TagType.STRING]);
   }
 }
 
-// ── NPCFactionManager ─────────────────────────────────────────────────────────
+/** Editable semantic fields of an immutable group; metadata is explicit subtype data. */
+export interface SimulationGroupFields {
+  version: number; type: number; members: readonly string[]; startTime: bigint;
+  startSector: Vector3i; programId: number; metadata: Tag;
+}
 
-/**
- * Represents the NPCFactionManager model used by high-level StarMade object modelling.
- */
-export class NPCFactionManager {
-  /**
-   * Creates a NPCFactionManager instance.
-   *
-   * @param version - Input value for the constructor operation.
-   */
-  constructor(
-    /** File format version (always 0 in current StarMade). */
-    public version: number,
-  ) {}
-
-  // ── Serialization ─────────────────────────────────────────────────────────
-
-  /**
-   * Creates a value from Tag.
-   *
-   * @param root - Input value for the fromTag operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromTag(root: Tag): NPCFactionManager {
-    if (root.type !== TagType.STRUCT) throw new TypeError('NPCFactionManager: expected STRUCT');
-    const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
-    const version = s[0]?.type === TagType.BYTE ? s[0].getByte() : 0;
-    return new NPCFactionManager(version);
+/** One supported group, including the mandatory start sector and complete metadata payload. */
+export class SimulationGroup implements SimulationGroupFields {
+  private readonly memberValues: readonly string[];
+  private readonly sector: Vector3i;
+  private readonly meta: Tag;
+  private readonly options: TagReadOptions;
+  /** Creates a validated group; BYTE zero is the real default metadata only for a ravaging group. */
+  constructor(readonly version: number, readonly type: number, members: readonly string[], readonly startTime: bigint,
+    startSector: Vector3i, readonly programId: number, metadata: Tag = Tags.byte(null, 0), options: TagReadOptions = {}) {
+    this.options = tagModelOptions(options);
+    supported(version, [0, 1], 'group version'); supported(type, [0, 1, 2], 'group type');
+    if (!startSector) throw new DecodeError('E_FORMAT', 'Simulation startSector is required');
+    if (programId >= 0) supported(programId, [0, 1], 'program');
+    this.memberValues = [...members]; this.sector = { x: startSector.x, y: startSector.y, z: startSector.z };
+    metadataFor(type, metadata); this.meta = copyTagModel(metadata, this.options);
+    writeTo(this.toTag(), this.options); Object.freeze(this);
   }
-
-  /**
-   * Converts this value to Tag.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
+  /** Detached member identifiers cannot mutate an existing model. */
+  get members(): string[] { return [...this.memberValues]; }
+  /** Detached coordinates cannot mutate an existing model. */
+  get startSector(): Vector3i { return { ...this.sector }; }
+  /** Detached metadata includes subtype-specific extensions. */
+  get metadata(): Tag { return copyTagModel(this.meta, this.options); }
+  /** Returns a validated edit without sharing mutable caller-owned arrays, vectors or Tags. */
+  with(changes: Partial<SimulationGroupFields>): SimulationGroup {
+    const fields = { version: this.version, type: this.type, members: this.members, startTime: this.startTime,
+      startSector: this.startSector, programId: this.programId, metadata: this.metadata, ...changes };
+    return inherited(this, new SimulationGroup(fields.version, fields.type, fields.members, fields.startTime,
+      fields.startSector, fields.programId, fields.metadata, this.options));
+  }
+  /** Reads required current/legacy fields strictly and retains every unmodelled trailing field. */
+  static fromTag(tag: Tag, options: TagReadOptions = {}): SimulationGroup {
+    const original = copyTagModel(tag, options), parts = children(original);
+    required(parts, [TagType.BYTE, TagType.INT, TagType.STRUCT, TagType.LONG, TagType.VECTOR3i, TagType.INT]);
+    if (!parts[6]) throw new DecodeError('E_INCOMPLETE', 'Simulation metadata is missing');
+    const members = children(parts[2]);
+    if (members.some(member => member.type !== TagType.STRING)) throw new DecodeError('E_FORMAT', 'Simulation members require STRING records');
+    const result = new SimulationGroup(parts[0].getByte(), parts[1].getInt(), members.map(member => member.getString()),
+      parts[3].getLong(), parts[4].getVector3i(), parts[5].getInt(), parts[6], options);
+    rememberTagModel(result, original, result.fields(original), options); return result;
+  }
+  /** Renders only edited fields, retaining root/member names and all unknown slots. */
   toTag(): Tag {
-    return Tags.struct(null, [Tags.byte(null, this.version)]);
+    const initial = Tags.struct(null, []), source = renderTagModel(this, new Map(), initial, this.options);
+    const result = renderTagModel(this, this.fields(source), initial, this.options);
+    writeTo(result, this.options); return result;
   }
-
-  /** Encodes to binary for NPCFACTIONS_*.tag. */
-  toBuffer(): Buffer { return writeTo(this.toTag()); }
-
-  /**
-   * Creates a value from Buffer.
-   *
-   * @param data - Input value for the fromBuffer operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromBuffer(data: Buffer | Uint8Array): NPCFactionManager {
-    return NPCFactionManager.fromTag(readFrom(data));
+  /** Stable diagnostic representation uses the group's actual persisted fields. */
+  toString(): string { return `SimulationGroup(type=${this.type}, members=${this.memberValues.length}, sector=${JSON.stringify(this.sector)})`; }
+  /** Known fields retain original member names by position when replacing a collection. */
+  private fields(root: Tag): TagModelFields {
+    const previous = children(root)[2], members = previous ? children(previous) : [];
+    return new Map([[0, Tags.byte(null, this.version)], [1, Tags.int(null, this.type)],
+      [2, Tags.struct(null, this.memberValues.map((member, index) => Tags.string(members[index]?.name ?? null, member)))],
+      [3, Tags.long(null, this.startTime)], [4, Tags.vector3i(null, this.sector.x, this.sector.y, this.sector.z)],
+      [5, Tags.int(null, this.programId)], [6, copyTagModel(this.meta, this.options)]]);
   }
+}
 
-  /**
-   * Builds the diagnostic string representation for this value.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
+/** Only the NPC manager version is modeled; other source fields remain opaque. */
+export class NPCFactionManager {
+  private readonly options: TagReadOptions;
+  /** Creates the supported version-zero manager. */
+  constructor(readonly version: number, options: TagReadOptions = {}) {
+    this.options = tagModelOptions(options); supported(version, [0], 'NPC manager version');
+    writeTo(this.toTag(), this.options); Object.freeze(this);
+  }
+  /** Returns a validated immutable edit, retaining the original source/envelope. */
+  with(changes: { version?: number }): NPCFactionManager {
+    return inherited(this, new NPCFactionManager({ version: this.version, ...changes }.version, this.options));
+  }
+  /** Reads the mandatory version byte and preserves extensions. */
+  static fromTag(root: Tag, options: TagReadOptions = {}): NPCFactionManager {
+    const original = copyTagModel(root, options), parts = children(original); required(parts, [TagType.BYTE]);
+    const result = new NPCFactionManager(parts[0].getByte(), options);
+    rememberTagModel(result, original, new Map([[0, Tags.byte(null, result.version)]]), options); return result;
+  }
+  /** Reads with caller limits and snapshots the original binary envelope. */
+  static fromBuffer(data: Buffer | Uint8Array, options: TagReadOptions = {}): NPCFactionManager {
+    const document = readTagDocument(data, options), result = NPCFactionManager.fromTag(document.root, tagModelOptions(options));
+    documents.set(result, document); return result;
+  }
+  /** Returns a detached tree with source extensions intact. */
+  toTag(): Tag {
+    const result = renderTagModel(this, new Map([[0, Tags.byte(null, this.version)]]), Tags.struct(null, []), this.options);
+    writeTo(result, this.options); return result;
+  }
+  /** Returns detached bytes, preserving an unchanged original file exactly. */
+  toBuffer(): Buffer { return encoded(this, this.toTag(), this.options); }
+  /** Human-readable supported manager version. */
   toString(): string { return `NPCFactionManager(v${this.version})`; }
 }
 
-// ── SimulationState ────────────────────────────────────────────────────────────
+/** Semantic state: uniqueGroups is the next group-ID counter, never a timestamp. */
+export interface SimulationStateFields { version: number; groups: readonly SimulationGroup[]; uniqueGroups: bigint; }
 
-/**
- * Represents the SimulationState model used by high-level StarMade object modelling.
- */
-export class SimulationState {
-  /**
-   * Creates a SimulationState instance.
-   *
-   * @param version - Input value for the constructor operation.
-   * @param groups - Input value for the constructor operation.
-   * @param lastUpdate - Input value for the constructor operation.
-   */
-  constructor(
-    public version: number,
-    public groups: SimulationGroup[],
-    public lastUpdate: bigint,
-  ) {}
-
-  // ── Updates ──────────────────────────────────────────────────────────
-
-  /**
-   * Handles the addGroup operation used by high-level StarMade object modelling.
-   *
-   * @param group - Input value for the addGroup operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  addGroup(group: SimulationGroup): SimulationState {
-    return new SimulationState(this.version, [...this.groups, group], this.lastUpdate);
+/** Immutable group collection and group-ID generator, with lossless source retention. */
+export class SimulationState implements SimulationStateFields {
+  private readonly values: readonly SimulationGroup[];
+  private readonly options: TagReadOptions;
+  /** Validates and snapshots groups under the same caller-selected traversal/output budgets. */
+  constructor(readonly version: number, groups: readonly SimulationGroup[], readonly uniqueGroups: bigint, options: TagReadOptions = {}) {
+    this.options = tagModelOptions(options); supported(version, [0], 'state version');
+    this.values = groups.map(group => SimulationGroup.fromTag(group.toTag(), this.options));
+    writeTo(this.toTag(), this.options); Object.freeze(this);
   }
-
-  /**
-   * Handles the removeGroup operation used by high-level StarMade object modelling.
-   *
-   * @param idx - Input value for the removeGroup operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  removeGroup(idx: number): SimulationState {
-    return new SimulationState(this.version, this.groups.filter((_, i) => i !== idx), this.lastUpdate);
+  /** Detached array of immutable group snapshots. */
+  get groups(): SimulationGroup[] { return [...this.values]; }
+  /** @deprecated Misnamed legacy alias for uniqueGroups; this is not an update time. */
+  get lastUpdate(): bigint { return this.uniqueGroups; }
+  /** Returns a validated state edit preserving original fields and the binary envelope. */
+  with(changes: Partial<SimulationStateFields>): SimulationState {
+    const fields = { version: this.version, groups: this.values, uniqueGroups: this.uniqueGroups, ...changes };
+    return inherited(this, new SimulationState(fields.version, fields.groups, fields.uniqueGroups, this.options));
   }
-
-  /**
-   * Returns a copy updated with LastUpdate.
-   *
-   * @param ts - Input value for the withLastUpdate operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  withLastUpdate(ts: bigint): SimulationState {
-    return new SimulationState(this.version, this.groups, ts);
+  /** Adds a detached group without inventing group-ID allocation or gameplay behavior. */
+  addGroup(group: SimulationGroup): SimulationState { return this.with({ groups: [...this.values, group] }); }
+  /** Removes an existing group; invalid positions fail explicitly. */
+  removeGroup(index: number): SimulationState {
+    if (!Number.isInteger(index) || index < 0 || index >= this.values.length) throw new DecodeError('E_RANGE', 'Simulation group index is out of range');
+    return this.with({ groups: this.values.filter((_, position) => position !== index) });
   }
-
-  // ── Serialization ─────────────────────────────────────────────────────────
-
-  /**
-   * Creates a value from Tag.
-   *
-   * @param root - Input value for the fromTag operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromTag(root: Tag): SimulationState {
-    if (root.type !== TagType.STRUCT) throw new TypeError('SimulationState: expected STRUCT');
-    const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
-    const version    = s[0]?.type === TagType.BYTE ? s[0].getByte() : 0;
-    const lastUpdate = s[2]?.type === TagType.LONG ? s[2].getLong() : 0n;
-    const groups: SimulationGroup[] = [];
-    if (s[1]?.type === TagType.STRUCT) {
-      for (const g of s[1].getStruct().filter(t => t.type !== TagType.FINISH)) {
-        if (g.type === TagType.STRUCT) {
-          try { groups.push(SimulationGroup.fromTag(g)); } catch { /* skip malformed */ }
-        }
-      }
-    }
-    return new SimulationState(version, groups, lastUpdate);
+  /** Explicitly updates the group-ID generator without treating it as a timestamp. */
+  withUniqueGroups(value: bigint): SimulationState { return this.with({ uniqueGroups: value }); }
+  /** @deprecated Use withUniqueGroups; the supplied value is a group-ID counter. */
+  withLastUpdate(value: bigint): SimulationState { return this.withUniqueGroups(value); }
+  /** Reads required fields strictly; the legacy absent counter defaults to zero as in the Java reader. */
+  static fromTag(root: Tag, options: TagReadOptions = {}): SimulationState {
+    const original = copyTagModel(root, options), parts = children(original); required(parts, [TagType.BYTE, TagType.STRUCT]);
+    if (parts[2] && parts[2].type !== TagType.LONG) throw new DecodeError('E_FORMAT', 'Simulation uniqueGroups requires LONG');
+    const groups = children(parts[1]).map(group => SimulationGroup.fromTag(group, options));
+    const result = new SimulationState(parts[0].getByte(), groups, parts[2] ? parts[2].getLong() : 0n, options);
+    rememberTagModel(result, original, result.fields(), options); return result;
   }
-
-  /**
-   * Converts this value to Tag.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
+  /** Reads with caller limits and snapshots the original binary envelope. */
+  static fromBuffer(data: Buffer | Uint8Array, options: TagReadOptions = {}): SimulationState {
+    const document = readTagDocument(data, options), result = SimulationState.fromTag(document.root, tagModelOptions(options));
+    documents.set(result, document); return result;
+  }
+  /** Returns a detached source-preserving tree, validating all output limits. */
   toTag(): Tag {
-    const groupTags = [...this.groups.map(g => g.toTag()), FINISH_TAG];
-    return Tags.struct('SimulationState', [
-      Tags.byte(null, this.version),
-      new Tag(TagType.STRUCT, null, groupTags),
-      Tags.long(null, this.lastUpdate),
-    ]);
+    const result = renderTagModel(this, this.fields(), Tags.struct('SimulationState', []), this.options);
+    writeTo(result, this.options); return result;
   }
-
-  /** Encodes to binary for SIMULATION_STATE.sim. */
-  toBuffer(): Buffer { return writeTo(this.toTag()); }
-
-  /**
-   * Creates a value from Buffer.
-   *
-   * @param data - Input value for the fromBuffer operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromBuffer(data: Buffer | Uint8Array): SimulationState {
-    return SimulationState.fromTag(readFrom(data));
-  }
-
-  /**
-   * Builds the diagnostic string representation for this value.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toString(): string {
-    return `SimulationState(v${this.version}, ${this.groups.length} groups, lastUpdate=${this.lastUpdate})`;
+  /** Returns detached bytes with exact no-op and reverted output. */
+  toBuffer(): Buffer { return encoded(this, this.toTag(), this.options); }
+  /** Diagnostic output names the counter according to its actual meaning. */
+  toString(): string { return `SimulationState(v${this.version}, ${this.values.length} groups, uniqueGroups=${this.uniqueGroups})`; }
+  /** Projects only modeled fields; source-only slots and names remain retained. */
+  private fields(): TagModelFields {
+    return new Map([[0, Tags.byte(null, this.version)], [1, Tags.struct(null, this.values.map(group => group.toTag()))],
+      [2, Tags.long(null, this.uniqueGroups)]]);
   }
 }

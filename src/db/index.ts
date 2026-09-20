@@ -76,3 +76,7 @@ export {
   writePersistentObjects,
 } from './PersistentObjects.js';
 export type { PersistentObjectFile, PersistentObjectEntry } from './PersistentObjects.js';
+
+export { WorldSeedDocument } from './WorldSeedDocument.js';
+export { PersistentObjectDocument } from './PersistentObjectDocument.js';
+export type { PersistentObjectLimits } from './PersistentObjectDocument.js';

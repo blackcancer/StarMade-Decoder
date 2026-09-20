@@ -50,3 +50,6 @@ export * from './entity/index.js';
 
 // Smd3 parser
 export * from './smd3/index.js';
+
+export type { FormatLimits } from './core/FormatLimits.js';
+export * from './skin/index.js';

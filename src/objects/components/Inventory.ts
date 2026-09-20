@@ -20,8 +20,9 @@ import { Tags } from '../../core/TagBuilder.js';
 import { TagType } from '../../core/TagType.js';
 import { FINISH_TAG } from '../../core/Tag.js';
 import { boundedInteger, DecodeError } from '../../core/DecodeError.js';
-import { copyInventoryTag, readInventoryWire, writeInventoryWire } from './InventoryWire.js';
-import { writeTo } from '../../core/TagParser.js';
+import { copyInventoryTag, inventoryTagBytes, readInventoryWire, writeInventoryWire } from './InventoryWire.js';
+import type { TagReadOptions } from '../../core/TagParser.js';
+import { tagModelOptions } from '../../core/TagModel.js';
 
 // ── ItemStack ─────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ import { writeTo } from '../../core/TagParser.js';
 export interface ItemMeta {
   id: number;
   type: number;
+  /** Legacy SDK placeholder; only zero is representable in either inventory encoding. */
   orientation: number;
   subId: number;
   /** Opaque metadata payload; its contents are not an item quantity. */
@@ -43,7 +45,7 @@ export interface ItemGroup { name: string; items: { type: number; count: number 
 /** Optional caller constraint; the file itself does not encode a universal inventory volume limit. */
 export interface InventoryCapacity { maximum: number; volumeOf: (type: number) => number; }
 /** Optional occupied-slot bound retained by every immutable edit after reading. */
-export interface InventoryReadOptions { maxSlots?: number; }
+export interface InventoryReadOptions extends TagReadOptions { maxSlots?: number; }
 /** JSON-safe item projection; opaque payloads contain complete encoded Tags, never truncated previews. */
 export interface ItemStackJSON {
   slot: number; type: number; count: number;
@@ -57,6 +59,7 @@ export interface ItemStackJSON {
 export class ItemStack {
   private readonly _meta?: ItemMeta;
   private readonly _group?: ItemGroup;
+  private readonly options: TagReadOptions;
   /**
    * Creates a ItemStack instance.
    *
@@ -74,14 +77,20 @@ export class ItemStack {
     /** Optional metadata (orientation, subtype...) */
     meta?: ItemMeta,
     group?: ItemGroup,
+    options: TagReadOptions = {},
   ) {
+    this.options = Object.freeze(tagModelOptions(options));
     boundedInteger(slot, 'inventory slot', 0x7fffffff);
     boundedInteger(count, 'item count', 0x7fffffff);
     if (!Number.isInteger(type) || type < -32768 || type > 32767) throw new DecodeError('E_RANGE', 'Item type must be a signed short');
+    if (meta) {
+      if (!Number.isInteger(meta.id) || meta.id < -0x80000000 || meta.id > 0x7fffffff) throw new DecodeError('E_RANGE', 'Metadata id must be a signed int');
+      for (const value of [meta.type, meta.subId]) if (!Number.isInteger(value) || value < -32768 || value > 32767) throw new DecodeError('E_RANGE', 'Metadata type and subtype must be signed shorts');
+      if (meta.orientation !== 0) throw new DecodeError('E_UNSUPPORTED', 'Inventory encodings do not store metadata orientation');
+    }
     if (meta?.payload) {
       if (type >= 0 || type === -32768 || type !== meta.type || count !== 1) throw new DecodeError('E_FORMAT', 'A special metadata item has quantity one');
       boundedInteger(meta.id, 'metadata id', 0x7fffffff);
-      if (!Number.isInteger(meta.subId) || meta.subId < -32768 || meta.subId > 32767) throw new DecodeError('E_RANGE', 'Metadata subtype must be a signed short');
     }
     if (group) {
       if (type !== -32768 || meta || typeof group.name !== 'string' || group.items.length === 0) throw new DecodeError('E_FORMAT', 'Invalid multislot container');
@@ -93,8 +102,9 @@ export class ItemStack {
       }
       if (count !== total) throw new DecodeError('E_FORMAT', 'Multislot aggregate differs from its members');
     }
-    this._meta = meta ? { ...meta, ...(meta.payload ? { payload: copyInventoryTag(meta.payload) } : {}) } : undefined;
+    this._meta = meta ? { ...meta, ...(meta.payload ? { payload: copyInventoryTag(meta.payload, this.options) } : {}) } : undefined;
     this._group = group ? structuredClone(group) : undefined;
+    Object.defineProperty(this, 'options', { enumerable: false });
     Object.defineProperty(this, '_meta', { enumerable: false });
     Object.defineProperty(this, '_group', { enumerable: false });
     Object.freeze(this);
@@ -102,27 +112,27 @@ export class ItemStack {
 
   /** Detached metadata, including its opaque payload, so callers cannot mutate a stored stack. */
   get meta(): ItemMeta | undefined {
-    return this._meta ? { ...this._meta, ...(this._meta.payload ? { payload: copyInventoryTag(this._meta.payload) } : {}) } : undefined;
+    return this._meta ? { ...this._meta, ...(this._meta.payload ? { payload: copyInventoryTag(this._meta.payload, this.options) } : {}) } : undefined;
   }
   /** Detached multislot membership; the containing slot's count is not one constituent's count. */
   get group(): ItemGroup | undefined { return this._group ? structuredClone(this._group) : undefined; }
   /** Moves the same complete stack to another slot without sharing mutable metadata. */
-  withSlot(slot: number): ItemStack { return new ItemStack(slot, this.type, this.count, this.meta, this.group); }
+  withSlot(slot: number): ItemStack { return new ItemStack(slot, this.type, this.count, this.meta, this.group, this.options); }
   /** Creates one metadata object without inventing an orientation or treating payload bytes as quantity. */
-  static special(slot: number, meta: Omit<ItemMeta, 'orientation'> & { payload: Tag }): ItemStack {
-    return new ItemStack(slot, meta.type, 1, { ...meta, orientation: 0 });
+  static special(slot: number, meta: Omit<ItemMeta, 'orientation'> & { payload: Tag }, options: TagReadOptions = {}): ItemStack {
+    return new ItemStack(slot, meta.type, 1, { ...meta, orientation: 0 }, undefined, options);
   }
   /** Creates a grouped slot; one remaining member becomes a regular stack as in the game format. */
-  static grouped(slot: number, name: string, items: ItemGroup['items']): ItemStack {
-    const stack = new ItemStack(slot, -32768, items.reduce((sum, item) => Math.min(0x7fffffff, sum + item.count), 0), undefined, { name, items });
-    return items.length === 1 ? new ItemStack(slot, items[0].type, items[0].count) : stack;
+  static grouped(slot: number, name: string, items: ItemGroup['items'], options: TagReadOptions = {}): ItemStack {
+    const stack = new ItemStack(slot, -32768, items.reduce((sum, item) => Math.min(0x7fffffff, sum + item.count), 0), undefined, { name, items }, options);
+    return items.length === 1 ? new ItemStack(slot, items[0].type, items[0].count, undefined, undefined, options) : stack;
   }
   /** Detached JSON projection; opaque Tags are represented as exact base64 binary envelopes. */
   toJSON(): ItemStackJSON {
     const meta = this.meta, group = this.group;
     return { slot: this.slot, type: this.type, count: this.count,
       ...(meta ? { meta: { id: meta.id, type: meta.type, orientation: meta.orientation, subId: meta.subId,
-        ...(meta.payload ? { payloadTagBase64: writeTo(meta.payload).toString('base64') } : {}) } } : {}),
+        ...(meta.payload ? { payloadTagBase64: inventoryTagBytes(meta.payload, this.options).toString('base64') } : {}) } } : {}),
       ...(group ? { group } : {}) };
   }
 
@@ -134,7 +144,7 @@ export class ItemStack {
    */
   withCount(count: number): ItemStack {
     if (this._group && count !== this.count) throw new DecodeError('E_FORMAT', 'Edit multislot members instead of its aggregate count');
-    return new ItemStack(this.slot, this.type, count, this.meta, this.group);
+    return new ItemStack(this.slot, this.type, count, this.meta, this.group, this.options);
   }
 
   /**
@@ -145,7 +155,7 @@ export class ItemStack {
    */
   withType(type: number): ItemStack {
     if (this._group && type !== this.type) throw new DecodeError('E_FORMAT', 'Edit multislot members instead of its container type');
-    return new ItemStack(this.slot, type, this.count, this.meta, this.group);
+    return new ItemStack(this.slot, type, this.count, this.meta, this.group, this.options);
   }
 
   /**
@@ -168,6 +178,7 @@ export class Inventory {
   private readonly _slots: Map<number, ItemStack>;
 
   readonly maxSlots: number;
+  private readonly options: InventoryReadOptions;
 
   /**
    * Creates a Inventory instance.
@@ -175,14 +186,20 @@ export class Inventory {
    * @param slots - Input value for the constructor operation.
    * @param maxSlots - Input value for the constructor operation.
    */
-  constructor(slots: ReadonlyMap<number, ItemStack>, maxSlots = Infinity, private readonly template?: Buffer) {
+  constructor(slots: ReadonlyMap<number, ItemStack>, maxSlots = Infinity, private readonly template?: Buffer, options: InventoryReadOptions = {}) {
+    this.options = Object.freeze(tagModelOptions(options));
     if (maxSlots !== Infinity) boundedInteger(maxSlots, 'maxSlots', 0x7fffffff);
     if (slots.size > maxSlots) throw new DecodeError('E_LIMIT', 'Inventory exceeds the explicit slot policy');
-    this._slots   = new Map(slots);
-    for (const [slot, item] of this._slots) if (slot !== item.slot) throw new DecodeError('E_FORMAT', 'Inventory map key differs from the item slot');
+    this._slots = new Map();
+    for (const [slot, item] of slots) {
+      if (!(item instanceof ItemStack) || slot !== item.slot) throw new DecodeError('E_FORMAT', 'Inventory map key or ItemStack is invalid');
+      this._slots.set(slot, new ItemStack(item.slot, item.type, item.count, item.meta, item.group, this.options));
+    }
     this.maxSlots = maxSlots;
     this.template = template ? Buffer.from(template) : undefined;
     Object.defineProperty(this, 'template', { enumerable: false });
+    Object.defineProperty(this, 'options', { enumerable: false });
+    Object.freeze(this);
   }
 
   static EMPTY = new Inventory(new Map());
@@ -194,15 +211,15 @@ export class Inventory {
    * @returns The computed StarMade-Decoder value.
    */
   static fromTag(tag: Tag, options: InventoryReadOptions = {}): Inventory {
-    const wire = readInventoryWire(tag, options.maxSlots);
+    const wire = readInventoryWire(tag, options.maxSlots, options);
     if (wire) return new Inventory(new Map(wire.items.map(item => [item.slot,
-      new ItemStack(item.slot, item.type, item.count, item.meta, item.group)])), options.maxSlots, wire.template);
+      new ItemStack(item.slot, item.type, item.count, item.meta, item.group, options)])), options.maxSlots, wire.template, options);
     throw new DecodeError('E_UNSUPPORTED', 'Unrecognized inventory format; old SDK tuples require fromLegacyTag');
   }
 
   /** Explicit compatibility reader for anonymous old-SDK tuples, including their historical lossy fallbacks. */
-  static fromLegacyTag(tag: Tag): Inventory {
-    const s = tag.getStruct().filter(t => t.type !== TagType.FINISH);
+  static fromLegacyTag(tag: Tag, options: InventoryReadOptions = {}): Inventory {
+    const s = copyInventoryTag(tag, options).getStruct().filter(t => t.type !== TagType.FINISH);
 
     const readList = (t: Tag | undefined): Tag[] => {
       if (!t || t.type !== TagType.STRUCT) return [];
@@ -259,7 +276,7 @@ export class Inventory {
       slots.set(slot, new ItemStack(slot, blockType, 1));
     }
 
-    return new Inventory(slots);
+    return new Inventory(slots, options.maxSlots, undefined, options);
   }
 
   /**
@@ -268,7 +285,7 @@ export class Inventory {
    * @returns The computed StarMade-Decoder value.
    */
   toTag(): Tag {
-    return writeInventoryWire(this.items, this.template);
+    return writeInventoryWire(this.items, this.template, this.options);
   }
 
   /** Explicit obsolete SDK tuple writer; this representation is not a current game inventory. */
@@ -293,11 +310,11 @@ export class Inventory {
     });
     valueTags.push(FINISH_TAG);
 
-    return Tags.struct(null, [
+    return copyInventoryTag(Tags.struct(null, [
       new Tag(TagType.STRUCT, null, slotTags),
       new Tag(TagType.STRUCT, null, typeTags),
       new Tag(TagType.STRUCT, null, valueTags),
-    ]);
+    ]), this.options);
   }
 
   // ── Accessors ─────────────────────────────────────────────────────────────────
@@ -355,10 +372,11 @@ export class Inventory {
    * @returns The computed StarMade-Decoder value.
    */
   set(item: ItemStack): Inventory {
+    if (!(item instanceof ItemStack)) throw new DecodeError('E_FORMAT', 'Inventory set requires ItemStack');
     if (item.count === 0) return this.remove(item.slot);
     const m = new Map(this._slots);
     m.set(item.slot, item);
-    return new Inventory(m, this.maxSlots, this.template);
+    return new Inventory(m, this.maxSlots, this.template, this.options);
   }
 
   /**
@@ -370,7 +388,7 @@ export class Inventory {
   remove(slot: number): Inventory {
     const m = new Map(this._slots);
     m.delete(slot);
-    return new Inventory(m, this.maxSlots, this.template);
+    return new Inventory(m, this.maxSlots, this.template, this.options);
   }
 
   /**
@@ -378,11 +396,11 @@ export class Inventory {
    *
    * @returns The computed StarMade-Decoder value.
    */
-  clear(): Inventory { return new Inventory(new Map(), this.maxSlots, this.template); }
+  clear(): Inventory { return new Inventory(new Map(), this.maxSlots, this.template, this.options); }
 
   /** Replaces only item contents while retaining this inventory's stash/factory metadata envelope. */
   withContents(inventory: Inventory): Inventory {
-    return new Inventory(new Map(inventory.items.map(item => [item.slot, item])), this.maxSlots, this.template);
+    return new Inventory(new Map(inventory.items.map(item => [item.slot, item])), this.maxSlots, this.template, this.options);
   }
 
   /** Adds regular items into a compatible stack or the first unused slot, without overflow. */

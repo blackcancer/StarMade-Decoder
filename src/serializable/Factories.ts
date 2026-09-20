@@ -115,14 +115,8 @@ class ElementCountMapParser {
 }
 
 // ── Factory 2 : NPCFactionNewsEvent ──────────────────────────────────────────
-// The Java factory reads: byte eventType + NPCFactionNewsEvent.deserialize(long time + int factionId) + extra data by type
-// Subtypes (NPCFactionNewsEventType):
-//   GROWN(0), WAR(1), ALLY(2?), TRADING, LOST_STATION, LOST_TERRITORY, NEUTRAL, OTHER_ENT, ROUTE, SYSTEM
-// Base = long time + int factionId
-// OtherEnt += long entityUid + String entityName
-// Route += Vector3i from + Vector3i to  (3×int each)
-// System += Vector3i system
-// The remaining event types do not carry additional data
+// Ordinals 0/6 carry a Vector3i; 1/2/3/5 carry modified UTF; 4 carries two Vector3i.
+// Unknown ordinals cannot be skipped because this payload has no enclosing byte length.
 
 /**
  * Represents the NPCFactionNewsEventParser model used by StarMade SERIALIZABLE payload handling.
@@ -138,26 +132,22 @@ class NPCFactionNewsEventParser {
     // base : long time + int factionId
     r.readInt64BE();  // time
     r.readInt32BE();  // factionId
-    // NPCFactionNewsEventType hierarchy:
-    //   GROWN(0)         → EventSystem → +Vector3i (3×int32)
-    //   WAR(1)           → base only
-    //   PEACE(2)         → base only
-    //   ALLIES(3)        → OtherEnt  → +readUTF (String)
-    //   TRADING(4)       → base only
-    //   LOST_STATION(5)  → OtherEnt  → +readUTF (String)
-    //   LOST_TERRITORY(6)→ EventSystem→ +Vector3i (3×int32)
     switch (eventType) {
       case 0: // GROWN → EventSystem
       case 6: // LOST_TERRITORY → EventSystem
         r.readInt32BE(); r.readInt32BE(); r.readInt32BE(); // Vector3i
         break;
+      case 1: // WAR → OtherEnt
+      case 2: // PEACE → OtherEnt
       case 3: // ALLIES → OtherEnt
       case 5: // LOST_STATION → OtherEnt
         r.readJavaUTF(); // String otherEnt (readUTF)
         break;
-      default:
-        // WAR=1, PEACE=2, TRADING=4 — no extra data
+      case 4: // TRADING → Route
+        for (let i = 0; i < 6; i++) r.readInt32BE();
         break;
+      default:
+        throw new DecodeError('E_UNSUPPORTED', 'Unknown NPC event ordinal');
     }
   }
 }

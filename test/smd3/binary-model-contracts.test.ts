@@ -95,51 +95,49 @@ describe('Binary model contracts — logic and templates', () => {
 });
 
 describe('Binary model contracts — simulation and auxiliary files', () => {
-  it('selects simulation, structured-group and opaque-root writer paths', () => {
-    const rootTag = Tags.int('diagnostic', 42);
+  it('writes simulation snapshots and complete structured groups, rejecting opaque non-simulation roots', () => {
+    const rootTag = new SimulationState(0, [], 0n).toTag();
     const base = { version: 0, groups: [], rootTag };
-    assert.equal(readFrom(writeSim(base)).getInt(), 42);
+    assert.equal(parseSim(writeSim(base)).uniqueGroups, 0n);
     assert.equal(parseSim(writeSim({ ...base, lastUpdate: 7n })).lastUpdate, 7n);
-    const group = new SimulationGroup(0, 2, ['ship'], 3n, { x: 1, y: 2, z: 3 } as any, 4);
-    const result = parseSim(writeSim({ ...base, groups: [{ ...group, raw: group.toTag() }] }));
+    const group = new SimulationGroup(1, 1, ['ship'], 3n, { x: 1, y: 2, z: 3 }, 1);
+    const dto = { version: group.version, type: group.type, members: group.members, startTime: group.startTime,
+      startSector: group.startSector, programId: group.programId, raw: group.toTag() };
+    const result = parseSim(writeSim({ ...base, groups: [dto] }));
     assert.deepEqual(result.groups[0].members, ['ship']); assert.equal(result.lastUpdate, 0n);
-    assert.equal(parseSim(writeSim({ ...base, simulation: new SimulationState(2, [group], 8n) })).version, 2);
+    assert.equal(parseSim(writeSim({ ...base, simulation: new SimulationState(0, [group], 8n) })).uniqueGroups, 8n);
     assert.equal(parseSim(new Uint8Array(writeTo(rootTag))).groups.length, 0);
-    assert.equal(parseSim(writeTo(Tags.struct(null, []))).groups.length, 0);
+    assert.throws(() => parseSim(writeTo(Tags.struct(null, []))), /field types/);
+    assert.throws(() => writeSim({ ...base, rootTag: Tags.int('diagnostic', 42) }), /Compound/);
   });
 
-  it('retains diagnostic group data if high-level simulation decoding fails', () => {
-    const originalState = SimulationState.fromTag, originalGroup = SimulationGroup.fromTag;
-    const good = new SimulationGroup(1, 2, ['ship'], 3n, { x: 1, y: 2, z: 3 } as any, 4).toTag();
-    const root = Tags.struct(null, [Tags.byte(null, 5), Tags.struct(null, [good, Tags.string(null, 'opaque')]), Tags.long(null, 8n)]);
-    try {
-      // The format-level reader deliberately has a fallback for a failing domain decoder.
-      SimulationState.fromTag = () => { throw new Error('Injected domain decoder failure'); };
-      const recovered = parseSim(writeTo(root));
-      assert.isNull(recovered.simulation); assert.equal(recovered.version, 5); assert.equal(recovered.lastUpdate, 8n);
-      assert.equal(recovered.groups[0].programId, 4); assert.equal(recovered.groups[1].raw.getString(), 'opaque');
-      SimulationGroup.fromTag = () => { throw new Error('Injected group decoder failure'); };
-      assert.equal(parseSim(writeTo(root)).groups[0].raw.type, TagType.STRUCT);
-      assert.equal(parseSim(writeTo(Tags.struct(null, []))).groups.length, 0);
-    } finally { SimulationState.fromTag = originalState; SimulationGroup.fromTag = originalGroup; }
+  it('rejects malformed neighbors and unsupported state versions without manufacturing typed shells', () => {
+    const good = new SimulationGroup(1, 1, ['ship'], 3n, { x: 1, y: 2, z: 3 }, 1).toTag();
+    const malformed = Tags.struct(null, [Tags.byte(null, 0), Tags.struct(null, [good, Tags.string(null, 'opaque')]), Tags.long(null, 8n)]);
+    assert.throws(() => parseSim(writeTo(malformed)), /Compound/);
+    const unsupported = Tags.struct(null, [Tags.byte(null, 5), Tags.struct(null, [good]), Tags.long(null, 8n)]);
+    assert.throws(() => parseSim(writeTo(unsupported)), /state version/);
+    const valid = Tags.struct(null, [Tags.byte(null, 0), Tags.struct(null, [good]), Tags.long(null, 8n), Tags.string('extension', 'preserved')]);
+    assert.equal(parseSim(writeTo(valid)).groups[0].programId, 1);
+    assert.deepEqual(writeSim(parseSim(writeTo(valid))), writeTo(valid));
   });
 
-  it('uses a high-level reconstructed raw group if the domain decoder synthesizes one', () => {
-    const original = SimulationState.fromTag;
-    const group = new SimulationGroup(0, 1, [], 0n, null, 0);
-    try {
-      SimulationState.fromTag = () => new SimulationState(0, [group], 0n);
-      assert.deepEqual(parseSim(writeTo(Tags.struct(null, []))).groups[0].raw, group.toTag());
-    } finally { SimulationState.fromTag = original; }
+  it('includes mandatory sector and metadata in newly created groups', () => {
+    const group = new SimulationGroup(1, 1, [], 0n, { x: 0, y: 0, z: 0 }, -1);
+    const parsed = parseSim(new SimulationState(0, [group], 0n).toBuffer());
+    assert.deepEqual(parsed.groups[0].raw, group.toTag());
+    assert.equal(parsed.groups[0].raw!.getStruct()[4].type, TagType.VECTOR3i);
+    assert.equal(parsed.groups[0].metadata!.getByte(), 0);
   });
 
   it('keeps opaque mappings unless explicitly requested as typed pairs', () => {
     assert.equal(emptyModMappings().length, 0);
     assert.isTrue(parseSmbmm(new Uint8Array()).isEmpty);
     const mappings = [{ from: 1, to: 2 }], raw = Buffer.from([1, 2, 3]);
-    assert.deepEqual(writeSmbmm({ mappings, raw, isEmpty: false, format: 'opaque' } as any), raw);
-    assert.equal(writeSmbmm({ mappings, raw, isEmpty: true, format: 'opaque' } as any).length, 8);
-    assert.equal(writeSmbmm({ mappings, raw: Buffer.alloc(0), isEmpty: false, format: 'opaque' } as any).length, 8);
+    assert.deepEqual(writeSmbmm({ raw, isEmpty: false, format: 'unknown',size:raw.length }), raw);
+    assert.throws(() => writeSmbmm({mappings,raw,isEmpty:false,size:raw.length,format:'unknown'}));
+    assert.equal(writeSmbmm({ mappings, raw, isEmpty: true, format: 'int32Pairs' } as any).length, 8);
+    assert.equal(writeSmbmm({ mappings, raw: Buffer.alloc(0), isEmpty: false, format: 'int32Pairs' } as any).length, 8);
     assert.equal(parseSmbph(writeSmbph(new BlueprintHeader({ entityType: 'UNKNOWN', headerVersion: 0, blockCountByType: [], boundingBox: { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 } }))).entityType, 'SHIP');
   });
 });

@@ -14,7 +14,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   BlueprintDocument, BlueprintArchive, BlueprintEntity, BlueprintHeader, BlueprintMeta,
-  BlueprintLogic, emptySegment, emptySmd3File, writeSment,
+  BlueprintLogic, BlueprintModMappings, emptySegment, emptySmd3File, writeSment, parseSmbmm, writeSmbmm,
 } from '../dist/index.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -24,7 +24,40 @@ const sdkVersion = 'sdk\0🚀';
 const air = () => ({ type: 0, hp: 0, active: false, orientation: 0 });
 const index = (x, y, z) => x + y * 32 + z * 1024;
 const oracle = mode => execFileSync('python3', ['-B', path.join(root, 'test/fixtures/blueprint_oracle.py'), mode, temp], { stdio: 'inherit', timeout: 30000 });
+const mappingOracle = mode => execFileSync('python3', ['-B', path.join(root, 'test/fixtures/blueprint_mappings_oracle.py'), mode, temp], { stdio: 'inherit', timeout: 30000 });
 try {
+  // Independent Python vectors are separate from the pinned JDK archive inventory.
+  mappingOracle('generate');
+  const expectedMappings = [
+    { modName: 'Étoiles🚀', blockName: 'Cœur: α', id: -32768 },
+    { modName: '工具包', blockName: '反应堆', id: 32767 },
+    { modName: 'naïve mod', blockName: 'bloc e\u0301', id: -1 },
+    { modName: 'vanilla-ish', blockName: 'zéro', id: 0 },
+    { modName: 'signes', blockName: 'positif', id: 12 },
+  ];
+  const replacedMapping = { ...expectedMappings[0], id: -12345 };
+  const addedMapping = { modName: 'Nouvelle🛰️', blockName: '氧气 Δ', id: 32767 };
+  for (const kind of ['text', 'zlib']) {
+    const input = fs.readFileSync(path.join(temp, `mappings-${kind}.smbmm`));
+    const model = BlueprintModMappings.fromBuffer(input);
+    assert.equal(model.compression, kind === 'zlib' ? 'zlib' : 'none');
+    assert.deepEqual(model.mappings, expectedMappings);
+    assert.equal(model.idOf('Étoiles🚀', 'Cœur: α'), -32768);
+    assert.deepEqual(model.get(32767), expectedMappings[1]);
+    fs.writeFileSync(path.join(temp, `mappings-${kind}-model-noop.smbmm`), model.toBuffer());
+    const edited = model.withMapping(replacedMapping).withoutId(32767).withMapping(addedMapping);
+    fs.writeFileSync(path.join(temp, `mappings-${kind}-model-edited.smbmm`), edited.toBuffer());
+    assert.deepEqual(model.toBuffer(), input, 'Mapping edits must leave the source unchanged');
+
+    const file = parseSmbmm(input);
+    assert.equal(file.format, kind === 'zlib' ? 'zlibText' : 'text');
+    assert.equal(file.isEmpty, false);
+    assert.deepEqual(file.namespacedMappings, expectedMappings);
+    fs.writeFileSync(path.join(temp, `mappings-${kind}-codec-noop.smbmm`), writeSmbmm(file));
+    file.namespacedMappings = [replacedMapping, ...expectedMappings.slice(2), addedMapping];
+    fs.writeFileSync(path.join(temp, `mappings-${kind}-codec-edited.smbmm`), writeSmbmm(file));
+  }
+  mappingOracle('verify');
   oracle('generate');
   const original = fs.readFileSync(path.join(temp, 'reference.sment'));
   assert.ok(original.readUInt16LE(6) & 8, 'Independent fixture must contain data descriptors');

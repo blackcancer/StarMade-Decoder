@@ -117,9 +117,9 @@ describe('Entity parsers — world0 files', function () {
       const tag = load('CATALOG.cat');
       const data = parseCatalog(tag);
       assert.isNumber(data.totalCount);
-      console.log('    Catalog: player=' + data.playerEntries.length + ' system=' + data.systemEntries.length);
-      data.playerEntries.slice(0, 2).forEach(e =>
-        console.log('      entry:', JSON.stringify({ uid: e.uid, name: e.name }))
+      console.log('    Catalog: entries=' + data.entries.length + ' rating groups=' + Object.keys(data.ratings).length);
+      data.entries.slice(0, 2).forEach(e =>
+        console.log('      entry:', JSON.stringify({ uid: e.uid, ownerUID: e.ownerUID }))
       );
     });
   });
@@ -130,8 +130,9 @@ describe('Entity parsers — world0 files', function () {
       const tag = load('FLOATING_ITEMS_ARCHIVE.ent');
       const data = parseFloatingItems(tag);
       assert.isNumber(data.version);
-      assert.isNumber(data.declaredCount);
-      console.log('    FloatingItems: version=' + data.version + ' count=' + data.declaredCount + ' actual=' + data.items.length);
+      assert.equal(data.nextId, 100069);
+      assert.equal(data.format, 'modern');
+      console.log('    FloatingItems: version=' + data.version + ' nextId=' + data.nextId + ' actual=' + data.items.length);
     });
   });
 });

@@ -104,7 +104,7 @@ export { parseSmbpl, BlueprintLogic } from './SmbplParser.js';
 export type { SmbplFile, ControlController, ControlGroup, ControlLink } from './SmbplParser.js';
 
 export { parseSmbmm } from './SmbmmParser.js';
-export type { SmbmmFile, SmbmmFormat, ModMapping } from './SmbmmParser.js';
+export type { SmbmmFile, SmbmmFormat, SmbmmParseOptions, ModMapping } from './SmbmmParser.js';
 
 export { parseSim } from './SimParser.js';
 export type { SimFile, SimGroup } from './SimParser.js';
@@ -136,3 +136,6 @@ export type { BlockVolumeOptions } from './BlockVolume.js';
 export { validateBlockPosition, segmentOriginOf, localPositionOf, regionCoordinatesOf, blockPositionKey } from './BlockCoordinates.js';
 export { BlueprintModel, BlueprintNode } from './BlueprintModel.js';
 export type { BlueprintModelOptions } from './BlueprintModel.js';
+
+export { BlueprintModMappings } from './BlueprintModMappings.js';
+export type { NamespacedBlockMapping, ModMappingOptions } from './BlueprintModMappings.js';

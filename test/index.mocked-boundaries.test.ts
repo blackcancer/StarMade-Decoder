@@ -211,7 +211,7 @@ describe('ManagerContainer — inventories / initialShields branch', () => {
     // Build a container tag with an inventory entry
     const invItem = Tags.struct(null, [
       Tags.int(null, 0),       // e[0] = type INT → type=0
-      Tags.nothing(null),      // e[1] padding
+      Tags.vector3i(null,0,0,0), // e[1] stored block position
       Inventory.EMPTY.set(new ItemStack(0, 1, 5)).toTag(), // e[2] = Inventory STRUCT
     ]);
     const invListTag = Tags.struct(null, [invItem]);
@@ -267,7 +267,7 @@ function buildContainerTag(
     Tags.struct(null, []),                     // [8] warpGateInfo
     Tags.struct(null, []),                     // [9] moduleTag
     Tags.struct(null, []),                     // [10] aiTag
-    Tags.struct(null, []),                     // [11] slotAssignment
+    Tags.struct(null, [Tags.byte(null,0),Tags.struct(null,[])]), // [11] slotAssignment
     Tags.struct(null, []),                     // [12] raceGateInfo
     Tags.struct(null, []),                     // [13] unloadedDummies
     Tags.struct(null, []),                     // [14] moduleExplosions
@@ -279,27 +279,11 @@ function buildContainerTag(
 
 // ── objects/components/PowerAndThrust — ThrustConfig version 0/1 VECTOR4f ───
 
-describe('ThrustConfig — version 0/1 VECTOR4f path', () => {
-  it('fromTag version 0 with VECTOR4f balance (lines 121-123)', () => {
-    // When version <= 1 and s[3] is VECTOR4f:
-    //   s[0]=version, s[1]=autoDamp, s[2]=autoReact, s[3]=VECTOR4f(bx,by,bz,rotBal)
-    //   s[4] is used for nothing (skipped — rotBal already from v4.w)
-    //   s[5]=autoDampExit, s[6]=thrustShare, s[7]=repulsor
-    const tag = Tags.struct(null, [
-      Tags.byte(null, 0),                              // [0] version = 0
-      Tags.byte(null, 1),                              // [1] automaticDampeners = true
-      Tags.byte(null, 0),                              // [2] autoReactivateDampeners = false
-      Tags.vector4f(null, 0.3, 0.4, 0.5, 0.7),       // [3] VECTOR4f → covers version<=1 branch
-      Tags.nothing(null),                              // [4] unused / rotBal already from v4.w
-      Tags.byte(null, 0),                              // [5] automaticDampenersOnExit
-      Tags.byte(null, 1),                              // [6] thrustSharing = true
-      Tags.float(null, 0.2),                           // [7] repulsorBalance
-    ]);
-    const tc = ThrustConfig.fromTag(tag);
-    assert.equal(tc.version, 0);
-    assert.closeTo(tc.thrustBalanceX, 0.3, 0.01);
-    assert.closeTo(tc.rotationBalance, 0.7, 0.01); // VECTOR4f.w
-    assert.isTrue(tc.thrustSharing); // s[6].getByte() !== 0
+describe('ThrustConfig — rejects network-only VECTOR4f in saved records', () => {
+  it('requires the actual VECTOR3f and separate FLOAT saved fields', () => {
+    const tag = Tags.struct(null, [Tags.byte(null, 0), Tags.byte(null, 1), Tags.byte(null, 0),
+      Tags.vector4f(null, 0.3, 0.4, 0.5, 0.7), Tags.nothing(null), Tags.byte(null, 0), Tags.byte(null, 1), Tags.float(null, 0.2)]);
+    assert.throws(() => ThrustConfig.fromTag(tag));
   });
 
   it('ThrustConfig.withThrustSharing (lines 157-161)', () => {
@@ -535,7 +519,7 @@ describe('SmbmmParser — isEmpty ternary branch', () => {
   });
 
   it('parseSmbmm returns isEmpty=false for non-empty buffer', () => {
-    const result = parseSmbmm(Buffer.from([0xFF]));
+    const result = parseSmbmm(Buffer.from([0xFF]), {mode:'preserve'});
     assert.isFalse(result.isEmpty);
     assert.equal(result.size, 1);
   });

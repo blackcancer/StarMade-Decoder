@@ -1,6 +1,6 @@
 {
   "name": "starmade-decoder",
-  "version": "1.7.0",
+  "version": "2.0.0",
   "description": "TypeScript SDK to read/write StarMade save files — faithful port of the Java Tag format",
   "type": "module",
   "license": "MIT",
@@ -17,7 +17,7 @@
     "clean": "rimraf dist coverage",
     "prepublishOnly": "npm run source:check && npm run build && npm run docs:check && npm run coverage:check",
     "source:check": "python3 scripts/check-source-boundary.py && python3 scripts/test-source-boundary.py && node scripts/check-test-layout.mjs",
-    "test:interop": "node scripts/check-wire-interop.mjs && node scripts/check-database-interop.mjs && node scripts/check-geometry-interop.mjs && node scripts/check-blueprint-interop.mjs",
+    "test:interop": "node scripts/check-wire-interop.mjs && node scripts/check-database-interop.mjs && node scripts/check-geometry-interop.mjs && node scripts/check-blueprint-interop.mjs && node scripts/check-skin-interop.mjs",
     "test:package": "node scripts/check-package-consumer.mjs",
     "coverage:verify": "c8 check-coverage --per-file=false --lines 100 --branches 100 --statements 100 --functions 70 && node scripts/check-coverage.mjs"
   },

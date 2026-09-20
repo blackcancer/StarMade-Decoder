@@ -1,392 +1,198 @@
-/**
- * @fileoverview Trading
- *
- * Defines high-level StarMade domain objects with typed accessors, mutation helpers, and round-trip serialization support.
- *
- * @author InitSysRev
- * @version 1.0.0
- */
-
-/**
- * Trading — business object for TRADING.tag
- *
- * Complete deserialization — no raw tag is kept.
- * All data is directly accessible from TypeScript.
- *
- * Structure Tag (TradeActive.toTagStructure) :
- *   STRUCT [
- *     BYTE  version (= 0)
- *     STRUCT payload [
- *       SERIALIZABLE  blocks (ElementCountMap, factoryId=1)
- *       LONG          blockPrice
- *       LONG          deliveryPrice
- *       LONG          startTime
- *       LONG          fromId
- *       LONG          toId
- *       LONG          fleetId
- *       DOUBLE        volume
- *       VECTOR3i      startSystem
- *       VECTOR3i      targetSystem
- *       VECTOR3i      currentSector
- *       INT           fromFactionId
- *       INT           toFactionId
- *       STRING        fromPlayer
- *       STRING        toPlayer
- *       STRING        fromStation
- *       STRING        toStation
- *       VECTOR3i      startSector
- *       STRUCT        sectorWayPoints [VECTOR3i...]  (listToTagStruct)
- *       FINISH
- *     ]
- *     FINISH
- *   ]
- *
- * TradingManager :
- *   STRUCT [
- *     BYTE   version (= 0)
- *     STRUCT trades (TradeRoute list)
- *     FINISH
- *   ]
- *
- * Source: TradeActive.java, TradeManager.java, TradeActiveMap.java
- */
-
+/** @fileoverview Validated trade-file records, with retained source fields and compression envelopes. */
 import { Tag } from '../core/Tag.js';
 import { Tags } from '../core/TagBuilder.js';
 import { TagType } from '../core/TagType.js';
-import { FINISH_TAG } from '../core/Tag.js';
-import { readFrom, writeTo } from '../core/TagParser.js';
+import { writeTo, type TagReadOptions } from '../core/TagParser.js';
+import { copyTagModel, rememberTagModel, inheritTagModel, renderTagModel, tagModelOptions, type TagModelFields } from '../core/TagModel.js';
+import { DecodeError } from '../core/DecodeError.js';
+import { TagModelFile } from '../core/TagModelFile.js';
 import { RawElement } from '../serializable/Factories.js';
-import { ElementCountMap } from './Serializables.js';
+import { ElementCountMap, type BlockCount } from './Serializables.js';
 import type { Vector3i } from '../types/Vectors.js';
+import type { FormatLimits } from '../core/FormatLimits.js';
 
-// ── TradeRoute ────────────────────────────────────────────────────────────────
-
-/**
- * Represents the TradeRoute model used by high-level StarMade object modelling.
- */
-export class TradeRoute {
-  /**
-   * Creates a TradeRoute instance.
-   *
-   * @param blocks - Input value for the constructor operation.
-   * @param blockPrice - Input value for the constructor operation.
-   * @param deliveryPrice - Input value for the constructor operation.
-   * @param startTime - Input value for the constructor operation.
-   * @param fromId - Input value for the constructor operation.
-   * @param toId - Input value for the constructor operation.
-   * @param fleetId - Input value for the constructor operation.
-   * @param volume - Input value for the constructor operation.
-   * @param startSystem - Input value for the constructor operation.
-   * @param targetSystem - Input value for the constructor operation.
-   * @param currentSector - Input value for the constructor operation.
-   * @param fromFactionId - Input value for the constructor operation.
-   * @param toFactionId - Input value for the constructor operation.
-   * @param fromPlayer - Input value for the constructor operation.
-   * @param toPlayer - Input value for the constructor operation.
-   * @param fromStation - Input value for the constructor operation.
-   * @param toStation - Input value for the constructor operation.
-   * @param startSector - Input value for the constructor operation.
-   * @param sectorWayPoints - Input value for the constructor operation.
-   */
-  constructor(
-    /** Traded blocks with their quantities */
-    public blocks: ElementCountMap,
-    /** Block prices in credits */
-    public blockPrice: bigint,
-    /** Delivery price in credits */
-    public deliveryPrice: bigint,
-    /** Start timestamp */
-    public startTime: bigint,
-    /** Source entity ID */
-    public fromId: bigint,
-    /** Destination entity ID */
-    public toId: bigint,
-    /** Transport fleet ID (-1 when absent) */
-    public fleetId: bigint,
-    /** Total cargo volume */
-    public volume: number,
-    /** Source system */
-    public startSystem: Vector3i | null,
-    /** Target system */
-    public targetSystem: Vector3i | null,
-    /** Current sector */
-    public currentSector: Vector3i | null,
-    /** Sender faction ID */
-    public fromFactionId: number,
-    /** Receiver faction ID */
-    public toFactionId: number,
-    /** Sender player */
-    public fromPlayer: string,
-    /** Receiver player */
-    public toPlayer: string,
-    /** Origin station */
-    public fromStation: string,
-    /** Station de destination */
-    public toStation: string,
-    /** Source sector */
-    public startSector: Vector3i | null,
-    /** Intermediate waypoints */
-    public sectorWayPoints: Vector3i[],
-  ) {}
-
-  /**
-   * Creates a value from Tag.
-   *
-   * @param tag - Input value for the fromTag operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromTag(tag: Tag): TradeRoute {
-    const outer = tag.getStruct().filter(t => t.type !== TagType.FINISH);
-    // outer[0] = BYTE version, outer[1] = STRUCT payload
-    const payload = outer[1]?.type === TagType.STRUCT
-      ? outer[1].getStruct().filter(t => t.type !== TagType.FINISH)
-      : outer; // fallback when there is no version wrapper
-
-    let i = 0;
-
-    // ElementCountMap SERIALIZABLE
-    let blocks = new ElementCountMap([]);
-    if (payload[i]?.type === TagType.SERIALIZABLE) {
-      const elem = payload[i].value as RawElement;
-      if (elem.factoryId === 1) blocks = ElementCountMap.fromRaw(elem.raw);
-      i++;
-    }
-
-    const g = <T>(type: TagType, extractor: (t: Tag) => T, def: T): T => {
-      const t = payload[i++];
-      return t?.type === type ? extractor(t) : def;
-    };
-
-    const blockPrice    = g(TagType.LONG,     t => t.getLong(),    0n);
-    const deliveryPrice = g(TagType.LONG,     t => t.getLong(),    0n);
-    const startTime     = g(TagType.LONG,     t => t.getLong(),    0n);
-    const fromId        = g(TagType.LONG,     t => t.getLong(),    0n);
-    const toId          = g(TagType.LONG,     t => t.getLong(),    0n);
-    const fleetId       = g(TagType.LONG,     t => t.getLong(),   -1n);
-    const volume        = g(TagType.DOUBLE,   t => t.getDouble(),  0);
-    const startSystem   = g(TagType.VECTOR3i, t => t.getVector3i(), null);
-    const targetSystem  = g(TagType.VECTOR3i, t => t.getVector3i(), null);
-    const currentSector = g(TagType.VECTOR3i, t => t.getVector3i(), null);
-    const fromFactionId = g(TagType.INT,      t => t.getInt(),     0);
-    const toFactionId   = g(TagType.INT,      t => t.getInt(),     0);
-    const fromPlayer    = g(TagType.STRING,   t => t.getString(),  '');
-    const toPlayer      = g(TagType.STRING,   t => t.getString(),  '');
-    const fromStation   = g(TagType.STRING,   t => t.getString(),  '');
-    const toStation     = g(TagType.STRING,   t => t.getString(),  '');
-    const startSector   = g(TagType.VECTOR3i, t => t.getVector3i(), null);
-
-    // sectorWayPoints : STRUCT [VECTOR3i...] (listToTagStruct)
-    const sectorWayPoints: Vector3i[] = [];
-    if (payload[i]?.type === TagType.STRUCT) {
-      for (const wp of payload[i].getStruct().filter(t => t.type !== TagType.FINISH)) {
-        if (wp.type === TagType.VECTOR3i) sectorWayPoints.push(wp.getVector3i());
-      }
-      i++;
-    }
-
-    return new TradeRoute(blocks, blockPrice, deliveryPrice, startTime,
-      fromId, toId, fleetId, volume, startSystem, targetSystem, currentSector,
-      fromFactionId, toFactionId, fromPlayer, toPlayer, fromStation, toStation,
-      startSector, sectorWayPoints);
-  }
-
-  /**
-   * Converts this value to Tag.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toTag(): Tag {
-    // Encode the ECM inline (duck typing — works around duplicate ESM modules)
-    const counts: Array<{type: number; count: number}> =
-      (this.blocks as any).counts ?? [];
-    const nonZero = counts.filter(c => c.count > 0);
-    const ecmBuf = Buffer.alloc(4 + nonZero.length * 6);
-    ecmBuf.writeInt32BE(nonZero.length, 0);
-    nonZero.forEach((c, i) => {
-      ecmBuf.writeInt16BE(c.type,  4 + i * 6);
-      ecmBuf.writeInt32BE(c.count, 6 + i * 6);
-    });
-    const ecmElem = new RawElement(1, new Uint8Array(ecmBuf));
-    const ecmTag  = new Tag(TagType.SERIALIZABLE, null, ecmElem);
-    const v3 = (v: Vector3i | null) =>
-      v ? Tags.vector3i(null, v.x, v.y, v.z) : Tags.vector3i(null, 0, 0, 0);
-
-    // sectorWayPoints → listToTagStruct
-    const wpTags = [...this.sectorWayPoints.map(wp =>
-      Tags.vector3i(null, wp.x, wp.y, wp.z)), FINISH_TAG];
-    const waypointsStruct = new Tag(TagType.STRUCT, null, wpTags);
-
-    const payload = Tags.struct(null, [
-      ecmTag,
-      Tags.long(null, this.blockPrice),
-      Tags.long(null, this.deliveryPrice),
-      Tags.long(null, this.startTime),
-      Tags.long(null, this.fromId),
-      Tags.long(null, this.toId),
-      Tags.long(null, this.fleetId),
-      Tags.double(null, this.volume),
-      v3(this.startSystem),
-      v3(this.targetSystem),
-      v3(this.currentSector),
-      Tags.int(null, this.fromFactionId),
-      Tags.int(null, this.toFactionId),
-      Tags.string(null, this.fromPlayer),
-      Tags.string(null, this.toPlayer),
-      Tags.string(null, this.fromStation),
-      Tags.string(null, this.toStation),
-      v3(this.startSector),
-      waypointsStruct,
-    ]);
-
-    return Tags.struct(null, [Tags.byte(null, 0), payload]);
-  }
-
-  /**
-   * Builds the diagnostic string representation for this value.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toString(): string {
-    return `TradeRoute(${this.fromStation}→${this.toStation}, blocks=${this.blocks.totalBlocks}, price=${this.blockPrice}, fleet=${this.fleetId})`;
-  }
+/** Explicit persisted route fields; no economy or administrative policy is inferred. */
+export interface TradeRouteFields {
+  blocks: ElementCountMap; blockPrice: bigint; deliveryPrice: bigint; startTime: bigint;
+  fromId: bigint; toId: bigint; fleetId: bigint; volume: number;
+  startSystem: Vector3i; targetSystem: Vector3i; currentSector: Vector3i;
+  fromFactionId: number; toFactionId: number; fromPlayer: string; toPlayer: string;
+  fromStation: string; toStation: string; startSector: Vector3i; sectorWayPoints: readonly Vector3i[];
+}
+/** Complete file origins are private and shared only between immutable revisions. */
+const documents = new WeakMap<TradingManager, TagModelFile>();
+/** Checks a positional schema, preserving any extension slots. */
+function parts(tag: Tag, types: readonly TagType[]): Tag[] {
+  const values = tag.getStruct().filter(value => value.type !== TagType.FINISH);
+  if (types.some((type, index) => values[index]?.type !== type)) throw new DecodeError('E_FORMAT', 'Invalid trade record fields');
+  return values;
+}
+/** Converts a supplied coordinate without inferring a default sector. */
+function vector(value: Vector3i): Vector3i {
+  if (!value) throw new DecodeError('E_FORMAT', 'A trade coordinate is required');
+  return Object.freeze({ x: value.x, y: value.y, z: value.z });
+}
+/** Converts a stored coordinate to its exact integer Tag. */
+function vectorTag(value: Vector3i): Tag { return Tags.vector3i(null, value.x, value.y, value.z); }
+/** Raw block payloads use the enclosing Tag ceilings, rather than an unrelated format's lower defaults. */
+function blockLimits(options: TagReadOptions): FormatLimits {
+  return {maxEntries:options.maxNodes ?? 1_000_000,maxBytes:options.maxInflatedBytes ?? 256 * 1024 * 1024};
+}
+/** Both TradeActive and TradeManager currently define only version zero. */
+function checkVersion(version: number): void {
+  if (version !== 0) throw new DecodeError('E_UNSUPPORTED', 'Unsupported trade record version');
 }
 
-// ── TradingManager ────────────────────────────────────────────────────────────
+/** Immutable trade record with faithful opaque extension retention. */
+export class TradeRoute implements TradeRouteFields {
+  private readonly counts: readonly BlockCount[];
+  private readonly points: readonly Vector3i[];
+  #pointNames: readonly (string | null)[] = [];
+  private readonly payloadSource = {};
+  private readonly options: TagReadOptions;
+  /** Creates a route from explicit wire values and validates it before exposing the model. */
+  constructor(blocks: ElementCountMap, readonly blockPrice: bigint, readonly deliveryPrice: bigint,
+    readonly startTime: bigint, readonly fromId: bigint, readonly toId: bigint, readonly fleetId: bigint,
+    readonly volume: number, readonly startSystem: Vector3i, readonly targetSystem: Vector3i,
+    readonly currentSector: Vector3i, readonly fromFactionId: number, readonly toFactionId: number,
+    readonly fromPlayer: string, readonly toPlayer: string, readonly fromStation: string,
+    readonly toStation: string, readonly startSector: Vector3i, sectorWayPoints: readonly Vector3i[], options: TagReadOptions = {}) {
+    this.options = tagModelOptions(options);
+    for (const value of [blockPrice,deliveryPrice,startTime,fromId,toId,fleetId]) if (typeof value !== 'bigint') throw new DecodeError('E_FORMAT','Trade long fields require bigint');
+    this.counts = blocks.counts.map(count => Object.freeze({ ...count }));
+    this.startSystem = vector(startSystem); this.targetSystem = vector(targetSystem);
+    this.currentSector = vector(currentSector); this.startSector = vector(startSector);
+    this.points = sectorWayPoints.map(vector);
+    if (!Number.isFinite(volume)) throw new DecodeError('E_RANGE', 'Trade volume must be finite');
+    writeTo(this.toTag(), this.options); Object.freeze(this);
+  }
+  /** Creates a record with named fields and caller-selected codec limits. */
+  static create(fields: TradeRouteFields, options: TagReadOptions = {}): TradeRoute {
+    return new TradeRoute(fields.blocks, fields.blockPrice, fields.deliveryPrice, fields.startTime,
+      fields.fromId, fields.toId, fields.fleetId, fields.volume, fields.startSystem, fields.targetSystem,
+      fields.currentSector, fields.fromFactionId, fields.toFactionId, fields.fromPlayer, fields.toPlayer,
+      fields.fromStation, fields.toStation, fields.startSector, fields.sectorWayPoints, options);
+  }
+  /** Detached block counts; changing the returned legacy value cannot mutate the route. */
+  get blocks(): ElementCountMap { return new ElementCountMap(this.counts.map(count => ({ ...count })), blockLimits(this.options)); }
+  /** Detached waypoints in their persisted order. */
+  get sectorWayPoints(): Vector3i[] { return this.points.map(point => ({ ...point })); }
+  /** Returns a validated revision that retains source-only fields and names. */
+  with(changes: Partial<TradeRouteFields>): TradeRoute {
+    const result = TradeRoute.create({ ...this, blocks: this.blocks, sectorWayPoints: this.sectorWayPoints, ...changes }, this.options);
+    result.#pointNames=this.#pointNames;
+    inheritTagModel(this.payloadSource, result.payloadSource); inheritTagModel(this, result);
+    result.toTag(); return result;
+  }
+  /** Reads the versioned tuple strictly; damaged fields are never silently substituted. */
+  static fromTag(tag: Tag, options: TagReadOptions = {}): TradeRoute {
+    const source = copyTagModel(tag, options), outer = parts(source, [TagType.BYTE, TagType.STRUCT]);
+    checkVersion(outer[0].getByte());
+    const p = parts(outer[1], [TagType.SERIALIZABLE, ...Array<TagType>(6).fill(TagType.LONG), TagType.DOUBLE,
+      TagType.VECTOR3i, TagType.VECTOR3i, TagType.VECTOR3i, TagType.INT, TagType.INT,
+      TagType.STRING, TagType.STRING, TagType.STRING, TagType.STRING, TagType.VECTOR3i, TagType.STRUCT]);
+    const raw = p[0].value as RawElement;
+    if (raw.factoryId !== 1) throw new DecodeError('E_FORMAT', 'Trade blocks require ElementCountMap factory 1');
+    const bytes = Buffer.from(raw.raw);
+    const waypoints = p[18].getStruct().filter(t => t.type !== TagType.FINISH);
+    if (waypoints.some(t => t.type !== TagType.VECTOR3i)) throw new DecodeError('E_FORMAT', 'Trade waypoints require integer coordinates');
+    const result = new TradeRoute(ElementCountMap.fromRaw(bytes,blockLimits(options)), p[1].getLong(), p[2].getLong(), p[3].getLong(),
+      p[4].getLong(), p[5].getLong(), p[6].getLong(), p[7].getDouble(), p[8].getVector3i(), p[9].getVector3i(),
+      p[10].getVector3i(), p[11].getInt(), p[12].getInt(), p[13].getString(), p[14].getString(),
+      p[15].getString(), p[16].getString(), p[17].getVector3i(), waypoints.map(t => t.getVector3i()), options);
+    result.#pointNames=Object.freeze(waypoints.map(tag=>tag.name));
+    rememberTagModel(result.payloadSource, outer[1], result.fields(), options);
+    rememberTagModel(result, source, new Map([[0, Tags.byte(null, 0)], [1, result.payload()]]), options);
+    return result;
+  }
+  /** Encodes represented blocks without filtering zero/negative stored quantities. */
+  private fields(): TagModelFields {
+    const raw = Buffer.alloc(4 + this.counts.length * 6); raw.writeInt32BE(this.counts.length);
+    this.counts.forEach((count, index) => {
+      if (!Number.isInteger(count.type) || !Number.isInteger(count.count)) throw new DecodeError('E_RANGE', 'Block type and quantity must be integers');
+      raw.writeInt16BE(count.type, 4 + index * 6); raw.writeInt32BE(count.count, 6 + index * 6);
+    });
+    const tags = [new Tag(TagType.SERIALIZABLE, null, new RawElement(1, raw)),
+      Tags.long(null, this.blockPrice), Tags.long(null, this.deliveryPrice), Tags.long(null, this.startTime),
+      Tags.long(null, this.fromId), Tags.long(null, this.toId), Tags.long(null, this.fleetId), Tags.double(null, this.volume),
+      vectorTag(this.startSystem), vectorTag(this.targetSystem), vectorTag(this.currentSector),
+      Tags.int(null, this.fromFactionId), Tags.int(null, this.toFactionId), Tags.string(null, this.fromPlayer),
+      Tags.string(null, this.toPlayer), Tags.string(null, this.fromStation), Tags.string(null, this.toStation),
+      vectorTag(this.startSector), Tags.struct(null, this.points.map((point,index)=>Tags.rename(vectorTag(point),this.#pointNames[index]??null)))];
+    return new Map(tags.map((tag, index) => [index, tag]));
+  }
+  /** Renders a payload while retaining unknown slots and unchanged source representations. */
+  private payload(): Tag { return renderTagModel(this.payloadSource, this.fields(), Tags.struct(null, []), this.options); }
+  /** Returns a detached complete route tree. */
+  toTag(): Tag { return renderTagModel(this, new Map([[0, Tags.byte(null, 0)], [1, this.payload()]]), Tags.struct(null, []), this.options); }
+  /** JSON uses decimal strings for 64-bit fields without losing precision. */
+  toJSON(): object {
+    return { blocks: this.blocks.counts, blockPrice: String(this.blockPrice), deliveryPrice: String(this.deliveryPrice),
+      startTime: String(this.startTime), fromId: String(this.fromId), toId: String(this.toId), fleetId: String(this.fleetId),
+      volume: this.volume, startSystem: this.startSystem, targetSystem: this.targetSystem, currentSector: this.currentSector,
+      fromFactionId: this.fromFactionId, toFactionId: this.toFactionId, fromPlayer: this.fromPlayer, toPlayer: this.toPlayer,
+      fromStation: this.fromStation, toStation: this.toStation, startSector: this.startSector, sectorWayPoints: this.sectorWayPoints };
+  }
+  /** Human-readable diagnostic, independent from the wire representation. */
+  toString(): string { return `TradeRoute(${this.fromStation}→${this.toStation}, blocks=${this.blocks.totalBlocks}, price=${this.blockPrice}, fleet=${this.fleetId})`; }
+}
 
-/**
- * Represents the TradingManager model used by high-level StarMade object modelling.
- */
+/** Immutable collection for TRADING.tag; all edits validate indices and preserve source envelopes. */
 export class TradingManager {
-  /**
-   * Creates a TradingManager instance.
-   *
-   * @param version - Input value for the constructor operation.
-   * @param routes - Input value for the constructor operation.
-   */
-  constructor(
-    public version: number,
-    public routes: TradeRoute[],
-  ) {}
-
-  // ── Accessors ─────────────────────────────────────────────────────────────────
-
-  /**
-   * Handles the routesFrom operation used by high-level StarMade object modelling.
-   *
-   * @param factionId - Input value for the routesFrom operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  routesFrom(factionId: number): TradeRoute[] { return this.routes.filter(r => r.fromFactionId === factionId); }
-  /**
-   * Handles the routesTo operation used by high-level StarMade object modelling.
-   *
-   * @param factionId - Input value for the routesTo operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  routesTo(factionId: number):   TradeRoute[] { return this.routes.filter(r => r.toFactionId   === factionId); }
-  /**
-   * Handles the routesBetween operation used by high-level StarMade object modelling.
-   *
-   * @param a - Input value for the routesBetween operation.
-   * @param b - Input value for the routesBetween operation.
-   * @returns The computed StarMade-Decoder value.
-   */
+  private readonly values: readonly TradeRoute[];
+  private readonly options: TagReadOptions;
+  /** Creates a complete versioned manager; routes are immutable and the array is copied. */
+  constructor(readonly version: number, routes: readonly TradeRoute[], options: TagReadOptions = {}) {
+    checkVersion(version); this.options = tagModelOptions(options); this.values = [...routes];
+    writeTo(this.toTag(), this.options); Object.freeze(this);
+  }
+  /** Detached route array. */
+  get routes(): TradeRoute[] { return [...this.values]; }
+  /** Returns routes originating in one faction. */
+  routesFrom(factionId: number): TradeRoute[] { return this.values.filter(route => route.fromFactionId === factionId); }
+  /** Returns routes addressed to one faction. */
+  routesTo(factionId: number): TradeRoute[] { return this.values.filter(route => route.toFactionId === factionId); }
+  /** Returns routes in either direction between two factions. */
   routesBetween(a: number, b: number): TradeRoute[] {
-    return this.routes.filter(r =>
-      (r.fromFactionId === a && r.toFactionId === b) ||
-      (r.fromFactionId === b && r.toFactionId === a));
+    return this.values.filter(route => (route.fromFactionId === a && route.toFactionId === b) || (route.fromFactionId === b && route.toFactionId === a));
   }
-
-  // ── Immutable updates ───────────────────────────────────────────────
-
-  /**
-   * Handles the addRoute operation used by high-level StarMade object modelling.
-   *
-   * @param route - Input value for the addRoute operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  addRoute(route: TradeRoute): TradingManager {
-    return new TradingManager(this.version, [...this.routes, route]);
+  /** Appends a route, preserving existing order. */
+  addRoute(route: TradeRoute): TradingManager { return this.updated([...this.values, route]); }
+  /** Removes one existing index. */
+  removeRoute(index: number): TradingManager {
+    this.checkIndex(index); return this.updated(this.values.filter((_, position) => position !== index));
   }
-
-  /**
-   * Handles the removeRoute operation used by high-level StarMade object modelling.
-   *
-   * @param idx - Input value for the removeRoute operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  removeRoute(idx: number): TradingManager {
-    return new TradingManager(this.version, this.routes.filter((_, i) => i !== idx));
+  /** Replaces one existing index. */
+  updateRoute(index: number, route: TradeRoute): TradingManager {
+    this.checkIndex(index); return this.updated(this.values.map((value, position) => position === index ? route : value));
   }
-
-  /**
-   * Handles the updateRoute operation used by high-level StarMade object modelling.
-   *
-   * @param idx - Input value for the updateRoute operation.
-   * @param route - Input value for the updateRoute operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  updateRoute(idx: number, route: TradeRoute): TradingManager {
-    return new TradingManager(this.version, this.routes.map((r, i) => i === idx ? route : r));
+  /** Rejects missing indices instead of silently ignoring edits. */
+  private checkIndex(index: number): void {
+    if (!Number.isInteger(index) || index < 0 || index >= this.values.length) throw new DecodeError('E_RANGE', 'Trade route index does not exist');
   }
-
-  // ── Serialization ─────────────────────────────────────────────────────────
-
-  /**
-   * Creates a value from Tag.
-   *
-   * @param root - Input value for the fromTag operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromTag(root: Tag): TradingManager {
-    if (root.type !== TagType.STRUCT) throw new TypeError('TradingManager: expected STRUCT');
-    const s = root.getStruct().filter(t => t.type !== TagType.FINISH);
-    const version = s[0]?.type === TagType.BYTE ? s[0].getByte() : 0;
-    const routes: TradeRoute[] = [];
-
-    if (s[1]?.type === TagType.STRUCT) {
-      for (const child of s[1].getStruct().filter(t => t.type !== TagType.FINISH)) {
-        if (child.type === TagType.STRUCT) {
-          try { routes.push(TradeRoute.fromTag(child)); } catch { /* skip corrupted */ }
-        }
-      }
-    }
-    return new TradingManager(version, routes);
+  /** Carries immutable source metadata to a validated replacement collection. */
+  private updated(routes: TradeRoute[]): TradingManager {
+    const result = inheritTagModel(this, new TradingManager(this.version, routes, this.options)), document = documents.get(this);
+    if (document) documents.set(result, document); result.toBuffer(); return result;
   }
-
-  /**
-   * Converts this value to Tag.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toTag(): Tag {
-    const routeTags = [...this.routes.map(r => r.toTag()), FINISH_TAG];
-    return Tags.struct(null, [
-      Tags.byte(null, this.version),
-      new Tag(TagType.STRUCT, null, routeTags),
-    ]);
+  /** Reads every route strictly and retains unknown manager fields. */
+  static fromTag(root: Tag, options: TagReadOptions = {}): TradingManager {
+    const source = copyTagModel(root, options), p = parts(source, [TagType.BYTE, TagType.STRUCT]); checkVersion(p[0].getByte());
+    const result = new TradingManager(p[0].getByte(), p[1].getStruct().filter(t => t.type !== TagType.FINISH).map(t => TradeRoute.fromTag(t, options)), options);
+    rememberTagModel(result, source, result.fields(), options); return result;
   }
-
-  /** Encodes to binary for TRADING.tag. */
-  toBuffer(): Buffer { return writeTo(this.toTag()); }
-
-  /**
-   * Creates a value from Buffer.
-   *
-   * @param data - Input value for the fromBuffer operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromBuffer(data: Buffer | Uint8Array): TradingManager {
-    return TradingManager.fromTag(readFrom(data));
+  /** Known fields at their persisted positions. */
+  private fields(): TagModelFields { return new Map([[0, Tags.byte(null, this.version)], [1, Tags.struct(null, this.values.map(route => route.toTag()))]]); }
+  /** Returns a detached, field-preserving root. */
+  toTag(): Tag { return renderTagModel(this, this.fields(), Tags.struct(null, []), this.options); }
+  /** Serializes original bytes when unchanged, retaining compression/version/trailer after edits. */
+  toBuffer(): Buffer { const doc = documents.get(this); return doc ? doc.withRoot(this.toTag()).toBuffer() : writeTo(this.toTag(), this.options); }
+  /** Reads one file with explicit codec limits. */
+  static fromBuffer(data: Uint8Array, options: TagReadOptions = {}): TradingManager {
+    const doc = TagModelFile.fromBuffer(data, options), result = TradingManager.fromTag(doc.root, doc.options); documents.set(result, doc); return result;
   }
-
-  /**
-   * Builds the diagnostic string representation for this value.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toString(): string {
-    return `TradingManager(v${this.version}, ${this.routes.length} routes)`;
-  }
+  /** Exact JSON projection independent from retained binary metadata. */
+  toJSON(): object { return {version: this.version, routes: this.values.map(route => route.toJSON())}; }
+  /** Human-readable collection summary. */
+  toString(): string { return `TradingManager(v${this.version}, ${this.values.length} routes)`; }
 }

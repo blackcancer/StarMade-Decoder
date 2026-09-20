@@ -31,12 +31,18 @@ try {
   const fixture = new AdmZip();
   fixture.addFile('Consumer/header.smbph', Buffer.alloc(36));
   fs.writeFileSync(path.join(consumer, 'consumer.sment'), fixture.toBuffer());
+  for (const file of ['FACTIONS.fac', 'CATALOG.cat', 'TRADING.tag']) {
+    fs.copyFileSync(path.join(root, 'samples', file), path.join(consumer, file));
+  }
   const script = `
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { Tags, writeTo, readFrom, BlockConfig, BlockDefinition, BlockState, Segment, BlockVolume,
+  SkinDocument, WorldSeedDocument, PersistentObjectDocument, SubtitleDocument, SystemNamesDocument, BlueprintModMappings,
+  XmlConfigDocument, FactionManager, Catalog, TradingManager, ControlElementMapper, registerAllFactories,
   Inventory, ItemStack, ManagerContainer, parseSment, emptySegment, emptySmd3File, writeSmd3, parseSmd3,
   Smd3Document, readBlueprintDocument, readBlueprintFolderDocument, writeSment, writeBlueprintFolder } from 'starmade-decoder';
+registerAllFactories();
 assert.equal(readFrom(writeTo(Tags.string('name', '\\u0000\\ud83d\\ude80'))).getString(), '\\u0000\\ud83d\\ude80');
 const config = BlockConfig.fromXml('<Config><Block type="5" name="Consumer Hull"><Hitpoints>100</Hitpoints><Mass>2</Mass></Block></Config>');
 assert.equal(config.getElementInfoById(5).identity.name, 'Consumer Hull');
@@ -80,7 +86,36 @@ const model = folder.model(catalogue), node = model.nodes()[0];
 node.blocks.set({x: -257, y: 0, z: 0}, BlockState.create(9));
 assert.equal(node.blocks.blockCount, 2);
 assert.equal(readBlueprintDocument(folder.toBuffer()).blocks().get({x: -257, y: 0, z: 0}).type, 9);
-console.log('Isolated production consumer exercised format classes, position-indexed inventories, XML, Tags, SMD3 and ZIP/folder writers.');
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a1ioAAAAASUVORK5CYII=', 'base64');
+const skin = SkinDocument.create({mainDiffuse:png, mainEmission:png, helmetDiffuse:png, helmetEmission:png});
+assert.deepEqual(SkinDocument.fromBuffer(skin.toBuffer()).texture('mainDiffuse'), png);
+assert.deepEqual(skin.withFile('note.txt',Buffer.from('skin')).withoutFile('note.txt').toBuffer(),skin.toBuffer());
+assert.throws(() => SkinDocument.fromBuffer(skin.toBuffer(),{maxEntries:3}));
+const seed = new WorldSeedDocument(-9223372036854775808n);
+assert.equal(WorldSeedDocument.fromBuffer(seed.toBuffer()).toJSON().seed, '-9223372036854775808');
+const objects = new PersistentObjectDocument([{className: 'Consumer', objects: [{id: 3, nested: [true, null]}]}]);
+const exported = objects.objectsFor('Consumer'); exported[0].id = 99;
+assert.equal(PersistentObjectDocument.fromBuffer(objects.toBuffer()).objectsFor('Consumer')[0].id, 3);
+const subtitles = new SubtitleDocument([{startMs: 100, endMs: 200, lines: ['Hello']}]);
+assert.equal(SubtitleDocument.fromBuffer(subtitles.shift(25).toBuffer()).at(125)[0].lines[0], 'Hello');
+assert.deepEqual(subtitles.at(200), []);
+const names = new SystemNamesDocument([{value: 'sol', flags: ['START']}]);
+assert.equal(SystemNamesDocument.fromBuffer(names.toBuffer()).withFlag('START')[0].value, 'sol');
+const mappings = new BlueprintModMappings([{modName: 'Consumer', blockName: 'Hull', id: -32768}], {compression: 'zlib'});
+assert.equal(BlueprintModMappings.fromBuffer(mappings.toBuffer()).idOf('Consumer', 'Hull'), -32768);
+const xml = XmlConfigDocument.fromXml('<Config><!--keep--><Item>1</Item><Item>2</Item></Config>');
+assert.equal(XmlConfigDocument.fromXml(xml.set('Config.Item[1]', 3).toXml()).get('Config.Item[1]'), 3);
+assert.match(xml.set('Config.Item[1]', 3).toXml(), /<!--keep-->/);
+for (const [Model, file] of [[FactionManager, 'FACTIONS.fac'], [Catalog, 'CATALOG.cat'], [TradingManager, 'TRADING.tag']]) {
+  const raw = fs.readFileSync(file), model = Model.fromBuffer(raw);
+  assert.deepEqual(model.toBuffer(), raw, file + ' must retain the original envelope');
+  assert.throws(() => Model.fromBuffer(raw, {maxNodes: 1}));
+}
+const factions = FactionManager.fromBuffer(fs.readFileSync('FACTIONS.fac'));
+assert.deepEqual(factions.withLastUpdate(factions.lastUpdate + 1n).withLastUpdate(factions.lastUpdate).toBuffer(), factions.toBuffer());
+const mapper = new ControlElementMapper([{from: first, type: 9, targets: [second]}]);
+assert.deepEqual(ControlElementMapper.fromTag(readFrom(writeTo(mapper.toTag()))).links, mapper.links);
+console.log('Isolated production consumer exercised V2 auxiliary/domain classes and limits, skins, XML snapshots, controllers, position-indexed inventories, Tags, SMD3 and ZIP/folder writers.');
 `;
   fs.writeFileSync(path.join(consumer, 'smoke.mjs'), script);
   const env = { ...process.env }; delete env.NODE_PATH;
@@ -88,7 +123,10 @@ console.log('Isolated production consumer exercised format classes, position-ind
   fs.writeFileSync(path.join(consumer, 'smoke.ts'), `import { Tags, writeTo, readFrom, type BlockData, type Smd3ParseOptions,
     readBlueprintDocument, writeBlueprintFolder, type BlueprintFileMap, type BlueprintWriteOptions,
     BlockState, Segment, BlockVolume, BlueprintModel, BlockDefinition, Inventory, ItemStack, InventoryLocation,
-    type BlockDefinitionOptions, type InventoryCapacity, type InventoryReadOptions } from 'starmade-decoder';
+    type BlockDefinitionOptions, type InventoryCapacity, type InventoryReadOptions,
+    SkinDocument, WorldSeedDocument, PersistentObjectDocument, SubtitleDocument, SystemNamesDocument, BlueprintModMappings,
+    XmlConfigDocument, type XmlConfigValue, type FormatLimits, type PersistentObjectLimits, type ModMappingOptions,
+    ControlElementMapper, type ControlElementMapperOptions, type NPCRoute } from 'starmade-decoder';
 const options: Smd3ParseOptions = { mode: 'strict' };
 const block: BlockData = {type:1, hp:127, active:true, orientation:0, extra:63};
 readFrom(writeTo(Tags.int('value', block.type))); void options;
@@ -111,6 +149,21 @@ const inventory = Inventory.fromTag(Inventory.EMPTY.set(new ItemStack(0, 9, 3)).
 inventory.assertCapacity(capacity);
 new InventoryLocation(3, {x: 0, y: 0, z: 0}, inventory);
 void rendererInput; void BlockVolume; void BlueprintModel;
+const limits: FormatLimits = {maxBytes: 4096, maxEntries: 100};
+const jsonLimits: PersistentObjectLimits = {...limits, maxDepth: 10, maxNodes: 100};
+const modOptions: ModMappingOptions = {...limits, compression: 'zlib'};
+const controllerOptions: ControlElementMapperOptions = {...limits, maxDepth: 10};
+const xmlValue: XmlConfigValue | undefined = XmlConfigDocument.fromXml('<Config/>', limits).get('Config');
+new WorldSeedDocument(1n, limits).withSeed(2n);
+new PersistentObjectDocument([], jsonLimits).withClass('Example', [{id: 1}]);
+new SubtitleDocument([{startMs: 0, endMs: 1, lines: ['text']}], limits).shift(2);
+new SystemNamesDocument([], limits).set(0, {value: 'sol', flags: []});
+new BlueprintModMappings([], modOptions).withMapping({modName: 'Example', blockName: 'Hull', id: 1});
+new ControlElementMapper([], controllerOptions).toTag();
+function routeIdentity(route: NPCRoute): NPCRoute {return route;}
+const skinTextures = {mainDiffuse:Buffer.alloc(0),mainEmission:Buffer.alloc(0),helmetDiffuse:Buffer.alloc(0),helmetEmission:Buffer.alloc(0)};
+function createSkin(): Buffer {return SkinDocument.create(skinTextures,{maxEntries:4}).toBuffer();}
+void createSkin; void routeIdentity; void xmlValue;
 `);
   fs.writeFileSync(path.join(consumer, 'tsconfig.json'), JSON.stringify({ compilerOptions: {
     target: 'ES2023', module: 'NodeNext', moduleResolution: 'NodeNext', noEmit: true,

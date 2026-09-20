@@ -1,129 +1,72 @@
-/**
- * @fileoverview Slot Assignment
- *
- * Defines reusable domain components used by StarMade entity object models.
- *
- * @author InitSysRev
- * @version 1.0.0
- */
-
-/**
- * SlotAssignment — block assignment to control slots.
- *
- * Port of SlotAssignment.fromTagStructure() Java.
- *
- * Structure Tag :
- *   STRUCT [
- *     [0] BYTE    version
- *     [1] STRUCT  entries [
- *       STRUCT [BYTE slot, LONG blockPos, FINISH]
- *       ...
- *       FINISH
- *     ]
- *     FINISH
- *   ]
- */
-
+/** @fileoverview Stored control-slot mappings with bounded, non-lossy immutable edits. */
 import { Tag } from '../../core/Tag.js';
 import { Tags } from '../../core/TagBuilder.js';
 import { TagType } from '../../core/TagType.js';
-import { FINISH_TAG } from '../../core/Tag.js';
+import type { TagReadOptions } from '../../core/TagParser.js';
+import { TagModelFile, replaceTagField } from '../../core/TagModelFile.js';
+import { DecodeError } from '../../core/DecodeError.js';
 
-/**
- * Represents the SlotAssignment model used by high-level entity component modelling.
- */
+/** Optional application bounds for assign(); decoding preserves every signed-byte stored slot. */
+export interface SlotAssignmentOptions extends TagReadOptions {minSlot?:number;maxSlot?:number;}
+/** Rejects lossy JavaScript numbers and positions outside the actual LONG wire range. */
+function validatePosition(position:bigint):void{
+  if(typeof position!=='bigint'||position<-(1n<<63n)||position>=(1n<<63n))throw new DecodeError('E_RANGE','Slot position requires a signed 64-bit bigint');
+}
+/** Immutable collection of stored slot IDs and packed block keys. */
 export class SlotAssignment {
-  /**
-   * Creates a SlotAssignment instance.
-   *
-   * @param version - Input value for the constructor operation.
-   * @param slots - Input value for the constructor operation.
-   */
-  constructor(
-    readonly version: number,
-    /** Map<slot (0-9), blockPosIndex> */
-    readonly slots: ReadonlyMap<number, bigint>,
-  ) {}
-
-  static EMPTY = new SlotAssignment(0, new Map());
-
-  /**
-   * Creates a value from Tag.
-   *
-   * @param tag - Input value for the fromTag operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  static fromTag(tag: Tag): SlotAssignment {
-    const top = tag.getStruct().filter(t => t.type !== TagType.FINISH);
-    const version = top[0]?.type === TagType.BYTE ? top[0].getByte() : 0;
-    const slots = new Map<number, bigint>();
-
-    if (top[1]?.type === TagType.STRUCT) {
-      for (const entry of top[1].getStruct().filter(t => t.type !== TagType.FINISH)) {
-        if (entry.type !== TagType.STRUCT) continue;
-        const v = entry.getStruct().filter(t => t.type !== TagType.FINISH);
-        const slot = v[0]?.type === TagType.BYTE ? v[0].getByte() : -1;
-        const pos  = v[1]?.type === TagType.LONG ? v[1].getLong() : 0n;
-        if (slot >= 0) slots.set(slot, pos);
-      }
+  private readonly data:ReadonlyMap<number,bigint>;
+  private readonly file:TagModelFile;
+  private readonly minSlot:number;
+  private readonly maxSlot:number;
+  /** Creates a validated collection; the leading byte is retained as the format's reserved version field. */
+  constructor(readonly version:number,slots:ReadonlyMap<number,bigint>,options:SlotAssignmentOptions={},source?:TagModelFile){
+    this.minSlot=options.minSlot??0;this.maxSlot=options.maxSlot??9;
+    for(const value of [version,this.minSlot,this.maxSlot,...slots.keys()])if(!Number.isInteger(value)||value < -128||value>127)throw new DecodeError('E_RANGE','Slot field must fit signed byte');
+    if(this.minSlot>this.maxSlot)throw new DecodeError('E_RANGE','Invalid assignment bounds');
+    for(const position of slots.values())validatePosition(position);
+    this.data=new Map(slots);this.file=source??new TagModelFile(Tags.struct(null,[Tags.byte(null,version),Tags.struct(null,[...slots].map(([slot,pos])=>Tags.struct(null,[Tags.byte(null,slot),Tags.long(null,pos)])))]),options);
+    Object.freeze(this);
+  }
+  /** Empty assignments with the usual ten-slot edit bounds. */
+  static readonly EMPTY=new SlotAssignment(0,new Map());
+  /** Detached map, preserving stored order and signed-byte keys. */
+  get slots():ReadonlyMap<number,bigint>{return new Map(this.data);}
+  /** Reads the real tuple strictly, retaining root/list/entry extensions and names. */
+  static fromTag(tag:Tag,options:SlotAssignmentOptions={}):SlotAssignment{return SlotAssignment.fromFile(new TagModelFile(tag,options),options);}
+  /** Projects a private source snapshot without losing unmodeled slots. */
+  private static fromFile(file:TagModelFile,options:SlotAssignmentOptions):SlotAssignment{
+    const root=file.root,p=root.getStruct();
+    if(p[0]?.type!==TagType.BYTE||p[1]?.type!==TagType.STRUCT)throw new DecodeError('E_FORMAT','Invalid slot-assignment tuple');
+    const slots=new Map<number,bigint>();
+    for(const entry of p[1].getStruct().filter(tag=>tag.type!==TagType.FINISH)){
+      const values=entry.getStruct();
+      if(values[0]?.type!==TagType.BYTE||values[1]?.type!==TagType.LONG||slots.has(values[0].getByte()))throw new DecodeError('E_FORMAT','Invalid or duplicate slot assignment');
+      slots.set(values[0].getByte(),values[1].getLong());
     }
-
-    return new SlotAssignment(version, slots);
+    return new SlotAssignment(p[0].getByte(),slots,options,file);
   }
-
-  /**
-   * Converts this value to Tag.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toTag(): Tag {
-    const entryTags: Tag[] = [];
-    for (const [slot, pos] of this.slots) {
-      entryTags.push(Tags.struct(null, [
-        Tags.byte(null, slot),
-        Tags.long(null, pos),
-      ]));
-    }
-    entryTags.push(FINISH_TAG);
-
-    return Tags.struct(null, [
-      Tags.byte(null, this.version),
-      new Tag(TagType.STRUCT, null, entryTags),
-    ]);
+  /** Detached complete record. */
+  toTag():Tag{return this.file.root;}
+  /** Assigns within caller-selected bounds; input keys/counts are never rounded or wrapped. */
+  assign(slot:number,position:bigint):SlotAssignment{
+    validatePosition(position);
+    if(!Number.isInteger(slot)||slot<this.minSlot||slot>this.maxSlot)throw new RangeError(`SlotAssignment: slot outside [${this.minSlot}, ${this.maxSlot}]`);
+    const root=this.file.root,list=root.getStruct()[1],children=list.getStruct().filter(tag=>tag.type!==TagType.FINISH);
+    const index=children.findIndex(tag=>tag.getStruct()[0].getByte()===slot);
+    if(index<0)children.push(Tags.struct(null,[Tags.byte(null,slot),Tags.long(null,position)]));
+    else children[index]=replaceTagField(children[index],1,Tags.long(null,position));
+    return this.updated(replaceTagField(root,1,Tags.struct(list.name,children)));
   }
-
-  /**
-   * Handles the assign operation used by high-level entity component modelling.
-   *
-   * @param slot - Input value for the assign operation.
-   * @param blockPos - Input value for the assign operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  assign(slot: number, blockPos: bigint): SlotAssignment {
-    if (slot < 0 || slot > 9) throw new RangeError(`SlotAssignment: slot ${slot} hors limites (0-9)`);
-    const m = new Map(this.slots);
-    m.set(slot, blockPos);
-    return new SlotAssignment(this.version, m);
+  /** Removes a stored key without mutating the source map or imposing assignment policy. */
+  unassign(slot:number):SlotAssignment{
+    const root=this.file.root,list=root.getStruct()[1];
+    const children=list.getStruct().filter(tag=>tag.type!==TagType.FINISH&&tag.getStruct()[0].getByte()!==slot);
+    return this.updated(replaceTagField(root,1,Tags.struct(list.name,children)));
   }
-
-  /**
-   * Handles the unassign operation used by high-level entity component modelling.
-   *
-   * @param slot - Input value for the unassign operation.
-   * @returns The computed StarMade-Decoder value.
-   */
-  unassign(slot: number): SlotAssignment {
-    const m = new Map(this.slots);
-    m.delete(slot);
-    return new SlotAssignment(this.version, m);
-  }
-
-  /**
-   * Builds the diagnostic string representation for this value.
-   *
-   * @returns The computed StarMade-Decoder value.
-   */
-  toString(): string {
-    return `SlotAssignment(${this.slots.size} slots)`;
-  }
+  /** Carries both edit bounds and binary limits to a validated revision. */
+  private updated(root:Tag):SlotAssignment{return SlotAssignment.fromFile(this.file.withRoot(root),{...this.file.options,minSlot:this.minSlot,maxSlot:this.maxSlot});}
+  /** JSON preserves full signed-long keys as decimal strings. */
+  toJSON():object{return {version:this.version,slots:[...this.data].map(([slot,position])=>({slot,position:String(position)}))};}
+  /** Human-readable collection summary. */
+  toString():string{return `SlotAssignment(${this.data.size} slots)`;}
 }
