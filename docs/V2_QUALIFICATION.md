@@ -76,9 +76,13 @@ npm audit --omit=dev
 
 The package check requires registry access or populated npm caches. Python 3 is
 required for independent oracles; no JDK or proprietary game sources are needed.
-On CI hosts without a game installation, 26 installation-specific tests are
-reported as pending, not passed; portable coverage still must meet the same exact
-all-source gates. Missing required files fail once installation tests are enabled.
+The GitHub run for implementation commit `8552ee3` passed on Node.js 20, 22 and
+24, each with **1,430 passing and 47 pending** tests. Those 47 checks depend on
+installation data or optional fixtures absent from CI; all ran successfully in
+the local 1,477-test qualification above. They are not counted as CI passes.
+Portable CI coverage met the same exact all-source gates. Missing required files
+fail once installation tests are enabled. The three downloaded evidence archives
+also passed the Java source/binary boundary scan (884 extracted files).
 
 ## Qualification limits
 
