@@ -42,13 +42,20 @@ import { Tags, writeTo, readFrom, BlockConfig, BlockDefinition, BlockState, Segm
   XmlConfigDocument, FactionManager, Catalog, TradingManager, ControlElementMapper, registerAllFactories,
   Inventory, ItemStack, ManagerContainer, parseSment, emptySegment, emptySmd3File, writeSmd3, parseSmd3,
   BlueprintTemplate, parseSmtpl, writeSmtpl, FleetCommandObject, StarSystem, TradePricesObject,
-  ServerConfig, SERVER_CONFIG_SCHEMA, SERVER_CONFIG_SCHEMA_SOURCE,
+  ServerConfig, SERVER_CONFIG_SCHEMA, SERVER_CONFIG_SCHEMA_SOURCE, ChatLogReader, parseChatLogLine,
   Smd3Document, readBlueprintDocument, readBlueprintFolderDocument, writeSment, writeBlueprintFolder } from 'starmade-decoder';
 registerAllFactories();
 assert.equal(Object.keys(SERVER_CONFIG_SCHEMA).length, 210);
 assert.equal(SERVER_CONFIG_SCHEMA_SOURCE, 'e5a3b49d86943c4d618cea6512e28fa0b95901df');
 assert.equal(SERVER_CONFIG_SCHEMA.SECTOR_SIZE.default, 5000);
 assert.deepEqual(SERVER_CONFIG_SCHEMA.DEFAULT_GAME_MODE.choices, ['SURVIVAL', 'CREATIVE']);
+assert.equal(parseChatLogLine('2026/09/23 - 22:29:11 [InitSysRev]: hello').kind, 'message');
+fs.mkdirSync('chatlogs');
+fs.writeFileSync('chatlogs/all.txt', '2026/09/23 - 22:29:11 [InitSysRev]: hello\\n');
+const chatLog = new ChatLogReader(process.cwd());
+const chatHistory = chatLog.readRecent();
+assert.equal(chatHistory.records[0].kind, 'message');
+assert.equal(chatLog.poll(chatHistory.cursor).records.length, 0);
 assert.throws(() => ServerConfig.fromString('').set('SECTOR_SIZE', 1000), /at least 2000/);
 const attack = FleetCommandObject.create(42n, 'FLEET_ATTACK');
 assert.equal(attack.toBytes().readInt32BE(8), 6);

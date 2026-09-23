@@ -549,6 +549,45 @@ Represents `chatchannels.tag`.
 
 **`ChatChannel` fields:** `uid`, `password`, `isPermanent`, `isPublic`, `moderators`, `banned`, `muted`.
 
+#### Plain-text chatlogs
+
+`ChatLogReader` reads the separate `chatlogs/*.txt` files written by StarMade-Open
+`ChannelRouter`; `ChatChannelManager` handles the Tag archive instead. The source
+revision `e5a3b49d8` writes local-time lines as
+`yyyy/MM/dd - HH:mm:ss [sender]: message`, or `[sender -> recipient]: message`
+for direct messages. No timezone is stored, so `calendar` contains the literal
+year, month, day, hour, minute and second without converting to a UTC `Date`.
+
+```ts
+import { ChatLogReader } from 'starmade-decoder';
+
+const log = new ChatLogReader('/srv/StarMade', 'all.txt', {
+  maxBytes: 1024 * 1024, maxLines: 1000, maxLineBytes: 64 * 1024,
+});
+let batch = log.readRecent();
+// Persist batch.cursor for the next request; render batch.records.
+batch = log.poll(batch.cursor);
+```
+
+`readRecent()` returns the newest **complete** lines from a bounded tail window;
+`truncated` reports skipped older history. `poll(cursor)` returns only subsequent
+complete lines. Repeat polling while `hasMore` is true to drain a backlog. A
+rotation, file replacement, or shrink sets `reset` and restarts at the beginning.
+If the directory or file is absent, both methods return an empty history; a
+previous cursor is reset. An unfinished last line stays at the cursor until its
+newline arrives. Each record includes its original `raw` text and byte offset;
+malformed lines are returned as `kind: 'unparsed'` with a reason rather than
+discarded. `parseChatLogLine(raw)` parses one complete line independently.
+
+The reader accepts a single `.txt` basename under `chatlogs/`, rejects symlinked
+paths, decodes UTF-8 strictly and caps bytes, lines and line length per call.
+Defaults are 1 MiB, 1,000 lines and 64 KiB per line; maximum configurable caps
+are 64 MiB, 1,000,000 lines and 1 MiB per line. `maxBytes` must exceed
+`maxLineBytes`. A `ChatLogCursor` contains `{ offset, fileId }`; keep both fields.
+An empty read caused by a missing file is distinct from I/O or limit errors.
+See the [chatlog qualification](CHATLOG_QUALIFICATION.md) for the game-source
+reference and validation evidence.
+
 #### `TradingManager`
 
 `TradingManager.fromTag(root, options?)` / `fromBuffer(data, options?)` accept

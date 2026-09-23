@@ -17,6 +17,9 @@ export { PlayerCharacter, PlayerTransformable, type PlayerTransformableFields } 
 export { PlayerState } from './PlayerState.js';
 export { SegmentControllerObject } from './SegmentController.js';
 export { ChatChannelManager, ChatChannel } from './ChatChannels.js';
+export { ChatLogReader, parseChatLogLine } from './ChatLogs.js';
+export type { ChatLogCalendar, ChatLogMessage, ChatLogUnparsed, ChatLogRecord,
+  ChatLogFileRecord, ChatLogCursor, ChatLogBatch, ChatLogReadOptions } from './ChatLogs.js';
 export { TradingManager, TradeRoute } from './Trading.js';
 export { NPCFactionManager, SimulationState, SimulationGroup } from './Simulation.js';
 export { FloatingItemsArchive, FloatingItem, FloatingItemSector, type FloatingItemPosition } from './FloatingItems.js';

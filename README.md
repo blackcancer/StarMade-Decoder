@@ -7,7 +7,7 @@ The SDK implements the Java `org.schema.schine.resource.tag.Tag` binary format a
 `ServerConfig` exposes the [210 current game settings](docs/API.md#serverconfig)
 with defaults, bounds or choices and effect descriptions for configuration tools.
 
-The **2.0.3 SDK** provides dedicated models for every supported format family,
+The **2.0.4 SDK** provides dedicated models for every supported format family,
 including auxiliary files, configuration, entities, inventories and blueprints.
 Models validate stored values, retain opaque data and expose caller-selected limits.
 See the [format matrix](docs/FORMAT_MODELS.md#coverage-of-supported-formats) for
@@ -38,6 +38,7 @@ SDK 2.0.1 cells require an explicit `legacy-sdk` profile; see
 - Read/write position-indexed inventories, opaque metadata items and multislot groups with caller-defined limits
 - Use typed domain objects for ships, stations, players, factions, catalogs, trading, and serializable payloads
 - Load StarMade configuration files, inspect BlockConfig element information, and save custom overrides safely
+- Read bounded `chatlogs/*.txt` history and poll appended chat lines with `ChatLogReader`
 - Read and write HSQLDB binary columns for fleet commands/remotes, sector items,
   trade prices and system data, including Java fleet-remotes object streams
 - Read, edit and write auxiliary files with `WorldSeedDocument`,

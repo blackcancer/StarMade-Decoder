@@ -133,6 +133,7 @@ StarMade/                              ← starmadeDir in SMToolConfig
 | `SIMULATION_STATE.sim` | Tag | `SimulationState.fromBuffer(data)` |
 | `NPCFACTIONS_*.tag` | Tag | `NPCFactionManager.fromBuffer(data)` |
 | `chatchannels.tag` | Tag | `ChatChannelManager.fromBuffer(data)` |
+| `chatlogs/*.txt` | UTF-8 text | `new ChatLogReader(gameDirectory, basename).readRecent()` / `.poll(cursor)` |
 | `FLOATING_ITEMS_ARCHIVE.ent` | Tag | `FloatingItemsArchive.fromBuffer(data)` |
 | `ENTITY_SHIP_*.ent` | Tag | `Ship.fromBuffer(data)` |
 | `ENTITY_SPACESTATION_*.ent` | Tag | `SpaceStation.fromBuffer(data)` |

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.4 — 2026-09-23
+
+- Add bounded text-chatlog parsing, recent history and incremental polling for
+  `chatlogs/*.txt`, including missing-file, partial-line and rotation handling.
+- Preserve malformed lines and byte offsets, parse channel/direct messages in
+  the local-time format written by StarMade-Open, and reject unsafe paths.
+
 ## 2.0.3 — 2026-09-23
 
 - Synchronize `ServerConfig` with all 210 active settings in StarMade-Open
