@@ -186,6 +186,7 @@ describe('SmtplWriter — .smtpl encoding', function () {
     const encoded = writeSmtpl(tpl1);
     const tpl2 = parseSmtpl(encoded);
 
+    assert.deepEqual(encoded, data, 'NOR Gate must retain every source byte');
     assert.equal(tpl2.totalBlocks, tpl1.totalBlocks);
     assert.equal(tpl2.minX, tpl1.minX);
     assert.equal(tpl2.maxX, tpl1.maxX);
@@ -208,6 +209,7 @@ describe('SmtplWriter — .smtpl encoding', function () {
       const tpl1 = parseSmtpl(data);
       const encoded = writeSmtpl(tpl1);
       const tpl2 = parseSmtpl(encoded);
+      assert.deepEqual(encoded, data, `${f}: every source byte must survive`);
       if (
         tpl2.totalBlocks === tpl1.totalBlocks &&
         tpl2.textCount === tpl1.textCount &&

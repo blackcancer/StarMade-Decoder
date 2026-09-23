@@ -11,9 +11,9 @@
  * SmtplParser — parser for .smtpl files (StarMade block templates)
  *
  * Format binaire (CopyArea.java) :
- *   byte    version     (VERSION = 6 current)
+ *   byte    version     (VERSION = 5 in StarMade-Open e5a3b49)
  *
- *   Version >= 6 (4-byte data par bloc) :
+ *   Version 6 (extended 4-byte data par bloc) :
  *     int   minX, minY, minZ
  *     int   maxX, maxY, maxZ
  *     int   piecesSize
@@ -33,7 +33,9 @@
  *     int   fillUpFilterSize
  *       long key + int lSize + lSize×(short+int)
  *
- *   Versions <= 5 (3-byte data par bloc) :
+ *   Versions 4-5: little-endian 24-bit words (11 type, 7 HP, 1 active, 5 orientation).
+ *   Versions 1-3: legacy big-endian 24-bit words (11 type, 8 HP, inverted active, 4 orientation).
+ *   Both three-byte layouts:
  *     min/max puis piecesSize×(3×int voidPos + 3×byte data)
  *     followed by the same connections/text/filter/prod sections
  *
@@ -41,6 +43,8 @@
  */
 
 import { BufferReader } from '../core/BufferReader.js';
+import { DecodeError } from '../core/DecodeError.js';
+import { decodeBlockWord } from './Smd3Parser.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,6 +57,8 @@ export interface TemplatePiece {
   hp: number;
   active: boolean;
   orientation: number;
+  /** Reserved bits 26..31 in version 6; absent means zero. */
+  extra?: number;
 }
 
 /**
@@ -579,8 +585,10 @@ export function parseSmtpl(data: Buffer | Uint8Array): SmtplFile {
   const r = BufferReader.from(buf);
 
   const version = r.readInt8();
+  if (version < 1 || version > 6) throw new DecodeError('E_UNSUPPORTED', `Unsupported SMTPL version ${version}`);
 
-  let minX = 0, minY = 0, minZ = 0, maxX = 0, maxY = 0, maxZ = 0;
+  const minX = r.readInt32BE(), minY = r.readInt32BE(), minZ = r.readInt32BE();
+  const maxX = r.readInt32BE(), maxY = r.readInt32BE(), maxZ = r.readInt32BE();
   const pieces: TemplatePiece[] = [];
   const connections: TemplateConnection[] = [];
   const texts = new Map<bigint, string>();
@@ -589,64 +597,33 @@ export function parseSmtpl(data: Buffer | Uint8Array): SmtplFile {
   const productionLimits: TemplateProductionLimit[] = [];
   const fillUpFilters: TemplateInventoryFilter[] = [];
 
-  if (version >= 6) {
-    // Current 4-byte format
-    minX = r.readInt32BE(); minY = r.readInt32BE(); minZ = r.readInt32BE();
-    maxX = r.readInt32BE(); maxY = r.readInt32BE(); maxZ = r.readInt32BE();
-
-    const piecesSize = r.readInt32BE();
-    for (let i = 0; i < piecesSize; i++) {
-      const vx = r.readInt32BE(), vy = r.readInt32BE(), vz = r.readInt32BE();
-      const data4 = r.readInt32BE();
-      pieces.push(_decode4BytePiece(vx, vy, vz, data4));
+  const piecesSize = r.readCount(version === 6 ? 16 : 15);
+  for (let i = 0; i < piecesSize; i++) {
+    const x = r.readInt32BE(), y = r.readInt32BE(), z = r.readInt32BE();
+    if (version === 6) {
+      pieces.push({ x, y, z, ...decodeBlockWord(r.readInt32BE()) });
+    } else {
+      const a = r.readUInt8(), b = r.readUInt8(), c = r.readUInt8();
+      if (version >= 4) {
+        const word = a | (b << 8) | (c << 16);
+        pieces.push({ x, y, z, type: word & 0x7ff, hp: (word >>> 11) & 127,
+          active: (word & 0x40000) !== 0, orientation: word >>> 19 });
+      } else {
+        pieces.push(_decode3BytePiece(x, y, z, a, b, c));
+      }
     }
+  }
 
-    _readConnections(r, connections);
-    _readTexts(r, texts);
-    filters.push(..._readFilters(r));              // filterSize + entries
-    production.push(..._readProdMap(r));           // prodSize + entries (long->short)
-    productionLimits.push(..._readProdLimitMap(r)); // prodLimitSize + entries (long->int)
-    fillUpFilters.push(..._readFilters(r));        // fillUpFilterSize + entries
-
-  } else if (version >= 4) {
-    // Format 3-byte pieces, same structure
-    minX = r.readInt32BE(); minY = r.readInt32BE(); minZ = r.readInt32BE();
-    maxX = r.readInt32BE(); maxY = r.readInt32BE(); maxZ = r.readInt32BE();
-
-    const piecesSize = r.readInt32BE();
-    for (let i = 0; i < piecesSize; i++) {
-      const vx = r.readInt32BE(), vy = r.readInt32BE(), vz = r.readInt32BE();
-      const b0 = r.readInt8(), b1 = r.readInt8(), b2 = r.readInt8();
-      pieces.push(_decode3BytePiece(vx, vy, vz, b0, b1, b2));
-    }
-
-    _readConnections(r, connections);
-    _readTexts(r, texts);
+  // Retain the established compatibility with files ending between optional sections.
+  _readConnections(r, connections);
+  if (version >= 2) _readTexts(r, texts);
+  if (version >= 3) {
     filters.push(..._readFilters(r));
     production.push(..._readProdMap(r));
-    if (version >= 5) {
-      productionLimits.push(..._readProdLimitMap(r));
-      fillUpFilters.push(..._readFilters(r));
-    }
-
-  } else {
-    // Very old versions (1-3) — same structure 3-byte but without prod/filter
-    minX = r.readInt32BE(); minY = r.readInt32BE(); minZ = r.readInt32BE();
-    maxX = r.readInt32BE(); maxY = r.readInt32BE(); maxZ = r.readInt32BE();
-
-    const piecesSize = r.readInt32BE();
-    for (let i = 0; i < piecesSize; i++) {
-      const vx = r.readInt32BE(), vy = r.readInt32BE(), vz = r.readInt32BE();
-      const b0 = r.readInt8(), b1 = r.readInt8(), b2 = r.readInt8();
-      pieces.push(_decode3BytePiece(vx, vy, vz, b0, b1, b2));
-    }
-
-    if (!r.isEOF()) _readConnections(r, connections);
-    if (version >= 2 && !r.isEOF()) _readTexts(r, texts);
-    if (version >= 3 && !r.isEOF()) {
-      filters.push(..._readFilters(r));
-      production.push(..._readProdMap(r));
-    }
+  }
+  if (version >= 5) {
+    productionLimits.push(..._readProdLimitMap(r));
+    fillUpFilters.push(..._readFilters(r));
   }
 
   return new BlueprintTemplate({
@@ -665,25 +642,6 @@ export function parseSmtpl(data: Buffer | Uint8Array): SmtplFile {
 // ── Block decoding ─────────────────────────────────────────────────────────────
 
 /**
- * Parses 4BytePiece for StarMade blueprint and segment file parsing.
- *
- * @param x - Input value for the _decode4BytePiece operation.
- * @param y - Input value for the _decode4BytePiece operation.
- * @param z - Input value for the _decode4BytePiece operation.
- * @param data - Input value for the _decode4BytePiece operation.
- * @returns The computed StarMade-Decoder value.
- */
-function _decode4BytePiece(x: number, y: number, z: number, data: number): TemplatePiece {
-  return {
-    x, y, z,
-    type:        data & 0x1FFF,
-    hp:          (data >> 13) & 0x7F,
-    active:      ((data >> 20) & 0x1) === 1,
-    orientation: (data >> 21) & 0x1F,
-  };
-}
-
-/**
  * Parses 3BytePiece for StarMade blueprint and segment file parsing.
  *
  * @param x - Input value for the _decode3BytePiece operation.
@@ -697,7 +655,7 @@ function _decode4BytePiece(x: number, y: number, z: number, data: number): Templ
 function _decode3BytePiece(x: number, y: number, z: number, b0: number, b1: number, b2: number): TemplatePiece {
   const u0 = b0 & 0xff, u1 = b1 & 0xff, u2 = b2 & 0xff;
   const type        = u2 + ((u1 & 0x07) * 256);
-  const hp          = ((u1 & 0xf8) >> 3) | ((u0 & 0x03) << 5);
+  const hp          = ((u1 & 0xf8) >> 3) | ((u0 & 0x07) << 5);
   const active      = (u0 & 0x08) === 0;
   const orientation = (u0 >> 4) & 0x0f;
   return { x, y, z, type, hp, active, orientation };
@@ -713,10 +671,10 @@ function _decode3BytePiece(x: number, y: number, z: number, b0: number, b1: numb
  */
 function _readConnections(r: BufferReader, out: TemplateConnection[]): void {
   if (r.isEOF()) return;
-  const size = r.readInt32BE();
+  const size = r.readCount(12);
   for (let i = 0; i < size; i++) {
     const key   = r.readInt64BE();
-    const lSize = r.readInt32BE();
+    const lSize = r.readCount(8);
     const targets: bigint[] = [];
     for (let j = 0; j < lSize; j++) targets.push(r.readInt64BE());
     out.push({ from: key, targets });
@@ -731,7 +689,7 @@ function _readConnections(r: BufferReader, out: TemplateConnection[]): void {
  */
 function _readTexts(r: BufferReader, out: Map<bigint, string>): void {
   if (r.isEOF()) return;
-  const size = r.readInt32BE();
+  const size = r.readCount(10);
   for (let i = 0; i < size; i++) {
     const key  = r.readInt64BE();
     const text = r.readJavaModifiedUTF();
@@ -748,10 +706,10 @@ function _readTexts(r: BufferReader, out: Map<bigint, string>): void {
 function _readFilters(r: BufferReader): TemplateInventoryFilter[] {
   if (r.isEOF()) return [];
   const filters: TemplateInventoryFilter[] = [];
-  const size = r.readInt32BE();
+  const size = r.readCount(12);
   for (let i = 0; i < size; i++) {
     const position = r.readInt64BE();
-    const lSize = r.readInt32BE();
+    const lSize = r.readCount(6);
     const entries: TemplateFilterEntry[] = [];
     for (let j = 0; j < lSize; j++) {
       entries.push({
@@ -773,7 +731,7 @@ function _readFilters(r: BufferReader): TemplateInventoryFilter[] {
 function _readProdMap(r: BufferReader): TemplateProductionEntry[] {
   if (r.isEOF()) return [];
   const entries: TemplateProductionEntry[] = [];
-  const size = r.readInt32BE();
+  const size = r.readCount(10);
   for (let i = 0; i < size; i++) {
     entries.push({
       position: r.readInt64BE(),
@@ -792,7 +750,7 @@ function _readProdMap(r: BufferReader): TemplateProductionEntry[] {
 function _readProdLimitMap(r: BufferReader): TemplateProductionLimit[] {
   if (r.isEOF()) return [];
   const entries: TemplateProductionLimit[] = [];
-  const size = r.readInt32BE();
+  const size = r.readCount(12);
   for (let i = 0; i < size; i++) {
     entries.push({
       position: r.readInt64BE(),

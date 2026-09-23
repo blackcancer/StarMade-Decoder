@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.0.1 — 2026-09-23
+
+- Correct SMTPL v4/v5 little-endian 24-bit block decoding against the updated
+  StarMade-Open reference. Preserve legacy v1–v3 encoding and extended v6 support.
+- Make template writes honor the requested version, with matching sections and
+  validation of block ranges and boolean activation. Reject data that cannot be
+  represented instead of truncating it or silently changing the version.
+- Preserve all eight legacy HP bits and the six reserved v6 block bits. Reject
+  unknown versions and negative, oversized or truncated collection counts.
+- Verify all 84 real v5 templates byte-for-byte and add independent Python
+  block-layout, creation and edit checks, plus installed-package contracts.
+
+See [migration notes](docs/INTEGRITY_AND_MIGRATION.md#smtpl-compatibility-correction-201)
+and the [SMTPL qualification report](docs/SMTPL_QUALIFICATION.md).
+
 ## 2.0.0 — 2026-09-20
 
 ### Complete format class layer

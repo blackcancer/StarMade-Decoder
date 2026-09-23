@@ -1,6 +1,6 @@
 # Format classes
 
-The 2.0.0 SDK provides models for stored StarMade data: decoding, explicit
+The 2.0.1 SDK provides models for stored StarMade data: decoding, explicit
 validation, in-memory edits, indexed access and serialization. Each consumer
 chooses its own workflow. StarMade-3D owns mesh generation, rendered coordinates,
 rotations and projection; StarMade-BlockEditor owns its editing interface;

@@ -1,5 +1,24 @@
 # Data integrity and migration
 
+## SMTPL compatibility correction (2.0.1)
+
+The updated local StarMade-Open reference `e5a3b49d86943c4d618cea6512e28fa0b95901df`
+writes SMTPL version 5. Versions 4–5 use little-endian 24-bit blocks, not the
+legacy big-endian layout used by versions 1–3. Earlier SDK releases therefore
+misdecoded v4/v5 type, HP, active and orientation fields; re-read original files
+with the corrected parser. Files already rewritten using the old erroneous
+decoding cannot be reliably repaired without their original input.
+
+`writeSmtpl` now respects the model's version instead of always writing version 6.
+Use `version: 5` when constructing templates for the updated game reference.
+The SDK still reads/writes v6 for compatibility with earlier exports, including
+reserved `extra` bits, but that updated reference does not accept v6.
+Out-of-range block values and unsupported sections are rejected without silent
+truncation. Legacy v1–v3 HP now retains all eight stored bits; orientation values
+remain raw, without game-dependent migration. See the
+[version and range table](API.md#smtpl-template-files) and
+[qualification report](SMTPL_QUALIFICATION.md).
+
 ## Upgrading to 2.0.0
 
 V2 completes the format-model layer and corrects schema assumptions in older SDK

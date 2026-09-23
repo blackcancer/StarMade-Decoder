@@ -4,7 +4,7 @@ TypeScript SDK for reading, inspecting, and rewriting **StarMade** save files an
 
 The SDK implements the Java `org.schema.schine.resource.tag.Tag` binary format and higher-level helpers for entities, blueprints and configuration files.
 
-The **2.0.0 SDK** provides dedicated models for every supported format family,
+The **2.0.1 SDK** provides dedicated models for every supported format family,
 including auxiliary files, configuration, entities, inventories and blueprints.
 Models validate stored values, retain opaque data and expose caller-selected limits.
 See the [format matrix](docs/FORMAT_MODELS.md#coverage-of-supported-formats) for
@@ -24,6 +24,8 @@ to StarMade-DB. This package provides format operations for those consumers.
   `BlueprintDocument`, preserving unchanged archives byte-for-byte
 - Preserve SMD3 sector layouts with `Smd3Document`; update only changed records
 - Parse StarMade blueprint formats (`.sment`, `.smd3`, `.smtpl`, `.smbph`, `.smbpl`, `.smbpm`, `.smbmm`)
+- Read/write `.smtpl` versions 1–6 without forced version upgrades; use version 5
+  for the updated StarMade-Open format. See the [template version table](docs/API.md#smtpl-template-files).
 - Work with immutable block states, indexed segment grids and bounded blueprint hierarchies
 - Create/edit block definitions and export matching XML/type mappings while preserving unknown fields
 - Read/write position-indexed inventories, opaque metadata items and multislot groups with caller-defined limits

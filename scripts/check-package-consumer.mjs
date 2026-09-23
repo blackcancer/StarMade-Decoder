@@ -41,8 +41,15 @@ import { Tags, writeTo, readFrom, BlockConfig, BlockDefinition, BlockState, Segm
   SkinDocument, WorldSeedDocument, PersistentObjectDocument, SubtitleDocument, SystemNamesDocument, BlueprintModMappings,
   XmlConfigDocument, FactionManager, Catalog, TradingManager, ControlElementMapper, registerAllFactories,
   Inventory, ItemStack, ManagerContainer, parseSment, emptySegment, emptySmd3File, writeSmd3, parseSmd3,
+  BlueprintTemplate, parseSmtpl, writeSmtpl,
   Smd3Document, readBlueprintDocument, readBlueprintFolderDocument, writeSment, writeBlueprintFolder } from 'starmade-decoder';
 registerAllFactories();
+const template = new BlueprintTemplate({version:5,minX:0,minY:0,minZ:0,maxX:0,maxY:0,maxZ:0,
+  pieces:[{x:0,y:0,z:0,type:2047,hp:127,active:true,orientation:31}],connections:[],texts:new Map()});
+const templateBytes = writeSmtpl(template);
+assert.equal(templateBytes[0], 5);
+assert.equal(templateBytes.subarray(41,44).toString('hex'), 'ffffff');
+assert.deepEqual(parseSmtpl(templateBytes).pieces, template.pieces);
 assert.equal(readFrom(writeTo(Tags.string('name', '\\u0000\\ud83d\\ude80'))).getString(), '\\u0000\\ud83d\\ude80');
 const config = BlockConfig.fromXml('<Config><Block type="5" name="Consumer Hull"><Hitpoints>100</Hitpoints><Mass>2</Mass></Block></Config>');
 assert.equal(config.getElementInfoById(5).identity.name, 'Consumer Hull');
@@ -123,11 +130,16 @@ console.log('Isolated production consumer exercised V2 auxiliary/domain classes 
   fs.writeFileSync(path.join(consumer, 'smoke.ts'), `import { Tags, writeTo, readFrom, type BlockData, type Smd3ParseOptions,
     readBlueprintDocument, writeBlueprintFolder, type BlueprintFileMap, type BlueprintWriteOptions,
     BlockState, Segment, BlockVolume, BlueprintModel, BlockDefinition, Inventory, ItemStack, InventoryLocation,
+    BlueprintTemplate, parseSmtpl, writeSmtpl, type TemplatePiece,
     type BlockDefinitionOptions, type InventoryCapacity, type InventoryReadOptions,
     SkinDocument, WorldSeedDocument, PersistentObjectDocument, SubtitleDocument, SystemNamesDocument, BlueprintModMappings,
     XmlConfigDocument, type XmlConfigValue, type FormatLimits, type PersistentObjectLimits, type ModMappingOptions,
     ControlElementMapper, type ControlElementMapperOptions, type NPCRoute } from 'starmade-decoder';
 const options: Smd3ParseOptions = { mode: 'strict' };
+const templatePiece: TemplatePiece = {x:0,y:0,z:0,type:1,hp:127,active:true,orientation:31,extra:0};
+const template = new BlueprintTemplate({version:5,minX:0,minY:0,minZ:0,maxX:0,maxY:0,maxZ:0,
+  pieces:[templatePiece],connections:[],texts:new Map()});
+parseSmtpl(writeSmtpl(template));
 const block: BlockData = {type:1, hp:127, active:true, orientation:0, extra:63};
 readFrom(writeTo(Tags.int('value', block.type))); void options;
 const exportOptions: BlueprintWriteOptions = { overwrite: true, maxBlocks: 32768 };

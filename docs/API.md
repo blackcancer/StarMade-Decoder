@@ -1212,13 +1212,45 @@ See [guarantees, model updates, Java reference and qualification](BLUEPRINT_EDIT
 
 - `parseSmtpl(data)` — parses a `.smtpl` file into `SmtplFile`.
 - `normalizeBlueprintTemplate(file)` or `new BlueprintTemplate(file)` — supplies the typed editing helpers below.
-- `writeSmtpl(template)` — encodes a `BlueprintTemplate` or compatible high-level object to `Buffer`.
+- `writeSmtpl(template)` — encodes a `BlueprintTemplate` or compatible high-level object to `Buffer`, honoring `template.version` (1–6).
 - `templatePositionKey(position)` / `templatePositionFromKey(key)` — convert StarMade template position keys to `{ x, y, z }`.
 
 **`BlueprintTemplate` fields:** `version`, `minX/minY/minZ`, `maxX/maxY/maxZ`, `sizeX/sizeY/sizeZ`, `pieces`, `connections`, `texts`, `filters`, `production`, `productionLimits`, `fillUpFilters`, `totalBlocks`.
 **`BlueprintTemplate` helpers:** `bounds`, `pieceCount`, `connectionCount`, `textCount`, `filterCount`, `productionCount`, `productionLimitCount`, `fillUpFilterCount`, `isEmpty`, `pieceAt(position)`, `piecesOfType(type)`, `blockCountOf(type)`, `topBlockTypes(limit?)`, `getText(positionOrKey)`, `filterAt(positionOrKey)`, `fillUpFilterAt(positionOrKey)`, `productionAt(positionOrKey)`, `productionLimitAt(positionOrKey)`, `controllersFor(target)`, `controlledBy(controller)`, `isConnected(controller, target)`, `withPieces(pieces)`, `withPiece(piece)`, `removePieceAt(position)`, `withConnections(connections)`, `addConnection(controller, target)`, `removeConnection(controller, target?)`, `withText(position, text)`, `withoutText(position)`, `withInventoryFilter(position, entries)`, `withFillUpFilter(position, entries)`, `withProduction(position, typeOrNull)`, `withProductionLimit(position, limitOrNull)`.
-**`TemplatePiece` fields:** `x`, `y`, `z`, `type`, `hp`, `active`, `orientation`.
+**`TemplatePiece` fields:** `x`, `y`, `z`, `type`, `hp`, `active`, `orientation`, optional `extra` (reserved v6 bits; absent means zero).
 **`TemplateInventoryFilter` fields:** `position`, `entries: Array<{ type, count }>`.
+
+Choose **`version: 5`** for new templates targeting the updated StarMade-Open
+reference `e5a3b49d86943c4d618cea6512e28fa0b95901df`. That reference accepts versions
+1–5; the SDK additionally retains version 6 from the previous reference.
+An existing parsed template keeps its version when written. The writer no longer
+silently converts every input to version 6.
+
+| Version | Block word | Type | HP | Orientation | Available sections |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 3 bytes, legacy big-endian, inverted active flag | 0–2047 | 0–255 | 0–15 | Connections |
+| 2 | Same legacy layout | 0–2047 | 0–255 | 0–15 | Connections, texts |
+| 3 | Same legacy layout | 0–2047 | 0–255 | 0–15 | Above + filters, production |
+| 4 | 3 bytes, little-endian, positive active flag | 0–2047 | 0–127 | 0–31 | Same sections as v3 |
+| 5 | Same little-endian layout | 0–2047 | 0–127 | 0–31 | Above + production limits, fill-up filters |
+| 6 | 4 bytes, big-endian, positive active flag | 0–8191 | 0–127 | 0–31 | Same sections as v5; `extra` 0–63 |
+
+Bounds and piece coordinates remain signed big-endian int32 values in every
+version. Block fields must be representable in the selected layout, and `active`
+must be a boolean. Unsupported versions, overflowing block fields, nonzero
+`extra` outside v6, and sections unavailable in a selected version fail explicitly.
+Negative, oversized or truncated collection counts also fail when reading.
+
+Legacy v1–v3 orientation values are exposed as stored; the SDK does not apply
+the game's block-style-dependent orientation migration or HP clamping. Changing
+`version` is an explicit caller operation, not a migration helper. In particular,
+do not convert legacy orientations merely by changing the version field.
+
+The parser retains its historical tolerance for EOF between optional tail
+sections. The writer emits all sections defined by the selected version, so
+abbreviated inputs are normalized. Complete canonical files, including all 84
+checked-in v5 samples, round-trip byte-for-byte; this is not a promise to preserve
+duplicate map keys, noncanonical UTF encodings or trailing extension bytes.
 
 ### `.smbpl` logic files
 
