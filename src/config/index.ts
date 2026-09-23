@@ -13,8 +13,8 @@
 export { SMToolConfig }         from './SMToolConfig.js';
 export type { SMToolConfigData, StarMadePaths } from './SMToolConfig.js';
 
-export { ServerConfig, SERVER_CONFIG_SCHEMA } from './ServerConfig.js';
-export type { ConfigEntryMeta, ConfigValueType, ConfigValue } from './ServerConfig.js';
+export { ServerConfig, SERVER_CONFIG_SCHEMA, SERVER_CONFIG_SCHEMA_SOURCE } from './ServerConfig.js';
+export type { ConfigEntryMeta, ConfigValueType, ConfigValueKind, ConfigCategory, ConfigValue } from './ServerConfig.js';
 
 export {
   BlockConfig,

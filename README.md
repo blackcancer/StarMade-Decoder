@@ -4,7 +4,10 @@ TypeScript SDK for reading, inspecting, and rewriting **StarMade** save files an
 
 The SDK implements the Java `org.schema.schine.resource.tag.Tag` binary format and higher-level helpers for entities, blueprints and configuration files.
 
-The **2.0.2 SDK** provides dedicated models for every supported format family,
+`ServerConfig` exposes the [210 current game settings](docs/API.md#serverconfig)
+with defaults, bounds or choices and effect descriptions for configuration tools.
+
+The **2.0.3 SDK** provides dedicated models for every supported format family,
 including auxiliary files, configuration, entities, inventories and blueprints.
 Models validate stored values, retain opaque data and expose caller-selected limits.
 See the [format matrix](docs/FORMAT_MODELS.md#coverage-of-supported-formats) for

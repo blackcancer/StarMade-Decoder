@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.3 — 2026-09-23
+
+- Synchronize `ServerConfig` with all 210 active settings in StarMade-Open
+  `e5a3b49d8`: add 24 new keys, remove 10 obsolete keys from the current schema,
+  and correct 31 previously divergent default values.
+- Expose each setting's exact game kind, default, inclusive range or choices,
+  category and effect description through the immutable `SERVER_CONFIG_SCHEMA`.
+  Export `SERVER_CONFIG_SCHEMA_SOURCE` for consumers that pin a game revision.
+- Reject out-of-range numeric edits and unsupported game-mode choices; preserve
+  legacy file lines and existing out-of-range numeric values during reading.
+- Validate the complete pinned 210-key schema, installed game config and isolated
+  package consumer without adding game source files to the project.
+
 ## 2.0.2 — 2026-09-23
 
 - Correct database fleet, sector and planet ordinals against Open `e5a3b49d8`;

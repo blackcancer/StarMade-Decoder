@@ -858,7 +858,26 @@ Entry point for all StarMade installation paths.
 - `entries()` returns a detached map; `keys()` lists keys; `isKnown(key)` tests schema membership.
 - `set(key, value)` / `setMany(values)` return immutable edits, validating known-key types and rejecting writes to unknown schema keys. Unknown text read from a file remains retained.
 - `toString()` exports the file in memory; `save(config)` writes `server.cfg`.
-- `SERVER_CONFIG_SCHEMA` exposes each known key's type and default. Read `SERVER_CONFIG_SCHEMA[key]?.default` for schema metadata.
+- `SERVER_CONFIG_SCHEMA` exposes the **210 active settings** from StarMade-Open
+  `e5a3b49d86943c4d618cea6512e28fa0b95901df`. Use
+  `SERVER_CONFIG_SCHEMA_SOURCE` to identify the pinned game revision.
+- Each `ConfigEntryMeta` has `type` (`string`, `boolean`, `number`, `float`),
+  `kind` (`string`, `boolean`, `int`, `long`, `float`, `enum`), `default`,
+  `category` and `description`. Numeric settings have inclusive `min` and `max`;
+  booleans and enums have `choices`. Free text has neither range nor choices.
+  Metadata and choice lists are immutable.
+- `set` and `setMany` reject numbers outside the game range and enum values
+  outside its choices. Integer and long values must be safe JavaScript integers.
+  Enum spelling is accepted case-insensitively, matching the game reader.
+  Existing out-of-range numeric lines remain readable and unchanged until edited;
+  this lets tools inspect older files without silently rewriting them.
+- The ten keys removed from the current game schema are treated like other
+  unknown lines: they remain in the original file text, but `isKnown` is false
+  and `set` rejects them. Existing values never acquire a guessed current default.
+
+For example, `SERVER_CONFIG_SCHEMA.SECTOR_SIZE` has default `5000`, inclusive
+range `2000`–`1000000` and a warning about shrinking an existing universe.
+`DEFAULT_GAME_MODE` offers `SURVIVAL` and `CREATIVE`.
 
 ### `BlockConfig`
 

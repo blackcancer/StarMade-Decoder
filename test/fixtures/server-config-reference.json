@@ -1,0 +1,2049 @@
+{
+  "source": "e5a3b49d86943c4d618cea6512e28fa0b95901df",
+  "entries": {
+    "WORLD": {
+      "type": "string",
+      "default": "unset",
+      "description": "set world to use (set 'old' for using the old world). if no world exists a new one will be set automatically",
+      "category": "database",
+      "kind": "string"
+    },
+    "PROTECT_STARTING_SECTOR": {
+      "type": "boolean",
+      "default": false,
+      "description": "Protects the starting sector",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "ENABLE_SIMULATION": {
+      "type": "boolean",
+      "default": true,
+      "description": "Universe AI simulation",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "CONCURRENT_SIMULATION": {
+      "type": "number",
+      "default": 256,
+      "description": "How many simulation groups may be in the universe simultaniously (performance)",
+      "category": "performance",
+      "min": 1,
+      "max": 2147483646,
+      "kind": "int"
+    },
+    "ENEMY_SPAWNING": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enables enemy spawing",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SECTOR_SIZE": {
+      "type": "number",
+      "default": 5000,
+      "description": "Sets the size of sectors in the universe **WARNING** scaling the size of an existing universe down may cause issues",
+      "category": "game",
+      "min": 2000,
+      "max": 1000000,
+      "kind": "int"
+    },
+    "BLUEPRINT_DEFAULT_PRIVATE": {
+      "type": "boolean",
+      "default": true,
+      "description": "If true, set blueprints private as default (else they are public)",
+      "category": "database",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "BLUEPRINT_UPLOAD_SPEED": {
+      "type": "number",
+      "default": 2048,
+      "description": "The speed at which clients can upload blueprints to the server. Specifically, this setting affects the upload block size, which is essentially how big each package sent from the client can be.",
+      "category": "network",
+      "min": 512,
+      "max": 4096,
+      "kind": "long"
+    },
+    "FLOATING_ITEM_LIFETIME_SECS": {
+      "type": "number",
+      "default": 240,
+      "description": "How much seconds items floating in space should be alive",
+      "category": "game",
+      "min": 1,
+      "max": 604800,
+      "kind": "int"
+    },
+    "SIMULATION_SPAWN_DELAY": {
+      "type": "number",
+      "default": 420,
+      "description": "How much seconds between simulation spawn ticks",
+      "category": "game",
+      "min": 1,
+      "max": 604800,
+      "kind": "int"
+    },
+    "SIMULATION_TRADING_FILLS_SHOPS": {
+      "type": "boolean",
+      "default": true,
+      "description": "Trading guild will deliver stock to shops",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SECTOR_INACTIVE_TIMEOUT": {
+      "type": "number",
+      "default": 20,
+      "description": "Time in secs after which sectors go inactive (-1 = off)",
+      "category": "performance",
+      "min": -1,
+      "max": 604800,
+      "kind": "int"
+    },
+    "SECTOR_INACTIVE_CLEANUP_TIMEOUT": {
+      "type": "number",
+      "default": 10,
+      "description": "Time in secs after which inactive sectors are completely removed from memory (-1 = off)",
+      "category": "network",
+      "min": -1,
+      "max": 604800,
+      "kind": "int"
+    },
+    "USE_STARMADE_AUTHENTICATION": {
+      "type": "boolean",
+      "default": false,
+      "description": "allow star-made.org authentication",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "REQUIRE_STARMADE_AUTHENTICATION": {
+      "type": "boolean",
+      "default": false,
+      "description": "require star-made.org authentication (USE_STARMADE_AUTHENTICATION must be true)",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "PROTECTED_NAMES_BY_ACCOUNT": {
+      "type": "number",
+      "default": 10,
+      "description": "How many player names a player may protect with his account (if exceeded, the player name, that was logged in the longest time ago gets unprotected)",
+      "category": "network",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "DEFAULT_BLUEPRINT_ENEMY_USE": {
+      "type": "boolean",
+      "default": true,
+      "description": "Default option for blueprints not in catalog yet",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "DEFAULT_BLUEPRINT_FACTION_BUY": {
+      "type": "boolean",
+      "default": true,
+      "description": "Default option for blueprints not in catalog yet",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "DEFAULT_BLUEPRINT_OTHERS_BUY": {
+      "type": "boolean",
+      "default": true,
+      "description": "Default option for blueprints not in catalog yet",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "DEFAULT_BLUEPRINT_HOME_BASE_BUY": {
+      "type": "boolean",
+      "default": true,
+      "description": "Default option for blueprints not in catalog yet",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "LOCK_FACTION_SHIPS": {
+      "type": "boolean",
+      "default": true,
+      "description": "If true, ships of other factions cant be edited, activated, or entered",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "CATALOG_SLOTS_PER_PLAYER": {
+      "type": "number",
+      "default": -1,
+      "description": "How many slots per player for saved ships (-1 for unlimited)",
+      "category": "game",
+      "min": -1,
+      "max": 2147483646,
+      "kind": "int"
+    },
+    "UNIVERSE_DAY_IN_MS": {
+      "type": "number",
+      "default": -1,
+      "description": "how long is a 'day' (stellar system rotation) in milliseconds (-1 to switch off system rotation)",
+      "category": "game",
+      "min": -1,
+      "max": 2147483646,
+      "kind": "int"
+    },
+    "ASTEROIDS_ENABLE_DYNAMIC_PHYSICS": {
+      "type": "boolean",
+      "default": true,
+      "description": "enables asteroids to be able to move in space",
+      "category": "performance",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "ENABLE_BREAK_OFF": {
+      "type": "boolean",
+      "default": false,
+      "description": "debug (don't activate unless you know what you're doing)",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "COLLISION_DAMAGE": {
+      "type": "boolean",
+      "default": false,
+      "description": "colliding into another object does damage",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "COLLISION_DAMAGE_THRESHOLD": {
+      "type": "float",
+      "default": 2,
+      "description": "Threshold of Impulse that does damage (the lower, the less force is needed for damage)",
+      "category": "game",
+      "min": 0,
+      "max": 3.4028234663852886e+38,
+      "kind": "float"
+    },
+    "SKIN_ALLOW_UPLOAD": {
+      "type": "boolean",
+      "default": true,
+      "description": "if off, skin uploading to server is deactivated",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "CATALOG_NAME_COLLISION_HANDLING": {
+      "type": "boolean",
+      "default": false,
+      "description": "if off, saving with an existing entry is denied, if on the name is automatically changed by adding numbers on the end",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SECTOR_AUTOSAVE_SEC": {
+      "type": "number",
+      "default": 300,
+      "description": "Time interval in secs the server will autosave (-1 for never)",
+      "category": "performance",
+      "min": -1,
+      "max": 604800,
+      "kind": "int"
+    },
+    "PHYSICS_SLOWDOWN_THRESHOLD": {
+      "type": "number",
+      "default": 40,
+      "description": "Milliseconds a collision test may take before anti-slowdown mode is activated",
+      "category": "game",
+      "min": -1,
+      "max": 2147483646,
+      "kind": "int"
+    },
+    "THRUST_SPEED_LIMIT": {
+      "type": "number",
+      "default": 75,
+      "description": "How fast ships, etc. may go in m/s . Too high values may induce physics tunneling effects",
+      "category": "network",
+      "min": 1,
+      "max": 5000,
+      "kind": "int"
+    },
+    "MAX_CLIENTS": {
+      "type": "number",
+      "default": 32,
+      "description": "Max number of clients allowed on this server",
+      "category": "network",
+      "min": 1,
+      "max": 1024,
+      "kind": "int"
+    },
+    "SUPER_ADMIN_PASSWORD_USE": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable super admin for this server",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SUPER_ADMIN_PASSWORD": {
+      "type": "string",
+      "default": "mypassword",
+      "description": "Super admin password for this server",
+      "category": "network",
+      "kind": "string"
+    },
+    "SERVER_LISTEN_IP": {
+      "type": "string",
+      "default": "all",
+      "description": "Enter specific ip for the server to listen to. use \"all\" to listen on every ip",
+      "category": "network",
+      "kind": "string"
+    },
+    "SOCKET_BUFFER_SIZE": {
+      "type": "number",
+      "default": 65536,
+      "description": "buffer size of incoming and outgoing data per socket",
+      "category": "network",
+      "min": 0,
+      "max": 2147483646,
+      "kind": "int"
+    },
+    "PHYSICS_LINEAR_DAMPING": {
+      "type": "float",
+      "default": 0.05,
+      "description": "how much object slow down naturally (must be between 0 and 1): 0 is no slowdown",
+      "category": "game",
+      "min": 0,
+      "max": 1.0,
+      "kind": "float"
+    },
+    "PHYSICS_ROTATIONAL_DAMPING": {
+      "type": "float",
+      "default": 0.05,
+      "description": "how much object slow down naturally (must be between 0 and 1): 0 is no slowdown",
+      "category": "game",
+      "min": 0,
+      "max": 1.0,
+      "kind": "float"
+    },
+    "AI_DESTRUCTION_LOOT_COUNT_MULTIPLIER": {
+      "type": "float",
+      "default": 0.9,
+      "description": "multiply amount of items in a loot stack. use values smaller 1 for less and 0 for none",
+      "category": "game",
+      "min": 0,
+      "max": 100.0,
+      "kind": "float"
+    },
+    "AI_DESTRUCTION_LOOT_STACK_MULTIPLIER": {
+      "type": "float",
+      "default": 0.9,
+      "description": "multiply amount of items spawned after AI destruction. use values smaller 1 for less and 0 for none",
+      "category": "game",
+      "min": 0,
+      "max": 100.0,
+      "kind": "float"
+    },
+    "CHEST_LOOT_COUNT_MULTIPLIER": {
+      "type": "float",
+      "default": 0.9,
+      "description": "multiply amount of items in a loot stack. use values smaller 1 for less and 0 for none",
+      "category": "game",
+      "min": 0,
+      "max": 100.0,
+      "kind": "float"
+    },
+    "CHEST_LOOT_STACK_MULTIPLIER": {
+      "type": "float",
+      "default": 0.9,
+      "description": "multiply amount of items spawned in chests of generated chests. use values smaller 1 for less and 0 for none",
+      "category": "game",
+      "min": 0,
+      "max": 100.0,
+      "kind": "float"
+    },
+    "USE_WHITELIST": {
+      "type": "boolean",
+      "default": false,
+      "description": "only names/ips from whitelist.txt are allowed",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "FILTER_CONNECTION_MESSAGES": {
+      "type": "boolean",
+      "default": false,
+      "description": "don't display join/disconnect messages",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "USE_UDP": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use 'User Datagram Protocol' (UDP) instead of 'Transmission Control Protocol' (TCP) for connections",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "AUTO_KICK_MODIFIED_BLUEPRINT_USE": {
+      "type": "boolean",
+      "default": false,
+      "description": "Kick players that spawn modified blueprints",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "AUTO_BAN_ID_MODIFIED_BLUEPRINT_USE": {
+      "type": "boolean",
+      "default": false,
+      "description": "Ban player by name that spawn modified blueprints",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "AUTO_BAN_IP_MODIFIED_BLUEPRINT_USE": {
+      "type": "boolean",
+      "default": false,
+      "description": "Ban player by IP that spawn modified blueprints",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "AUTO_BAN_TIME_IN_MINUTES": {
+      "type": "number",
+      "default": 60,
+      "description": "Time to ban in minutes (-1 for permanently)",
+      "category": "network",
+      "min": 0,
+      "max": 2147483646,
+      "kind": "int"
+    },
+    "REMOVE_MODIFIED_BLUEPRINTS": {
+      "type": "boolean",
+      "default": false,
+      "description": "Auto-removes a modified blueprint",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "TCP_NODELAY": {
+      "type": "boolean",
+      "default": true,
+      "description": "Naggles algorithm (WARNING: only change when you know what you're doing)",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "PING_FLUSH": {
+      "type": "boolean",
+      "default": false,
+      "description": "flushes ping/pong immediately (WARNING: only change when you know what you're doing)",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SHOP_SPAWNING_PROBABILITY": {
+      "type": "float",
+      "default": 0.1,
+      "description": "(must be between 0 and 1): 0 is no shops spawned in asteroid sectors, 1 is shop spawned in everyone (default: 8% -> 0.08)",
+      "category": "game",
+      "min": 0,
+      "max": 1.0,
+      "kind": "float"
+    },
+    "DEFAULT_SPAWN_SECTOR_X": {
+      "type": "number",
+      "default": 2,
+      "description": "DEFAULT Spawn Sector X Coordinate",
+      "category": "game",
+      "min": -2147483648,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "DEFAULT_SPAWN_SECTOR_Y": {
+      "type": "number",
+      "default": 2,
+      "description": "DEFAULT Spawn Sector Y Coordinate",
+      "category": "game",
+      "min": -2147483648,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "DEFAULT_SPAWN_SECTOR_Z": {
+      "type": "number",
+      "default": 2,
+      "description": "DEFAULT Spawn Sector Z Coordinate",
+      "category": "game",
+      "min": -2147483648,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "MODIFIED_BLUEPRINT_TOLERANCE": {
+      "type": "float",
+      "default": 0.1,
+      "description": "Tolerance of modified blueprint trigger (default = 10%)",
+      "category": "game",
+      "min": 0.0,
+      "max": 100,
+      "kind": "float"
+    },
+    "DEFAULT_SPAWN_POINT_X_1": {
+      "type": "float",
+      "default": 8.0,
+      "description": "First Rotating Spawn: Local Pos X Coordinate",
+      "category": "game",
+      "min": -10000,
+      "max": 10000,
+      "kind": "float"
+    },
+    "DEFAULT_SPAWN_POINT_Y_1": {
+      "type": "float",
+      "default": -6.5,
+      "description": "First Rotating Spawn: Local Pos Y Coordinate",
+      "category": "game",
+      "min": -10000,
+      "max": 10000,
+      "kind": "float"
+    },
+    "DEFAULT_SPAWN_POINT_Z_1": {
+      "type": "float",
+      "default": 0.0,
+      "description": "First Rotating Spawn: Local Pos Z Coordinate",
+      "category": "game",
+      "min": -10000,
+      "max": 10000,
+      "kind": "float"
+    },
+    "DEFAULT_SPAWN_POINT_X_2": {
+      "type": "float",
+      "default": 15.0,
+      "description": "Second Rotating Spawn: Local Pos X Coordinate",
+      "category": "game",
+      "min": -10000,
+      "max": 10000,
+      "kind": "float"
+    },
+    "DEFAULT_SPAWN_POINT_Y_2": {
+      "type": "float",
+      "default": -6.5,
+      "description": "Second Rotating Spawn: Local Pos Y Coordinate",
+      "category": "game",
+      "min": -10000,
+      "max": 10000,
+      "kind": "float"
+    },
+    "DEFAULT_SPAWN_POINT_Z_2": {
+      "type": "float",
+      "default": 8.0,
+      "description": "Second Rotating Spawn: Local Pos Z Coordinate",
+      "category": "game",
+      "min": -10000,
+      "max": 10000,
+      "kind": "float"
+    },
+    "DEFAULT_SPAWN_POINT_X_3": {
+      "type": "float",
+      "default": 8.0,
+      "description": "Third Rotating Spawn: Local Pos X Coordinate",
+      "category": "game",
+      "min": -10000,
+      "max": 10000,
+      "kind": "float"
+    },
+    "DEFAULT_SPAWN_POINT_Y_3": {
+      "type": "float",
+      "default": -6.5,
+      "description": "Third Rotating Spawn: Local Pos Y Coordinate",
+      "category": "game",
+      "min": -10000,
+      "max": 10000,
+      "kind": "float"
+    },
+    "DEFAULT_SPAWN_POINT_Z_3": {
+      "type": "float",
+      "default": 15.0,
+      "description": "Third Rotating Spawn: Local Pos Z Coordinate",
+      "category": "game",
+      "min": -10000,
+      "max": 10000,
+      "kind": "float"
+    },
+    "DEFAULT_SPAWN_POINT_X_4": {
+      "type": "float",
+      "default": 0.0,
+      "description": "Forth Rotating Spawn: Local Pos X Coordinate",
+      "category": "game",
+      "min": -10000,
+      "max": 10000,
+      "kind": "float"
+    },
+    "DEFAULT_SPAWN_POINT_Y_4": {
+      "type": "float",
+      "default": -6.5,
+      "description": "Forth Rotating Spawn: Local Pos Y Coordinate",
+      "category": "game",
+      "min": -10000,
+      "max": 10000,
+      "kind": "float"
+    },
+    "DEFAULT_SPAWN_POINT_Z_4": {
+      "type": "float",
+      "default": 8.0,
+      "description": "Forth Rotating Spawn: Local Pos Z Coordinate",
+      "category": "game",
+      "min": -10000,
+      "max": 10000,
+      "kind": "float"
+    },
+    "PLAYER_DEATH_CREDIT_PUNISHMENT": {
+      "type": "float",
+      "default": 0.1,
+      "description": "players credits lost of total on death (must be between 0 and 1): 1 = lose all, 0 = keep all",
+      "category": "game",
+      "min": 0,
+      "max": 1.0,
+      "kind": "float"
+    },
+    "PLAYER_DEATH_CREDIT_DROP": {
+      "type": "boolean",
+      "default": false,
+      "description": "drop credits lost on death into space instead",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "PLAYER_DEATH_BLOCK_PUNISHMENT": {
+      "type": "boolean",
+      "default": false,
+      "description": "player will drop all his blocks into space on death",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "PLAYER_DEATH_PUNISHMENT_TIME": {
+      "type": "number",
+      "default": 300,
+      "description": "Time interval in seconds after death of a player in which the player is not punished",
+      "category": "game",
+      "min": 0,
+      "max": 604800,
+      "kind": "int"
+    },
+    "ALLOW_CHAT_COLOR_CODES": {
+      "type": "boolean",
+      "default": true,
+      "description": "If true, all players can use color codes in chat messages (e.g &bl for blue text).",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "ALLOW_CHAT_ASCII_EXTRA": {
+      "type": "boolean",
+      "default": true,
+      "description": "If true, all players can use extended ASCII characters in chat messages (e.g. Ü, ñ, é, etc.).",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "DISPLAY_MODULE_CHAR_LIMIT": {
+      "type": "number",
+      "default": 2000,
+      "description": "how many characters a display module may have (default: 2000)",
+      "category": "game",
+      "min": 1,
+      "max": 2000,
+      "kind": "int"
+    },
+    "DISPLAY_MODULE_LINE_LIMIT": {
+      "type": "number",
+      "default": 20,
+      "description": "how many lines a display module may have (default: 20)",
+      "category": "game",
+      "min": 1,
+      "max": 20,
+      "kind": "int"
+    },
+    "PLAYER_HISTORY_BACKLOG": {
+      "type": "number",
+      "default": 30,
+      "description": "How many login history objects (with name, IP, account-name, and time) should be saved by player state",
+      "category": "network",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "PROJECTILES_ADDITIVE_VELOCITY": {
+      "type": "boolean",
+      "default": true,
+      "description": "initial projectile speed depend on relative linear velocity of object fired from",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "PROJECTILES_VELOCITY_MULTIPLIER": {
+      "type": "float",
+      "default": 1,
+      "description": "multiplicator for projectile velocity",
+      "category": "game",
+      "min": 0,
+      "max": 100000.0,
+      "kind": "float"
+    },
+    "WEAPON_RANGE_REFERENCE": {
+      "type": "float",
+      "default": 2000,
+      "description": "Reference distance for weapon ranges. (what blockBehaviorConfig.xml weapon ranges are multiplied with (usually the sector size)). Set to 1 to interpret weapon ranges in the config in meters",
+      "category": "game",
+      "min": 300,
+      "max": 1000000,
+      "kind": "float"
+    },
+    "ALLOW_UPLOAD_FROM_LOCAL_BLUEPRINTS": {
+      "type": "boolean",
+      "default": true,
+      "description": "enables clients being able to upload their pre-build-blueprints to the server",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SHOP_NPC_STARTING_CREDITS": {
+      "type": "number",
+      "default": 10000000,
+      "description": "how much credits do shops start with",
+      "category": "game",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "SHOP_NPC_RECHARGE_CREDITS": {
+      "type": "number",
+      "default": 100000,
+      "description": "how much credits do shops gain about every 10 min",
+      "category": "game",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "AI_WEAPON_AIMING_ACCURACY": {
+      "type": "number",
+      "default": 3000,
+      "description": "how accurate the AI aims (the higher the value the more accurate vs distance. 10 = about 99% accuracy at 10m)",
+      "category": "game",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "BROADCAST_SHIELD_PERCENTAGE": {
+      "type": "number",
+      "default": 5,
+      "description": "percent of shields changed for the server to broadcast a shield synch",
+      "category": "network",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "BROADCAST_POWER_PERCENTAGE": {
+      "type": "number",
+      "default": 50,
+      "description": "percent of power changed for the server to broadcast a power synch (not that critical)",
+      "category": "network",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "ADMINS_CIRCUMVENT_STRUCTURE_CONTROL": {
+      "type": "boolean",
+      "default": true,
+      "description": "admins can enter ships of any faction",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "STAR_DAMAGE": {
+      "type": "boolean",
+      "default": true,
+      "description": "suns dealing damage to entities",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SQL_NIO_FILE_SIZE": {
+      "type": "number",
+      "default": 256,
+      "description": "megabyte limit of .data file when to use NIO (faster) (must be power of 2)",
+      "category": "database",
+      "min": 256,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "PLANET_CORES_INVULNERABLE": {
+      "type": "boolean",
+      "default": false,
+      "description": "if true, all planets cores are invulnerable",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "PLANET_SIZE_MEAN_VALUE": {
+      "type": "float",
+      "default": 100,
+      "description": "Planet size mean (normal gaussian distribution) (min 50)",
+      "category": "game",
+      "min": 50,
+      "max": 3.4028234663852886e+38,
+      "kind": "float"
+    },
+    "PLANET_SIZE_DEVIATION_VALUE": {
+      "type": "float",
+      "default": 35.0,
+      "description": "Planet size standard deviation. Note: normal gaussian distribution graph scaled horizontally by 1/3 (min 0)",
+      "category": "game",
+      "min": 0,
+      "max": 3.4028234663852886e+38,
+      "kind": "float"
+    },
+    "ASTEROID_RADIUS_MAX": {
+      "type": "number",
+      "default": 64,
+      "description": "Asteroid max radius in blocks (from -x to +x)",
+      "category": "game",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "ASTEROID_RESOURCE_SIZE": {
+      "type": "float",
+      "default": 2.5,
+      "description": "Average diameter of resource veins in asteroids",
+      "category": "game",
+      "min": 1,
+      "max": 65504.0,
+      "kind": "float"
+    },
+    "ASTEROID_RESOURCE_CHANCE": {
+      "type": "float",
+      "default": 0.003,
+      "description": "Chance per block to place a new resource vein (1.0 = 100%)",
+      "category": "game",
+      "min": 0.0,
+      "max": 1.0,
+      "kind": "float"
+    },
+    "PLAYER_MAX_BUILD_AREA": {
+      "type": "number",
+      "default": 100,
+      "description": "max area a player may add/remove in adv. build mode",
+      "category": "game",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "MAX_MULTI_PLACE_DRAG_INSTANCES": {
+      "type": "number",
+      "default": 100,
+      "description": "max number of instances that can be placed in one multi-place drag session",
+      "category": "game",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "NT_SPAM_PROTECT_TIME_MS": {
+      "type": "number",
+      "default": 30000,
+      "description": "period of spam protection",
+      "category": "network",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "ASTEROID_SECTOR_REPLENISH_TIME_SEC": {
+      "type": "number",
+      "default": -1,
+      "description": "seconds until a sector that is mined down to 0 asteroids is replenished (-1 = never)",
+      "category": "game",
+      "min": -1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "NT_SPAM_PROTECT_MAX_ATTEMPTS": {
+      "type": "number",
+      "default": 30,
+      "description": "max attempts before refusing connections in spam protect period (default is 1/sec for 30 sec)",
+      "category": "network",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "NT_SPAM_PROTECT_EXCEPTIONS": {
+      "type": "string",
+      "default": "127.0.0.1",
+      "description": "ips excepted from spam control (separate multiple with comma) (default is localhost)",
+      "category": "network",
+      "kind": "string"
+    },
+    "ANNOUNCE_SERVER_TO_SERVERLIST": {
+      "type": "boolean",
+      "default": false,
+      "description": "announces the server to the starmade server list so clients can find it. Hostname must be provided for HOST_NAME_TO_ANNOUNCE_TO_SERVER_LIST!",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "HOST_NAME_TO_ANNOUNCE_TO_SERVER_LIST": {
+      "type": "string",
+      "default": "",
+      "description": "this must be a valid hostname (either ip or host, e.g. play.star-made.org)",
+      "category": "network",
+      "kind": "string"
+    },
+    "SERVER_LIST_NAME": {
+      "type": "string",
+      "default": "NoName",
+      "description": "max length 64 characters",
+      "category": "network",
+      "kind": "string"
+    },
+    "SERVER_LIST_DESCRIPTION": {
+      "type": "string",
+      "default": "NoDescription",
+      "description": "max length 128 characters",
+      "category": "network",
+      "kind": "string"
+    },
+    "MISSILE_DEFENSE_FRIENDLY_FIRE": {
+      "type": "boolean",
+      "default": true,
+      "description": "can shoot down own or missiles from own faction",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "USE_DYNAMIC_RECIPE_PRICES": {
+      "type": "boolean",
+      "default": true,
+      "description": "use recipe based prices (the price is the price of the parts it is made out of in crafting)",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "DYNAMIC_RECIPE_PRICE_MODIFIER": {
+      "type": "float",
+      "default": 1.05,
+      "description": "modifier to adjust dynamic price",
+      "category": "game",
+      "min": -1,
+      "max": 1000,
+      "kind": "float"
+    },
+    "MAKE_HOMBASE_ATTACKABLE_ON_FP_DEFICIT": {
+      "type": "boolean",
+      "default": true,
+      "description": "Home bases become attackable if a faction's Faction Points are in the minus and the faction doesn't own any territory",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "PLANET_SPECIAL_REGION_PROBABILITY": {
+      "type": "number",
+      "default": 240,
+      "description": "one out of thisValue chance of a special region spawning per planet plate (cities, pyramids, etc) (changing this value migth change some plates, but won't change any plates that are already modified by a player)",
+      "category": "game",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "NT_BLOCK_QUEUE_SIZE": {
+      "type": "number",
+      "default": 1024,
+      "description": "How many blocks are sent per update. Huge placements will shot faster, but it will consume more bandwidth and is subject to spamming players",
+      "category": "network",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "CHUNK_REQUEST_THREAD_POOL_SIZE_TOTAL": {
+      "type": "number",
+      "default": 10,
+      "description": "Thead pool size for chunk requests (from disk and generated)",
+      "category": "performance",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "CHUNK_REQUEST_THREAD_POOL_SIZE_CPU": {
+      "type": "number",
+      "default": 2,
+      "description": "Available threads of total for CPU generation. WARNING: too high can cause cpu spikes. About the amount of available cores minus one is best",
+      "category": "performance",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "BUY_BLUEPRINTS_WITH_CREDITS": {
+      "type": "boolean",
+      "default": false,
+      "description": "buy blueprints directly with credits",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SHOP_USE_STATIC_SELL_BUY_PRICES": {
+      "type": "boolean",
+      "default": false,
+      "description": "shop buy and sell price change depending on stock (shop prices will always stay the same if true)",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SHOP_SELL_BUY_PRICES_UPPER_LIMIT": {
+      "type": "float",
+      "default": 1.2,
+      "description": "maximum of base price a shop will want depending on its stock (e.g. max 120 credits if the normal cost is 100)",
+      "category": "game",
+      "min": 0.001,
+      "max": 3.4028234663852886e+38,
+      "kind": "float"
+    },
+    "SHOP_SELL_BUY_PRICES_LOWER_LIMIT": {
+      "type": "float",
+      "default": 0.8,
+      "description": "minimum of base price a shop will want depending on its stock (e.g. max 80 credits if the normal cost is 100)",
+      "category": "game",
+      "min": 0.001,
+      "max": 3.4028234663852886e+38,
+      "kind": "float"
+    },
+    "MINING_BONUS": {
+      "type": "number",
+      "default": 1,
+      "description": "general multiplier on all mining",
+      "category": "game",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "MAX_LOGIC_SIGNAL_QUEUE_PER_OBJECT": {
+      "type": "number",
+      "default": 250000,
+      "description": "max logic trace queue allowed",
+      "category": "game",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "MAX_LOGIC_ACTIVATIONS_AT_ONCE_PER_OBJECT_WARN": {
+      "type": "number",
+      "default": 10000,
+      "description": "warn about objects that activate more than x blocks at once",
+      "category": "game",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "MAX_LOGIC_ACTIVATIONS_AT_ONCE_PER_OBJECT_STOP": {
+      "type": "number",
+      "default": 50000,
+      "description": "stop logic of objects that activate more than x blocks at once. They will enter a logic cooldown of 10 seconds to prevent servers from overloading",
+      "category": "game",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "MAX_COORDINATE_BOOKMARKS": {
+      "type": "number",
+      "default": 20,
+      "description": "coordinate bookmarks per player allowed",
+      "category": "game",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "ALLOWED_STATIONS_PER_SECTOR": {
+      "type": "number",
+      "default": 1,
+      "description": "How many stations are allowed per sector",
+      "category": "game",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "STATION_CREDIT_COST": {
+      "type": "number",
+      "default": 50000,
+      "description": "how much does a station or station blueprint cost",
+      "category": "game",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "SKIN_SERVER_UPLOAD_BLOCK_SIZE": {
+      "type": "number",
+      "default": 256,
+      "description": "how fast should skins be transferred from server to clients (too high might cause lag) [default 256 ~ 16kb/s]",
+      "category": "network",
+      "min": 1,
+      "max": 32767,
+      "kind": "int"
+    },
+    "WEIGHTED_CENTER_OF_MASS": {
+      "type": "boolean",
+      "default": true,
+      "description": "if on, the center of mass for each structured will be calculated based on block mass. On 'false', the center of mass is always the core position",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SECURE_UPLINK_ENABLED": {
+      "type": "boolean",
+      "default": false,
+      "description": "dedicated servers can be registered on the StarMade registry",
+      "category": "network",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SECURE_UPLINK_TOKEN": {
+      "type": "string",
+      "default": "",
+      "description": "uplink token, provided when registering a dedicated server",
+      "category": "network",
+      "kind": "string"
+    },
+    "USE_STRUCTURE_HP": {
+      "type": "boolean",
+      "default": true,
+      "description": "ships and other structures use the hitpoint system. if off, a ship will overheat when the core gets taken out (old)",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SHOP_REBOOT_COST_PER_SECOND": {
+      "type": "float",
+      "default": 100,
+      "description": "Cost to reboot a ship at a shop (per second it would take to reboot in space)",
+      "category": "game",
+      "min": 0,
+      "max": 3.4028234663852886e+38,
+      "kind": "float"
+    },
+    "SHOP_ARMOR_REPAIR_COST_PER_HITPOINT": {
+      "type": "float",
+      "default": 1,
+      "description": "Cost to repair a ship's armor at a shop",
+      "category": "game",
+      "min": 0,
+      "max": 3.4028234663852886e+38,
+      "kind": "float"
+    },
+    "MAX_SIMULTANEOUS_EXPLOSIONS": {
+      "type": "number",
+      "default": 10,
+      "description": "the more the faster explosions at the same time are executed (costs in total about 20MB RAM each and of course CPU because it's all threaded) (10 is default for a medium powered singleplayer)",
+      "category": "performance",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "ACID_MAX_BLOCK_OPS_PER_UPDATE": {
+      "type": "number",
+      "default": 2048,
+      "description": "Maximum acid block damage/propagation steps processed per entity per acid update tick. Lower this if acid weapons cause server lag or combat ping spikes (2048 is the historical default; 256 is the gentler pre-rework value).",
+      "category": "performance",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "ACID_UPDATE_FREQUENCY_MS": {
+      "type": "number",
+      "default": 10,
+      "description": "Minimum milliseconds between propagation steps for a single acid instance. Higher values slow acid spread and reduce server load (10 is the historical default; 90 is the gentler pre-rework value).",
+      "category": "performance",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "ELEMENT_COLLECTION_RECALC_DEBOUNCE_MS": {
+      "type": "number",
+      "default": 1000,
+      "description": "Minimum milliseconds between full recalculations of an entity's block systems (thrusters, weapons, reactor, etc.) while it keeps changing. Higher coalesces the recalc / mesh-rebuild / reactor convex-hull storm during heavy block destruction (acid, explosions), at the cost of briefly stale system stats. 0 = recalc as fast as possible (legacy behavior).",
+      "category": "performance",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "PROJECTILE_RAYCAST_AABB_CACHE": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enables the per-tick broadphase AABB cache used by weapon raycasts in busy sectors (>32 collision objects). Leave ON for performance. Set OFF only as a diagnostic.",
+      "category": "performance",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "PROJECTILE_MAX_COLLISION_STEP": {
+      "type": "number",
+      "default": 25,
+      "description": "Maximum distance a projectile may travel per collision check. When a single frame would move it further (fast weapons at low server FPS), the movement is split into multiple collision-checked sub-steps so it cannot tunnel through a target without registering a hit. 0 = disabled (one check per frame, legacy behavior).",
+      "category": "performance",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "EXPLOSION_APPLY_BUDGET_MS": {
+      "type": "number",
+      "default": 8,
+      "description": "Maximum milliseconds per server tick spent applying finished explosions' block damage to entities. A fleet-fight volley can finish many explosions at once; without a budget, applying them all in one tick froze the server main loop for hundreds of ms. Excess explosions are applied on following ticks (at least one is always applied per tick). 0 = unlimited (legacy behavior).",
+      "category": "performance",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "REPULSE_SWEEP_INTERVAL_MS": {
+      "type": "number",
+      "default": 0,
+      "description": "Minimum milliseconds between physics sweeps for an ACTIVE repulsor (one that has thrust dedicated to it). Each repulsor block runs a physics sweep over nearby objects; doing it every tick across a fleet is expensive. Higher values trade hover responsiveness for performance. Decorative/unpowered repulsors are skipped entirely regardless of this setting. 0 = every tick (legacy behavior, smoothest hover).",
+      "category": "performance",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "REMOVE_ENTITIES_WITH_INCONSISTENT_BLOCKS": {
+      "type": "boolean",
+      "default": false,
+      "description": "This will remove ships that have blocks that are normally disallowed (e.g. space station blocks on ships)",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "OVERRIDE_INVALID_BLUEPRINT_TYPE": {
+      "type": "boolean",
+      "default": true,
+      "description": "If a loaded blueprint is invalid, it's type will be overridden",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "FACTION_FOUNDER_KICKABLE_AFTER_DAYS_INACTIVITY": {
+      "type": "number",
+      "default": 30,
+      "description": "Days of inactivity after which a founder may kick another founder",
+      "category": "network",
+      "min": 0,
+      "max": 2147483646,
+      "kind": "int"
+    },
+    "BLUEPRINT_SPAWNABLE_SHIPS": {
+      "type": "boolean",
+      "default": true,
+      "description": "enables or disables blueprint spawning from item",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "BLUEPRINT_SPAWNABLE_STATIONS": {
+      "type": "boolean",
+      "default": true,
+      "description": "enables or disables blueprint spawning from item",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "USE_OLD_GENERATED_PIRATE_STATIONS": {
+      "type": "boolean",
+      "default": false,
+      "description": "enables spawning of old style pirate stations",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "CARGO_BLEED_AT_OVER_CAPACITY": {
+      "type": "boolean",
+      "default": false,
+      "description": "cargo is ejected every minute if storage is at over capacity",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "ALLOW_PERSONAL_INVENTORY_OVER_CAPACITY": {
+      "type": "boolean",
+      "default": false,
+      "description": "Personal Inventory can go over capacity",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "ONLY_ALLOW_FACTION_SHIPS_ADDED_TO_FLEET": {
+      "type": "boolean",
+      "default": false,
+      "description": "only allows faction ships to be added to fleet",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "MAX_CHAIN_DOCKING": {
+      "type": "number",
+      "default": 25,
+      "description": "maximal deepness of docking chains (may cause glitches depending on OS (path and filename length) at high numbers)",
+      "category": "game",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "DELETE_DOCKED_ON_OVERHEAT": {
+      "type": "boolean",
+      "default": true,
+      "description": "If enabled, all entities docked to an entity (recursively) are deleted along with it when its core fully overheats and the entity is destroyed, instead of being undocked. Helps prevent entity clogging.",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SHOP_RAILS_ON_ADV": {
+      "type": "boolean",
+      "default": true,
+      "description": "Advanced shops will have 4 rails dockers that can be used like a neutral homebase (anything docked is safe)",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SHOP_RAILS_ON_NORMAL": {
+      "type": "boolean",
+      "default": false,
+      "description": "Normal shops will have 4 rails dockers that can be used like a neutral homebase (anything docked is safe)",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "ALLOW_FLEET_FORMATION": {
+      "type": "boolean",
+      "default": true,
+      "description": "Allows fleet formation",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "BACKUP_WORLD_ON_MIGRATION": {
+      "type": "boolean",
+      "default": true,
+      "description": "Back up world when migrating to a new file format",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "BACKUP_BLUEPRINTS_ON_MIGRATION": {
+      "type": "boolean",
+      "default": true,
+      "description": "Back up blueprints when migrating to a new file format",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SECTORS_TO_EXPLORE_FOR_SYS": {
+      "type": "number",
+      "default": 15,
+      "description": "How many sectors of a system have to be explored",
+      "category": "game",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "NPC_FACTION_SPAWN_LIMIT": {
+      "type": "number",
+      "default": -1,
+      "description": "Maximum npc factions per galaxy (-1 for unlimited (will still be around 2-10))",
+      "category": "npc",
+      "min": -1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "NPC_DEBUG_MODE": {
+      "type": "boolean",
+      "default": false,
+      "description": "Sends complete NPC faction package to clients (very bandwith intensive)",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "FLEET_OUT_OF_SECTOR_MOVEMENT": {
+      "type": "number",
+      "default": 6000,
+      "description": "How long for an unloaded fleet to cross a sector in ms",
+      "category": "game",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "NPC_LOADED_SHIP_MAX_SPEED_MULT": {
+      "type": "float",
+      "default": 0.7,
+      "description": "How fast NPC fleet ships are compared to their max speed when loaded",
+      "category": "game",
+      "min": 0,
+      "max": 100000.0,
+      "kind": "float"
+    },
+    "USE_FOW": {
+      "type": "boolean",
+      "default": true,
+      "description": "Use 'fog of war'. Turning this off will make everything visible to everyone",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "ALLOW_PASTE_AABB_OVERLAPPING": {
+      "type": "boolean",
+      "default": true,
+      "description": "Allow Paste bounding box overlapping",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "NPC_PREVENT_HOMEBASE_SYSTEM_LOSS": {
+      "type": "boolean",
+      "default": true,
+      "description": "Prevents NPC factions from losing their homebase system",
+      "category": "npc",
+      "choices": [
+        true,
+        false
+      ],
+      "kind": "boolean"
+    },
+    "NPC_SYSTEM_RATIO_LOSS": {
+      "type": "float",
+      "default": 0.9,
+      "description": "Ratio of asset loss required for an NPC faction to lose control of a system.",
+      "category": "npc",
+      "min": 0.1,
+      "max": 1.0,
+      "kind": "float"
+    },
+    "USE_PLAYER_FLEET_DELIVERY": {
+      "type": "boolean",
+      "default": true,
+      "description": "If enabled, trade deliveries between players can be done by player-assigned fleets instead of NPC fleets.",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "DEFAULT_GAME_MODE": {
+      "type": "string",
+      "default": "SURVIVAL",
+      "description": "Game mode new players start in. SURVIVAL: normal play. CREATIVE: players are granted creative mode on join (good for creative build servers).",
+      "category": "game",
+      "choices": [
+        "SURVIVAL",
+        "CREATIVE"
+      ],
+      "kind": "enum"
+    },
+    "BLUEPRINT_NO_RESOURCE_COST": {
+      "type": "boolean",
+      "default": false,
+      "description": "If enabled, spawning/buying blueprints costs no resources or credits (good for creative build servers).",
+      "category": "game",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "DEBUG_FSM_STATE": {
+      "type": "boolean",
+      "default": false,
+      "description": "transfer debug FSM state. Turning this on may slow down network",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "PHYSICS_SHAPE_CASTING_TUNNELING_PREVENTION": {
+      "type": "boolean",
+      "default": false,
+      "description": "Makes a convex cast for hight speed object to prevent clipping. High Cost. (Bugged right now, so dont turn it on)",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "FORCE_DISK_WRITE_COMPLETION": {
+      "type": "boolean",
+      "default": false,
+      "description": "forces writing operations of raw data to disk directly after operation. For some OS this prevents raw data corruption",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "DEBUG_SEGMENT_WRITING": {
+      "type": "boolean",
+      "default": false,
+      "description": "Debugs correctness of writing of segments (costs server performance)",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "TURNING_DIMENSION_SCALE": {
+      "type": "float",
+      "default": 1.1,
+      "description": "Scaling of tuning speed VS ship dimension (default = 1.1)",
+      "category": "debug",
+      "min": 0.0,
+      "max": 100,
+      "kind": "float"
+    },
+    "RECIPE_BLOCK_COST": {
+      "type": "number",
+      "default": 5000,
+      "description": "How much blocks have to be invested to create a recipe (min 0)",
+      "category": "debug",
+      "min": 0,
+      "max": 2147483646,
+      "kind": "int"
+    },
+    "RECIPE_REFUND_MULT": {
+      "type": "float",
+      "default": 0.5,
+      "description": "how much blocks are refunded from selling a recipe (must be between 0 and 1): 0 no refund, 1 full refund",
+      "category": "debug",
+      "min": 0,
+      "max": 1.0,
+      "kind": "float"
+    },
+    "RECIPE_LEVEL_AMOUNT": {
+      "type": "number",
+      "default": 4000,
+      "description": "On how much created blocks will a recipe level up (base value) (min 0)",
+      "category": "debug",
+      "min": 0,
+      "max": 2147483646,
+      "kind": "int"
+    },
+    "IGNORE_DOCKING_AREA": {
+      "type": "boolean",
+      "default": false,
+      "description": "ignores docking area size",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "ALLOW_OLD_DOCKING_BEAM": {
+      "type": "boolean",
+      "default": false,
+      "description": "enables old docking beam",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "NT_SPAM_PROTECT_ACTIVE": {
+      "type": "boolean",
+      "default": true,
+      "description": "enables connection spawn protection (flooding servers with login attempts)",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "USE_PERSONAL_SECTORS": {
+      "type": "boolean",
+      "default": false,
+      "description": "will spawn a player in a locked sector sandbox (warning, don't use unless you know what you do)",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "BATTLE_MODE": {
+      "type": "boolean",
+      "default": false,
+      "description": "turn on battlemode (warning, don't use unless you know what you're doing)",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "BATTLE_MODE_CONFIG": {
+      "type": "string",
+      "default": "battleSector=0,0,0,Physics.smsec;battleSector=15,15,15,Physics.smsec;countdownRound=300;countdownStart=30;maxMass=-1;maxDim=300;maxMassPerFaction=-1;",
+      "description": "General config for battlemode",
+      "category": "debug",
+      "kind": "string"
+    },
+    "BATTLE_MODE_FACTIONS": {
+      "type": "string",
+      "default": "[TeamA, fighters, 500,500,500, 0.5,0.1,0.9];[TeamB, fighters, -500,-500,-500, 0.5,0.9,0.2];[TeamFFA,ffa, 0,0,-500, 0.2,0.9,0.9];[Spectators,spectators, 0,500,0,0.8,0.4,0.8]",
+      "description": "Faction config for battlemode",
+      "category": "debug",
+      "kind": "string"
+    },
+    "LEADERBOARD_BACKLOG": {
+      "type": "number",
+      "default": 24,
+      "description": "time in hours to keep leaderboard backlog (the more time, the more data has to be sent to client)",
+      "category": "debug",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "DEBUG_BEAM_POWER_CONSUMPTION": {
+      "type": "boolean",
+      "default": false,
+      "description": "server will send notifications on power consumed (not counting power given from supply) on server (costs performance, so only use for debugging)",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "DEBUG_BEAM_TICKS_DONE": {
+      "type": "boolean",
+      "default": false,
+      "description": "server will send notifications on ticks done on server (costs performance, so only use for debugging)",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "DEBUG_BEAM_POWER_PER_TICK": {
+      "type": "boolean",
+      "default": false,
+      "description": "server will send notifications on beam power per tick on server (costs performance, so only use for debugging)",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "DEBUG_MISSILE_POWER_CONSUMPTION": {
+      "type": "boolean",
+      "default": false,
+      "description": "server will send notifications on missiles on server (costs performance, so only use for debugging)",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "NPC_LOG_MODE": {
+      "type": "number",
+      "default": 0,
+      "description": "use 0 for npc file logs [/logs/npc/] and 1 for normal log output",
+      "category": "debug",
+      "min": 0,
+      "max": 2,
+      "kind": "int"
+    },
+    "NPC_DEBUG_SHOP_OWNERS": {
+      "type": "string",
+      "default": "",
+      "description": "Additional shop owners for npc faction shops (case insensitive, seperate with comma)",
+      "category": "debug",
+      "kind": "string"
+    },
+    "SQL_PERMISSION": {
+      "type": "string",
+      "default": "",
+      "description": "user name allowed to sql query remotely (direct console always allowed /sql_query, /sql_update, /sql_insert_return_generated_keys) (case insensitive, seperate with comma)",
+      "category": "debug",
+      "kind": "string"
+    },
+    "DEBUG_EMPTY_CHUNK_WRITES": {
+      "type": "boolean",
+      "default": false,
+      "description": "Logs empty chunks (debug only)",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "ALLOWED_UNPACKED_FILE_UPLOAD_IN_MB": {
+      "type": "number",
+      "default": 1024,
+      "description": "how much mb is an uploaded blueprint/skin allowed to have (unzipped)",
+      "category": "debug",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "RESTRICT_BUILDING_SIZE": {
+      "type": "float",
+      "default": 2,
+      "description": "Restricts Building Size to X times Sector Size (-1 for off) Warning: values set in GameConfig.xml overwrite this",
+      "category": "debug",
+      "min": 0,
+      "max": 32,
+      "kind": "float"
+    },
+    "DISPLAY_GROUPING_DEBUG_INFORMATION": {
+      "type": "boolean",
+      "default": false,
+      "description": "Displays grouping calculation information",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "MANAGER_CALC_CANCEL_ON": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enables performance increase by prematurely ending calculations when there is a refresh request",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "ALLOW_OLD_POWER_SYSTEM": {
+      "type": "boolean",
+      "default": true,
+      "description": "enables old power system (WARNING: once the old power system has been disallowed, it cannot be allowed again and the game will ignore this option, as that would cause compatibility issues.)",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "JUMP_DRIVE_ENABLED_BY_DEFAULT": {
+      "type": "boolean",
+      "default": true,
+      "description": "Weather all ships have jump capability or the basic jump chamber is required for jump capability",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SHORT_RANGE_SCAN_DRIVE_ENABLED_BY_DEFAULT": {
+      "type": "boolean",
+      "default": true,
+      "description": "Weather all ships have scanner capability or the basic scan chamber is required for scan capability",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SPAWN_PROTECTION": {
+      "type": "number",
+      "default": 10,
+      "description": "Spawn protection in seconds (may not yet protect against everything)",
+      "category": "debug",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "AI_ENGAGEMENT_RANGE_OF_MIN_WEAPON_RANGE": {
+      "type": "float",
+      "default": 0.75,
+      "description": "Percentage of minimum weapon range the AI prefers to engage from",
+      "category": "debug",
+      "min": 0.0,
+      "max": 1.0,
+      "kind": "float"
+    },
+    "MISSILE_TARGET_PREDICTION_SEC": {
+      "type": "float",
+      "default": 3.5,
+      "description": "Since lockstep algorithm is based on recorded target positions, how much should a target chasing missiles predict a target's position based on its velocity (in ticks of 8ms). Change if missiles miss fast targets",
+      "category": "debug",
+      "min": 0.0,
+      "max": 1000000.0,
+      "kind": "float"
+    },
+    "AI_WEAPON_SWITCH_DELAY": {
+      "type": "number",
+      "default": 500,
+      "description": "Delay inbetween an AI can switch weapon in ms",
+      "category": "debug",
+      "min": 0,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "ALLOW_FACTORY_ON_SHIPS": {
+      "type": "boolean",
+      "default": false,
+      "description": "Factories work on ships",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SHIPYARD_IGNORE_STRUCTURE": {
+      "type": "boolean",
+      "default": false,
+      "description": "Removes necessity to build shipyard structure (just computer and ancor is enough)",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "MISSILE_RADIUS_HP_BASE": {
+      "type": "float",
+      "default": 1.1,
+      "description": "Missile Damage to Radius relation: MissileRadius = ((3/4π) * (MissileTotalDamage/MISSILE_RADIUS_HP_BASE)) ^ (1/3)",
+      "category": "debug",
+      "min": 1e-06,
+      "max": 9999999999,
+      "kind": "float"
+    },
+    "MAX_EXPLOSION_POOL": {
+      "type": "number",
+      "default": -1,
+      "description": "Maximum amount of explosions to keep in pool (to reuse in memory, -1 for unlimited)",
+      "category": "debug",
+      "min": -1,
+      "max": 2147483647,
+      "kind": "int"
+    },
+    "SERVER_TICK_PROFILER": {
+      "type": "boolean",
+      "default": true,
+      "description": "Times the server main loop and logs the dominant phase when a tick exceeds SERVER_TICK_WARN_MS (very low cost, helps diagnose stalls)",
+      "category": "debug",
+      "choices": [
+        false,
+        true
+      ],
+      "kind": "boolean"
+    },
+    "SERVER_TICK_WARN_MS": {
+      "type": "number",
+      "default": 120,
+      "description": "Server main-loop tick budget in ms; ticks slower than this get a per-phase breakdown logged (requires SERVER_TICK_PROFILER)",
+      "category": "debug",
+      "min": 1,
+      "max": 2147483647,
+      "kind": "int"
+    }
+  }
+}

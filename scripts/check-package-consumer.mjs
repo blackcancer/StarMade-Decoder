@@ -42,8 +42,14 @@ import { Tags, writeTo, readFrom, BlockConfig, BlockDefinition, BlockState, Segm
   XmlConfigDocument, FactionManager, Catalog, TradingManager, ControlElementMapper, registerAllFactories,
   Inventory, ItemStack, ManagerContainer, parseSment, emptySegment, emptySmd3File, writeSmd3, parseSmd3,
   BlueprintTemplate, parseSmtpl, writeSmtpl, FleetCommandObject, StarSystem, TradePricesObject,
+  ServerConfig, SERVER_CONFIG_SCHEMA, SERVER_CONFIG_SCHEMA_SOURCE,
   Smd3Document, readBlueprintDocument, readBlueprintFolderDocument, writeSment, writeBlueprintFolder } from 'starmade-decoder';
 registerAllFactories();
+assert.equal(Object.keys(SERVER_CONFIG_SCHEMA).length, 210);
+assert.equal(SERVER_CONFIG_SCHEMA_SOURCE, 'e5a3b49d86943c4d618cea6512e28fa0b95901df');
+assert.equal(SERVER_CONFIG_SCHEMA.SECTOR_SIZE.default, 5000);
+assert.deepEqual(SERVER_CONFIG_SCHEMA.DEFAULT_GAME_MODE.choices, ['SURVIVAL', 'CREATIVE']);
+assert.throws(() => ServerConfig.fromString('').set('SECTOR_SIZE', 1000), /at least 2000/);
 const attack = FleetCommandObject.create(42n, 'FLEET_ATTACK');
 assert.equal(attack.toBytes().readInt32BE(8), 6);
 const oldAttack = FleetCommandObject.create(42n, 'FLEET_ATTACK', [], 'legacy-sdk');
@@ -143,7 +149,13 @@ console.log('Isolated production consumer exercised V2 auxiliary/domain classes 
     type BlockDefinitionOptions, type InventoryCapacity, type InventoryReadOptions,
     SkinDocument, WorldSeedDocument, PersistentObjectDocument, SubtitleDocument, SystemNamesDocument, BlueprintModMappings,
     XmlConfigDocument, type XmlConfigValue, type FormatLimits, type PersistentObjectLimits, type ModMappingOptions,
-    ControlElementMapper, type ControlElementMapperOptions, type NPCRoute } from 'starmade-decoder';
+    ControlElementMapper, type ControlElementMapperOptions, type NPCRoute,
+    SERVER_CONFIG_SCHEMA, SERVER_CONFIG_SCHEMA_SOURCE,
+    type ConfigEntryMeta, type ConfigValueKind, type ConfigCategory } from 'starmade-decoder';
+const serverMeta: ConfigEntryMeta = SERVER_CONFIG_SCHEMA.SECTOR_SIZE;
+const serverKind: ConfigValueKind = serverMeta.kind;
+const serverCategory: ConfigCategory = serverMeta.category;
+void serverKind; void serverCategory; void SERVER_CONFIG_SCHEMA_SOURCE;
 const options: Smd3ParseOptions = { mode: 'strict' };
 const templatePiece: TemplatePiece = {x:0,y:0,z:0,type:1,hp:127,active:true,orientation:31,extra:0};
 const template = new BlueprintTemplate({version:5,minX:0,minY:0,minZ:0,maxX:0,maxY:0,maxZ:0,

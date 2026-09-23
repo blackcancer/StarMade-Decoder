@@ -26,7 +26,9 @@ describe('Configuration contracts — portable fixtures', () => {
       assert.isTrue(cfg.isKnown(key));
       assert.strictEqual(cfg.get(key), meta.default, key);
       assert.strictEqual(ServerConfig.fromString('').get(key), meta.default, `default ${key}`);
-      const value = meta.type === 'string' ? 'changed' : meta.type === 'boolean' ? !meta.default : 7;
+      const value = meta.kind === 'enum' ? meta.choices!.find(choice => choice !== meta.default)!
+        : meta.type === 'string' ? 'changed' : meta.type === 'boolean' ? !meta.default
+        : meta.default === meta.max ? meta.min! : Math.min(meta.max!, Math.max(meta.min!, Number(meta.default) + 1));
       const next = cfg.set(key, value);
       assert.strictEqual(ServerConfig.fromString(next.toString()).get(key), value, `edit ${key}`);
       assert.strictEqual(cfg.get(key), meta.default, `immutable ${key}`);
@@ -47,7 +49,7 @@ describe('Configuration contracts — portable fixtures', () => {
     assert.equal(original.toString(), text);
     assert.isTrue(original.getBoolean('CUSTOM'));
     assert.isFalse(original.getBoolean('ENABLE_SIMULATION'));
-    assert.isTrue(original.getBoolean('BLUEPRINTS_USE_COMPONENTS'));
+    assert.isFalse(original.getBoolean('BLUEPRINT_NO_RESOURCE_COST'));
     assert.equal(original.getFloat('PHYSICS_LINEAR_DAMPING'), 0.25);
     assert.equal(original.getNumber('MAX_CLIENTS'), 8);
     assert.equal(original.getString('MAX_CLIENTS'), '8');

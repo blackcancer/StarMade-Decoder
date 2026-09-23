@@ -39,7 +39,7 @@ describe('ServerConfig document integrity', () => {
     for (const value of [1, null, {}, ' leading', 'trailing ', 'a\nb', 'a\rb', 'https://host', '\ud800']) assert.throws(() => model.set('WORLD', value as any), TypeError);
     for (const value of ['1', NaN, Infinity, 0.5, Number.MAX_SAFE_INTEGER + 1]) assert.throws(() => model.set('MAX_CLIENTS', value as any), TypeError);
     for (const value of ['1', NaN, Infinity]) assert.throws(() => model.set('PHYSICS_LINEAR_DAMPING', value as any), TypeError);
-    assert.equal(model.set('MAX_CLIENTS', -7).get('MAX_CLIENTS'), -7);
+    assert.throws(() => model.set('MAX_CLIENTS', -7), /at least 1/);
     assert.equal(model.set('PHYSICS_LINEAR_DAMPING', 0.25).get('PHYSICS_LINEAR_DAMPING'), 0.25);
     assert.equal(model.set('WORLD', 'a=b').get('WORLD'), 'a=b');
     assert.equal(model.toString(), '');

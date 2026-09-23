@@ -89,10 +89,10 @@ describe('ServerConfig', function () {
     assert.isNumber(sc.getFloat('COLLISION_DAMAGE_THRESHOLD'));
   });
 
-  it('schema contains the 196 Java entries', () => {
+  it('schema contains the 210 current game entries', () => {
     const count = Object.keys(SERVER_CONFIG_SCHEMA).length;
     console.log('    Schema entries:', count);
-    assert.isAbove(count, 150, 'schema must have 150+ entries');
+    assert.equal(count, 210);
     // Check a few important keys
     assert.isDefined(SERVER_CONFIG_SCHEMA['WORLD']);
     assert.isDefined(SERVER_CONFIG_SCHEMA['MAX_CLIENTS']);

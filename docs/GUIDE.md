@@ -529,6 +529,10 @@ console.log('Max clients:', server.getNumber('MAX_CLIENTS'));
 console.log('Enemy spawning:', server.getBoolean('ENEMY_SPAWNING'));
 ```
 
+The public `SERVER_CONFIG_SCHEMA` provides type, initial value, inclusive numeric
+limits or choices, category and effect description for each current game setting.
+See the [complete API contract](API.md#serverconfig).
+
 ### Edit server.cfg
 
 ```ts
