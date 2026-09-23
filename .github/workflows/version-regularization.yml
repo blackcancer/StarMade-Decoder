@@ -1,0 +1,24 @@
+name: Reconcile historical versions
+on:
+  push:
+    branches: [maintenance/version-regularization-20260923]
+    paths: [.github/workflows/version-regularization.yml]
+permissions:
+  contents: write
+concurrency:
+  group: version-regularization-20260923
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    if: github.repository == 'blackcancer/StarMade-Decoder'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Retrieve the reviewed reconciliation script at an immutable commit
+        run: curl --fail --silent --show-error --max-time 60 https://raw.githubusercontent.com/blackcancer/StarMade-DB/36af107bce5e332210e81faccdffb533dc65f1ee/scripts/regularize-versions.mjs -o regularize-versions.mjs
+      - name: Validate targets, preserve published refs, restore tags and releases
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERSION_PLAN: >-
+            {"repository":"blackcancer/StarMade-Decoder","snapshot":"8707f2293f8b389e044f68cfb9fb01b635db8886","latest":"v2.0.2","existingTags":{"v1.0.0":"277f5181e95f14fbb708ed6699eaa0ab6aefe1da","v2.0.2":"4b8bf4a4be543323768859d102851bf32855bf23"},"versions":[{"tag":"v1.0.0","original":"277f5181e95f14fbb708ed6699eaa0ab6aefe1da","originalVersion":"1.0.0","summary":"Initial StarMade-Decoder release. The published tag and release remain unchanged."},{"tag":"v1.1.0","original":"096d0cbb40663c2cefd90aaabb69bf263dd4b525","originalVersion":"1.0.0","normalize":true,"summary":"Java modified UTF-8 network read/write helpers, before the subsequent database codec integration.","reason":"The changelog identifies these network UTF helpers as 1.1.0, but the historical implementation commit kept package.json at 1.0.0. This archival reconstruction changes root package and lockfile version metadata only; runtime source, dependencies and the original commit are preserved."},{"tag":"v1.2.0","original":"143fd646c41152ba1f4a13d620597616edec5cc2","originalVersion":"1.2.0","summary":"Database VARBINARY codecs and immutable objects, additional blueprint writers and Tag-object serialization helpers."},{"tag":"v1.3.0","original":"5a34b5ae89c921b84f729ce767429c9f06b7921a","originalVersion":"1.3.0","summary":"SegmentController immutable mutation helpers. Records the historical release with its subsequent release-metadata synchronization, before 1.4 rendering changes."},{"tag":"v1.4.0","original":"93496c33e84b71e568a8a0792485d4ec58c629eb","originalVersion":"1.4.0","summary":"Block render/LOD metadata preservation and corrected version-6 segment block decoding."},{"tag":"v2.0.0","original":"4cb21bd72258c87eb8115f90449a8334c34658a6","originalVersion":"2.0.0","summary":"Complete format-model layer and integrity corrections. Records the historically pinned 2.0.0 snapshot, including qualification-documentation updates."},{"tag":"v2.0.1","original":"ed9d3becdb139eaf665c27a23c6ef3ef60d687d9","originalVersion":"2.0.1","summary":"Correct SMTPL v4/v5 block decoding and version-aware template writing; preserve legacy HP and extended reserved bits."},{"tag":"v2.0.2","original":"8707f2293f8b389e044f68cfb9fb01b635db8886","originalVersion":"2.0.2","summary":"Correct database ordinals, explicit current/legacy-sdk profiles, JDK-compatible trade-price zlib envelopes and native 16-byte resource storage. Review the pinned migration notes before interpreting previously rewritten data."}]}
+        run: node regularize-versions.mjs
