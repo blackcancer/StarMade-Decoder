@@ -41,9 +41,18 @@ import { Tags, writeTo, readFrom, BlockConfig, BlockDefinition, BlockState, Segm
   SkinDocument, WorldSeedDocument, PersistentObjectDocument, SubtitleDocument, SystemNamesDocument, BlueprintModMappings,
   XmlConfigDocument, FactionManager, Catalog, TradingManager, ControlElementMapper, registerAllFactories,
   Inventory, ItemStack, ManagerContainer, parseSment, emptySegment, emptySmd3File, writeSmd3, parseSmd3,
-  BlueprintTemplate, parseSmtpl, writeSmtpl,
+  BlueprintTemplate, parseSmtpl, writeSmtpl, FleetCommandObject, StarSystem, TradePricesObject,
   Smd3Document, readBlueprintDocument, readBlueprintFolderDocument, writeSment, writeBlueprintFolder } from 'starmade-decoder';
 registerAllFactories();
+const attack = FleetCommandObject.create(42n, 'FLEET_ATTACK');
+assert.equal(attack.toBytes().readInt32BE(8), 6);
+const oldAttack = FleetCommandObject.create(42n, 'FLEET_ATTACK', [], 'legacy-sdk');
+assert.equal(oldAttack.toBytes().readInt32BE(8), 5);
+assert.equal(FleetCommandObject.fromBytes(oldAttack.toBytes(), 'legacy-sdk').commandType, 'FLEET_ATTACK');
+assert.equal(StarSystem.empty().infosToBytes()[0], 6);
+assert.equal(StarSystem.empty().resourcesToBytes().length, 16);
+const gameTrade = Buffer.from('0000001a00000019789c636000032d2066646406924c40c697ff400000124e0523', 'hex');
+assert.equal(TradePricesObject.fromBytes(gameTrade).getSellOrder(259).price, 500);
 const template = new BlueprintTemplate({version:5,minX:0,minY:0,minZ:0,maxX:0,maxY:0,maxZ:0,
   pieces:[{x:0,y:0,z:0,type:2047,hp:127,active:true,orientation:31}],connections:[],texts:new Map()});
 const templateBytes = writeSmtpl(template);

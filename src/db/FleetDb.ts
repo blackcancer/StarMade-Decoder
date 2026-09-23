@@ -17,41 +17,8 @@ import type { DecodeDiagnostic } from '../core/DecodeError.js';
 import { MAX_DATABASE_BYTES, readDatabase, readZeroPadding } from './DatabaseValidation.js';
 import { readJavaBooleanMap, writeJavaBooleanMap } from './JavaBooleanMap.js';
 
-// ── FleetCommandTypes enum (ordinal order from FleetCommandTypes.java) ────────
-
-/**
- * Fleet command type ordinals.
- * Order matches the Java enum declaration in FleetCommandTypes.java.
- */
-export const FLEET_COMMAND_TYPES = [
-  'IDLE',             // 0
-  'MOVE_FLEET',       // 1
-  'PATROL_FLEET',     // 2
-  'TRADE_FLEET',      // 3
-  'REPAIR_FLEET',     // 4
-  'FLEET_ATTACK',     // 5
-  'FLEET_DEFEND',     // 6
-  'ESCORT',           // 7
-  'REPAIR',           // 8
-  'ARTILLERY',        // 9
-  'SENTRY_FORMATION', // 10
-  'SENTRY',           // 11
-  'FLEET_IDLE_FORMATION', // 12
-  'CALL_TO_CARRIER',  // 13
-  'MINE_IN_SECTOR',   // 14
-  'CLOAK',            // 15
-  'UNCLOAK',          // 16
-  'JAM',              // 17
-  'UNJAM',            // 18
-  'ACTIVATE_REMOTE',  // 19
-  'INTERDICT',        // 20
-  'STOP_INTERDICT',   // 21
-] as const;
-
-/**
- * Defines the FleetCommandType type used by StarMade database object parsing.
- */
-export type FleetCommandType = typeof FLEET_COMMAND_TYPES[number];
+import { FLEET_COMMAND_TYPES, getDatabaseProfile, type DatabaseProfile, type FleetCommandType } from './DatabaseProfile.js';
+export { FLEET_COMMAND_TYPES, type FleetCommandType };
 
 // ── Command arg types (NetUtil constants) ─────────────────────────────────────
 
@@ -105,7 +72,7 @@ export interface FleetCommand {
 }
 
 /**
- * Decodes `FLEETS.COMMAND` (VARBINARY 1024).
+ * Decodes `FLEETS.COMMAND` (VARBINARY 1024) using an explicit profile (current by default).
  *
  * Wire format (FleetCommand.serializeBytes → DataOutput):
  *   long  fleetDbId
@@ -116,12 +83,13 @@ export interface FleetCommand {
  * Strings use Java Modified UTF-8 (DataOutput.writeUTF).
  * Returns null if the buffer is null or empty.
  */
-export function decodeFleetCommand(data: Buffer | Uint8Array | null | undefined): FleetCommand | null {
+export function decodeFleetCommand(data: Buffer | Uint8Array | null | undefined, profile: DatabaseProfile = 'current'): FleetCommand | null {
+  const contract = getDatabaseProfile(profile);
   if (!data || data.length === 0) return null;
   return readDatabase(data, 'FLEETS.COMMAND', r => {
     const fleetDbId = r.readInt64BE();
     const commandOrdinal = r.readInt32BE();
-    const commandType = FLEET_COMMAND_TYPES[commandOrdinal] as FleetCommandType | undefined;
+    const commandType = contract.fleetCommands[commandOrdinal] as FleetCommandType | undefined;
     const args = readCommandArgs(r);
     readZeroPadding(r);
     return { fleetDbId, commandOrdinal, commandType, args };

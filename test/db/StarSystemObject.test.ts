@@ -30,8 +30,8 @@ describe('StarSystem integrity', () => {
     assert.deepEqual(model.infosToBytes(), original);
   });
   it('preserves full-grid views, unknown types, derived planet metadata and detached JSON', () => {
-    const infos = StarSystem.empty().infosToBytes(); infos[1] = 45; infos[2] = 255; infos[3] = 67;
-    const model = StarSystem.fromBytes(infos, new Uint8Array(19), { includeVoid: true })!;
+    const infos = StarSystem.empty('legacy-sdk').infosToBytes(); infos[1] = 45; infos[2] = 255; infos[3] = 67;
+    const model = StarSystem.fromBytes(infos, new Uint8Array(19), { includeVoid: true, profile: 'legacy-sdk' })!;
     assert.lengthOf(model.sectors, 4096);
     assert.equal(model.getSector(0, 0, 0)!.metadata, 45);
     const unknown = model.getSector(1, 0, 0)!;
@@ -67,7 +67,7 @@ describe('StarSystem integrity', () => {
     for (const patch of [{ x: -1 }, { y: 16 }, { z: 0.5 }, { x: NaN }, { index: 0 },
       { metadata: 256 }, { metadata: -1 }, { sectorTypeOrdinal: 256 }, { sectorTypeOrdinal: -1 },
       { sectorType: 'SUN' }, { planetType: 'ICE' }]) assert.throws(() => model.withSector({ ...info, ...patch } as any), RangeError);
-    assert.throws(() => model.withSector({ ...info, sectorType: 'SUN', sectorTypeOrdinal: 5 }), /Planet type/);
+    assert.throws(() => model.withSector({ ...info, sectorType: 'SUN', sectorTypeOrdinal: 4 }), /Planet type/);
     assert.throws(() => model.withResourceDensity(NaN, 0), RangeError);
     assert.throws(() => model.withResourceDensity(0, NaN), RangeError);
     assert.throws(() => model.withResourceDensity(-1, 0), RangeError);
@@ -76,6 +76,6 @@ describe('StarSystem integrity', () => {
     const valid = model.withResourceDensity(18, 255).withSectorType(15, 15, 15, 'VOID', 255);
     assert.equal(valid.getResourceDensity(18), 255);
     assert.equal(valid.infosToBytes()[8191], 255);
-    assert.deepEqual(StarSystem.fromBytes(valid.infosToBytes(), valid.resourcesToBytes())!.infosToBytes(), valid.infosToBytes());
+    assert.deepEqual(StarSystem.fromBytes(valid.infosToBytes(), valid.resourcesToBytes(19))!.infosToBytes(), valid.infosToBytes());
   });
 });

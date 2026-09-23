@@ -80,3 +80,6 @@ export type { PersistentObjectFile, PersistentObjectEntry } from './PersistentOb
 export { WorldSeedDocument } from './WorldSeedDocument.js';
 export { PersistentObjectDocument } from './PersistentObjectDocument.js';
 export type { PersistentObjectLimits } from './PersistentObjectDocument.js';
+
+export { getDatabaseProfile, LEGACY_FLEET_COMMAND_TYPES, LEGACY_SECTOR_TYPES, LEGACY_PLANET_TYPES } from './DatabaseProfile.js';
+export type { DatabaseProfile, DatabaseContract } from './DatabaseProfile.js';

@@ -9,7 +9,7 @@
  * Wire format:
  *   int   uncompressedSize   — byte count of the inflated payload
  *   int   deflatedSize       — byte count of the zlib-deflated payload
- *   byte[deflatedSize]       — zlib DEFLATE (no gzip header) of the payload
+ *   byte[deflatedSize]       — zlib-wrapped DEFLATE (raw only with legacy-sdk) of the payload
  *
  * Payload (TradePrices.serialize, DataOutput big-endian):
  *   long  entDbId            — entity DB ID of the shop/station
@@ -25,6 +25,8 @@
  * @author InitSysRev
  * @version 1.1.0
  */
+
+import { getDatabaseProfile, type DatabaseProfile } from './DatabaseProfile.js';
 
 import zlib from 'node:zlib';
 import { BufferReader } from '../core/BufferReader.js';
@@ -65,12 +67,13 @@ export interface TradePrices {
 }
 
 /**
- * Decodes `TRADE_NODES.ITEMS` (VARBINARY).
+ * Decodes `TRADE_NODES.ITEMS`; current uses zlib, explicit legacy-sdk uses raw DEFLATE.
  *
  * Returns null for null/empty input.
  * Throws on malformed zlib data.
  */
-export function decodeTradeNodeItems(data: Buffer | Uint8Array | null | undefined): TradePrices | null {
+export function decodeTradeNodeItems(data: Buffer | Uint8Array | null | undefined, profile: DatabaseProfile = 'current'): TradePrices | null {
+  const contract = getDatabaseProfile(profile);
   if (!data || data.length === 0) return null;
   return readDatabase(data, 'TRADE_NODES.ITEMS', r => {
 
@@ -80,7 +83,7 @@ export function decodeTradeNodeItems(data: Buffer | Uint8Array | null | undefine
   const compressed       = Buffer.from(r.readBytes(deflatedSize));
   readZeroPadding(r);
 
-  const inflated = zlib.inflateRawSync(compressed, { maxOutputLength: uncompressedSize, info: true }) as unknown as {
+  const inflated = (contract.rawDeflate ? zlib.inflateRawSync : zlib.inflateSync)(compressed, { maxOutputLength: uncompressedSize, info: true }) as unknown as {
     buffer: Buffer; engine: { bytesWritten: number };
   };
   const payload = inflated.buffer;
@@ -107,9 +110,10 @@ export function decodeTradeNodeItems(data: Buffer | Uint8Array | null | undefine
 }
 
 /**
- * Encodes `TradePrices` back to VARBINARY bytes for `TRADE_NODES.ITEMS`.
+ * Encodes trade prices as current zlib bytes, or raw DEFLATE with explicit legacy-sdk.
  */
-export function encodeTradeNodeItems(prices: TradePrices): Buffer {
+export function encodeTradeNodeItems(prices: TradePrices, profile: DatabaseProfile = 'current'): Buffer {
+  const contract = getDatabaseProfile(profile);
   // Build payload
   const pw = new BufferWriter(256, MAX_DATABASE_BYTES);
   pw.writeInt64BE(prices.entDbId);
@@ -122,8 +126,8 @@ export function encodeTradeNodeItems(prices: TradePrices): Buffer {
   }
   const payload = pw.toBuffer();
 
-  // Compress with raw deflate (no gzip header), matching Java Deflater
-  const compressed = zlib.deflateRawSync(payload);
+  // Java Deflater uses the zlib wrapper; historical SDK bytes require an explicit profile.
+  const compressed = (contract.rawDeflate ? zlib.deflateRawSync : zlib.deflateSync)(payload);
 
   const w = new BufferWriter(8 + compressed.length);
   w.writeInt32BE(payload.length);

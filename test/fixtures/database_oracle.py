@@ -9,6 +9,7 @@ it does not execute a JDK or claim arbitrary ObjectStream support.
 import base64
 import hashlib
 import math
+import struct
 from pathlib import Path
 import sys
 import zlib
@@ -98,6 +99,16 @@ class ObjectStream:
 
 
 def run(mode, directory):
+    # Independent JDK 24 capture: owner 42, block 259, amount 2, price 500, limit -1.
+    trade = bytes.fromhex('0000001a00000019789c636000032d2066646406924c40c697ff400000124e0523')
+    expected_trade = struct.pack('>qihiii', 42, 1, 259, 2, 500, -1)
+    if mode == 'generate':
+        (directory / 'reference-trade').write_bytes(trade)
+    else:
+        trade = (directory / 'sdk-trade').read_bytes()
+    inflated_size, compressed_size = struct.unpack('>ii', trade[:8])
+    check(inflated_size == 26 and compressed_size == len(trade) - 8, 'trade frame dimensions')
+    check(zlib.decompress(trade[8:]) == expected_trade, 'trade zlib envelope or payload mismatch')
     for index in range(2):
         expected = {} if index == 0 else {key: i % 2 == 0 for i, key in enumerate(KEYS)}
         if mode == 'generate':
@@ -109,7 +120,7 @@ def run(mode, directory):
             data = (directory / f'sdk-map-{index}').read_bytes()
             check(hashlib.sha256(data).hexdigest() == SDK_HASHES[index], 'SDK bytes differ from ObjectInputStream-qualified capture')
         check(ObjectStream(data).read() == expected, 'ObjectStream value mismatch')
-    print(f'Python ObjectStream {mode}: empty/UTF maps, descriptors and shared handles; fixed JDK references.')
+    print(f'Python database {mode}: ObjectStream maps and zlib trade prices; fixed JDK references.')
 
 
 if __name__ == '__main__':

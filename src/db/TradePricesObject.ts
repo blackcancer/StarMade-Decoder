@@ -14,6 +14,8 @@
  * @version 1.1.0
  */
 
+import { type DatabaseProfile } from './DatabaseProfile.js';
+
 import { decodeTradeNodeItems, encodeTradeNodeItems, type TradePriceEntry } from './TradeNodeItems.js';
 
 export { type TradePriceEntry };
@@ -22,6 +24,8 @@ export { type TradePriceEntry };
  * Represents the TradePricesObject model used by StarMade database object parsing.
  */
 export class TradePricesObject {
+  /** Explicit compression contract retained across edits. */
+  readonly profile: DatabaseProfile;
   readonly entDbId: bigint;
   readonly #entries: TradePriceEntry[];
   /** Detached price entries; editing a snapshot does not edit the price list. */
@@ -31,10 +35,11 @@ export class TradePricesObject {
    * Creates a TradePricesObject instance.
    *
    * @param entDbId - Input value for the constructor operation.
-   * @param entries - Input value for the constructor operation.
+   * @param entries - Price entries. @param profile Explicit compression contract.
    */
-  private constructor(entDbId: bigint, entries: TradePriceEntry[]) {
-    encodeTradeNodeItems({ entDbId, entries });
+  private constructor(entDbId: bigint, entries: TradePriceEntry[], profile: DatabaseProfile) {
+    this.profile = profile;
+    encodeTradeNodeItems({ entDbId, entries }, profile);
     this.entDbId = entDbId;
     this.#entries = entries.map(entry => ({ ...entry }));
     Object.freeze(this);
@@ -43,18 +48,18 @@ export class TradePricesObject {
   // ── Named constructors ─────────────────────────────────────────────────────
 
   /**
-   * Decodes TRADE_NODES.ITEMS bytes.
+   * Decodes TRADE_NODES.ITEMS using the selected compression profile (current by default).
    * Returns null for absent/empty input; malformed input throws.
    */
-  static fromBytes(data: Buffer | Uint8Array | null | undefined): TradePricesObject | null {
-    const raw = decodeTradeNodeItems(data);
+  static fromBytes(data: Buffer | Uint8Array | null | undefined, profile: DatabaseProfile = 'current'): TradePricesObject | null {
+    const raw = decodeTradeNodeItems(data, profile);
     if (!raw) return null;
-    return new TradePricesObject(raw.entDbId, raw.entries);
+    return new TradePricesObject(raw.entDbId, raw.entries, profile);
   }
 
-  /** Creates an empty price list for the given entity. */
-  static empty(entDbId: bigint): TradePricesObject {
-    return new TradePricesObject(entDbId, []);
+  /** Creates an empty price list for the entity using the selected profile (current by default). */
+  static empty(entDbId: bigint, profile: DatabaseProfile = 'current'): TradePricesObject {
+    return new TradePricesObject(entDbId, [], profile);
   }
 
   // ── Accessors ──────────────────────────────────────────────────────────────
@@ -108,7 +113,7 @@ export class TradePricesObject {
     if (!Number.isInteger(blockType) || blockType < 1 || blockType > 32768) throw new RangeError('Buy block type must be an integer in [1, 32768]');
     const rest = this.#entries.filter(e => !(e.isBuyOrder && e.blockType === blockType));
     const entry: TradePriceEntry = { type: -blockType, isBuyOrder: true, blockType, amount, price, limit };
-    return new TradePricesObject(this.entDbId, [...rest, entry]);
+    return new TradePricesObject(this.entDbId, [...rest, entry], this.profile);
   }
 
   /**
@@ -119,39 +124,39 @@ export class TradePricesObject {
     if (!Number.isInteger(blockType) || blockType < 1 || blockType > 32767) throw new RangeError('Sell block type must be an integer in [1, 32767]');
     const rest = this.#entries.filter(e => !(!e.isBuyOrder && e.blockType === blockType));
     const entry: TradePriceEntry = { type: blockType, isBuyOrder: false, blockType, amount, price, limit };
-    return new TradePricesObject(this.entDbId, [...rest, entry]);
+    return new TradePricesObject(this.entDbId, [...rest, entry], this.profile);
   }
 
   /** Removes all entries for a given block type (both buy and sell). */
   withoutBlock(blockType: number): TradePricesObject {
-    return new TradePricesObject(this.entDbId, this.entries.filter(e => e.blockType !== blockType));
+    return new TradePricesObject(this.entDbId, this.entries.filter(e => e.blockType !== blockType), this.profile);
   }
 
   /** Removes the buy order for a given block type. */
   withoutBuyOrder(blockType: number): TradePricesObject {
-    return new TradePricesObject(this.entDbId, this.entries.filter(e => !(e.isBuyOrder && e.blockType === blockType)));
+    return new TradePricesObject(this.entDbId, this.entries.filter(e => !(e.isBuyOrder && e.blockType === blockType)), this.profile);
   }
 
   /** Removes the sell order for a given block type. */
   withoutSellOrder(blockType: number): TradePricesObject {
-    return new TradePricesObject(this.entDbId, this.entries.filter(e => !(!e.isBuyOrder && e.blockType === blockType)));
+    return new TradePricesObject(this.entDbId, this.entries.filter(e => !(!e.isBuyOrder && e.blockType === blockType)), this.profile);
   }
 
   /** Changes the entity DB ID (e.g. after entity relocation). */
   withEntDbId(id: bigint): TradePricesObject {
-    return new TradePricesObject(id, [...this.#entries]);
+    return new TradePricesObject(id, [...this.#entries], this.profile);
   }
 
   /** Removes all entries. */
   cleared(): TradePricesObject {
-    return new TradePricesObject(this.entDbId, []);
+    return new TradePricesObject(this.entDbId, [], this.profile);
   }
 
   // ── Serialization ──────────────────────────────────────────────────────────
 
   /** Encodes to VARBINARY bytes for TRADE_NODES.ITEMS. */
   toBytes(): Buffer {
-    return encodeTradeNodeItems({ entDbId: this.entDbId, entries: [...this.#entries] });
+    return encodeTradeNodeItems({ entDbId: this.entDbId, entries: [...this.#entries] }, this.profile);
   }
 
   /** JSON projection preserving the exact signed 64-bit entity ID as decimal text. */

@@ -32,7 +32,7 @@ describe('Database contracts — complete command arguments', () => {
       { kind: 'vec3i', x: -1, y: 2, z: 3 }, { kind: 'vec3f', x: 0.5, y: 1.5, z: 2.5 },
       { kind: 'vec4f', x: 0.5, y: 1.5, z: 2.5, w: 3.5 },
     ];
-    const command = { fleetDbId: -7n, commandOrdinal: 19, commandType: 'ACTIVATE_REMOTE' as const, args };
+    const command = { fleetDbId: -7n, commandOrdinal: 21, commandType: 'ACTIVATE_REMOTE' as const, args };
     const wire = Fleet.encodeFleetCommand(command, 0);
     assert.isBelow(wire.length, 1024);
     assert.deepEqual(Fleet.decodeFleetCommand(new Uint8Array(wire)), command);
@@ -121,12 +121,12 @@ describe('Database contracts — collections and alternate byte arrays', () => {
     assert.throws(() => empty.withSectorType(0, 0, 0, 'PLANET', -1), RangeError);
     assert.isUndefined(empty.getSectorByIndex(0));
     const planet = empty.withSectorType(0, 0, 0, 'PLANET', 255);
-    assert.equal(planet.getSectorByIndex(0)!.planetType, 'BARREN');
+    assert.equal(planet.getSectorByIndex(0)!.planetType, 'ICE');
     assert.isUndefined(planet.getSectorByIndex(1));
     const bytes = empty.infosToBytes(); bytes[0] = 255; bytes[2] = 2; bytes[3] = 255;
     const entries = System.decodeSystemInfos(new Uint8Array(bytes));
     assert.equal(entries[0].sectorType, 'UNKNOWN');
-    assert.equal(entries[1].planetType, 'BARREN');
+    assert.equal(entries[1].planetType, 'ICE');
     assert.equal(System.decodeSystemResources(new Uint8Array(System.RESOURCE_COUNT), { includeAbsent: true }).length, System.RESOURCE_COUNT);
   });
 

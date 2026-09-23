@@ -2,7 +2,7 @@
  * @fileoverview StarSystem business object
  *
  * High-level wrapper around SYSTEMS.INFOS (VARBINARY 8192) and
- * SYSTEMS.RESOURCES (VARBINARY 19).
+ * SYSTEMS.RESOURCES (16 current / 19 extended bytes).
  *
  * Models the star system grid and resource densities, matching the
  * StellarSystem / VoidSystem pattern from Java.
@@ -10,6 +10,8 @@
  * @author InitSysRev
  * @version 1.1.0
  */
+
+import { getDatabaseProfile, type DatabaseProfile } from './DatabaseProfile.js';
 
 import {
   decodeSystemInfos, encodeSystemInfos,
@@ -32,6 +34,10 @@ export {
  * Represents the StarSystem model used by StarMade database object parsing.
  */
 export class StarSystem {
+  /** Explicit grid ordinal contract retained across edits. */
+  readonly profile: DatabaseProfile;
+  /** Distinguishes missing resource cells from an explicitly zero-filled cell. */
+  readonly #hasResources: boolean;
   readonly #sectors: SectorInfo[];
   readonly #resources: SystemResource[];
   readonly #includeVoid: boolean;
@@ -41,16 +47,19 @@ export class StarSystem {
     return this.#sectors.filter(sector => this.#includeVoid || sector.sectorType !== 'VOID').map(sector => ({ ...sector }));
   }
 
-  /** Detached resource densities in index order (0–18), including absent resources. */
-  get resources(): ReadonlyArray<SystemResource> { return this.#resources.map(resource => ({ ...resource })); }
+  /** Detached canonical densities in index order (0–18); missing cells expose an empty array. */
+  get resources(): ReadonlyArray<SystemResource> { return this.#hasResources ? this.#resources.map(resource => ({ ...resource })) : []; }
 
   /**
    * Creates a StarSystem instance.
    *
    * @param sectors - Input value for the constructor operation.
-   * @param resources - Input value for the constructor operation.
+   * @param resources - Decoded densities. @param profile Explicit grid ordinal contract.
    */
-  private constructor(sectors: SectorInfo[], resources: SystemResource[], includeVoid = false) {
+  private constructor(sectors: SectorInfo[], resources: SystemResource[], includeVoid = false, profile: DatabaseProfile = 'current') {
+    getDatabaseProfile(profile);
+    this.profile = profile;
+    this.#hasResources = resources.length > 0;
     this.#sectors = sectors.map(sector => ({ ...sector }));
     this.#resources = RESOURCE_ITEM_IDS.map(meta => ({ index: meta.index, itemId: meta.id, name: meta.name,
       density: resources.find(resource => resource.index === meta.index)?.density ?? 0 }));
@@ -61,24 +70,24 @@ export class StarSystem {
   // ── Named constructors ─────────────────────────────────────────────────────
 
   /**
-   * Decodes both SYSTEMS.INFOS and SYSTEMS.RESOURCES bytes.
+   * Decodes both cells using options.profile (current by default); missing resources remain absent.
    * Returns null for absent/empty INFOS; malformed cells throw.
    */
   static fromBytes(
     infos: Buffer | Uint8Array | null | undefined,
     resources: Buffer | Uint8Array | null | undefined,
-    options: { includeVoid?: boolean } = {},
+    options: { includeVoid?: boolean; profile?: DatabaseProfile } = {},
   ): StarSystem | null {
     if (!infos || infos.length === 0) return null;
     // Keep the complete wire grid independently of the caller's filtered view.
-    const sectors = decodeSystemInfos(infos, { includeVoid: true });
+    const sectors = decodeSystemInfos(infos, { includeVoid: true, profile: options.profile });
     const res = decodeSystemResources(resources, { includeAbsent: true });
-    return new StarSystem(sectors, res, options.includeVoid);
+    return new StarSystem(sectors, res, options.includeVoid, options.profile);
   }
 
-  /** Creates a fully-VOID empty star system with zero resources. */
-  static empty(): StarSystem {
-    return new StarSystem([], []);
+  /** Creates a fully-VOID system using the selected profile; resource cells are initially absent. */
+  static empty(profile: DatabaseProfile = 'current'): StarSystem {
+    return new StarSystem([], [], false, profile);
   }
 
   // ── Sector accessors ───────────────────────────────────────────────────────
@@ -154,13 +163,14 @@ export class StarSystem {
    * Replaces if already present; adds otherwise.
    */
   withSector(info: SectorInfo): StarSystem {
-    validateSectorInfo(info);
+    validateSectorInfo(info, this.profile);
     const rest = this.#sectors.filter(sector => sector.index !== info.index);
     const entry = { ...info };
     if (info.sectorType === 'PLANET' || info.sectorType === 'GAS_PLANET') {
-      entry.planetType = PLANET_TYPES[Math.min(PLANET_TYPES.length - 1, info.metadata)];
+      const planets = getDatabaseProfile(this.profile).planetTypes;
+      entry.planetType = planets[Math.min(planets.length - 1, info.metadata)];
     }
-    return new StarSystem([...rest, entry], this.#resources, this.#includeVoid);
+    return new StarSystem([...rest, entry], [...this.resources], this.#includeVoid, this.profile);
   }
 
   /**
@@ -171,7 +181,7 @@ export class StarSystem {
     type: SectorType,
     metadata = 0,
   ): StarSystem {
-    const ordinal = SECTOR_TYPES.indexOf(type);
+    const ordinal = getDatabaseProfile(this.profile).sectorTypes.indexOf(type);
     if (ordinal === -1) throw new RangeError(`Unknown sector type: ${type}`);
     const index = systemCoordsToIndex(x, y, z);
     const info: SectorInfo = { x, y, z, index, sectorTypeOrdinal: ordinal, sectorType: type, metadata };
@@ -188,7 +198,7 @@ export class StarSystem {
     validateSystemInteger(index, RESOURCE_COUNT - 1, 'Resource index');
     validateSystemInteger(density, 255, 'Resource density');
     const resources = this.#resources.map((resource, i) => i === index ? { ...resource, density } : resource);
-    return new StarSystem(this.#sectors, resources, this.#includeVoid);
+    return new StarSystem(this.#sectors, resources, this.#includeVoid, this.profile);
   }
 
   /** Sets the density of a resource by item ID. */
@@ -202,12 +212,12 @@ export class StarSystem {
 
   /** Encodes to SYSTEMS.INFOS bytes (8192 bytes, VOID-filled). */
   infosToBytes(): Buffer {
-    return encodeSystemInfos(this.#sectors);
+    return encodeSystemInfos(this.#sectors, this.profile);
   }
 
-  /** Encodes to SYSTEMS.RESOURCES bytes (19 bytes). */
-  resourcesToBytes(): Buffer {
-    return encodeSystemResources(this.#resources);
+  /** Encode 16 current bytes or an explicit 19-byte extended cell; reject lossy conversion. */
+  resourcesToBytes(resourceSize: 16 | 19 = this.profile === 'legacy-sdk' ? 19 : 16): Buffer {
+    return encodeSystemResources(this.#resources, resourceSize);
   }
 
   /** Complete detached JSON projection, including VOID metadata hidden by the sector view. */
@@ -234,14 +244,15 @@ function validateSystemInteger(value: number, maximum: number, label: string): v
 }
 
 /** Rejects contradictory derived fields while preserving unknown wire ordinals. */
-function validateSectorInfo(info: SectorInfo): void {
+function validateSectorInfo(info: SectorInfo, profile: DatabaseProfile): void {
+  const contract = getDatabaseProfile(profile);
   for (const coordinate of [info.x, info.y, info.z]) validateSystemInteger(coordinate, SYSTEM_SIZE - 1, 'Sector coordinate');
   validateSystemInteger(info.sectorTypeOrdinal, 255, 'Sector type ordinal');
   validateSystemInteger(info.metadata, 255, 'Sector metadata');
   if (info.index !== systemCoordsToIndex(info.x, info.y, info.z)) throw new RangeError('Sector index does not match its coordinates');
-  const type = SECTOR_TYPES[info.sectorTypeOrdinal] ?? 'UNKNOWN';
+  const type = contract.sectorTypes[info.sectorTypeOrdinal] ?? 'UNKNOWN';
   if (info.sectorType !== type) throw new RangeError('Sector type does not match its ordinal');
   const planetType = type === 'PLANET' || type === 'GAS_PLANET'
-    ? PLANET_TYPES[Math.min(PLANET_TYPES.length - 1, info.metadata)] : undefined;
+    ? contract.planetTypes[Math.min(contract.planetTypes.length - 1, info.metadata)] : undefined;
   if (info.planetType !== undefined && info.planetType !== planetType) throw new RangeError('Planet type does not match sector metadata');
 }

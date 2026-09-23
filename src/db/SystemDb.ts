@@ -11,9 +11,9 @@
  *     byte[0] sectorType  — SectorType ordinal (see SECTOR_TYPES)
  *     byte[1] metadata    — varies by type (e.g. PlanetType ordinal for PLANET)
  *
- * SYSTEMS.RESOURCES (VARBINARY = 19 bytes)
+ * SYSTEMS.RESOURCES (VARBINARY = 16 current / 19 extended bytes)
  *   Flat byte array of resource densities.
- *   Written by VoidSystem.setSystemResources().
+ *   Current VoidSystem stores 16 slots; the canonical SDK view also supports three extended slots.
  *   Index = position in ElementKeyMap.resources array.
  *   Value = resource density (0 = absent).
  *
@@ -32,60 +32,16 @@ export const SECTOR_DATA_SIZE = 2;
 /** Expected size of SYSTEMS.INFOS in bytes. */
 export const SYSTEM_INFOS_SIZE = SYSTEM_SIZE * SYSTEM_SIZE * SYSTEM_SIZE * SECTOR_DATA_SIZE; // 8192
 
-/** Number of resource types (VoidSystem.RESOURCES = 19). */
+/** Canonical SDK resource slots; the current game stores the first 16. */
 export const RESOURCE_COUNT = 19;
 
-// ── SectorType enum (SectorInformation.SectorType, ordinal order) ─────────────
-
-/**
- * Sector type ordinals from SectorInformation.SectorType.java.
- * Index = byte value stored in INFOS[offset].
- */
-export const SECTOR_TYPES = [
-  'SPACE_STATION', // 0
-  'ASTEROID',      // 1
-  'PLANET',        // 2
-  'GAS_PLANET',    // 3
-  'MAIN',          // 4
-  'SUN',           // 5
-  'BLACK_HOLE',    // 6
-  'VOID',          // 7
-  'LOW_ASTEROID',  // 8
-  'GIANT',         // 9
-  'DOUBLE_STAR',   // 10
-] as const;
-
-/**
- * Defines the SectorType type used by StarMade database object parsing.
- */
-export type SectorType = typeof SECTOR_TYPES[number];
-
-// ── PlanetType enum (StellarSystem.PlanetType, ordinal order) ─────────────────
-
-// Retrieved from StellarSystem.java (getPlanetType uses values()[min(len-1, infos[dataIndex+1])]).
-// The enum declaration order determines ordinals. Based on StarMade-Open source:
-/**
- * Defines PLANET_TYPES for StarMade database object parsing.
- */
-export const PLANET_TYPES = [
-  'ICE',
-  'DESERT',
-  'TERRAN',
-  'GAS_GIANT',
-  'TOXIC',
-  'LAVA',
-  'BARREN',
-] as const;
-
-/**
- * Defines the PlanetType type used by StarMade database object parsing.
- */
-export type PlanetType = typeof PLANET_TYPES[number];
+import { SECTOR_TYPES, PLANET_TYPES, getDatabaseProfile, type DatabaseProfile, type SectorType, type PlanetType } from './DatabaseProfile.js';
+export { SECTOR_TYPES, PLANET_TYPES, type SectorType, type PlanetType };
 
 // ── Resource index → item ID mapping ─────────────────────────────────────────
 
 /**
- * Maps resource array index (0–18) to StarMade block/resource item IDs.
+ * Maps 16 current resource indices plus three historical extended slots to item IDs.
  * Source: ElementKeyMap.java static initializer.
  */
 export const RESOURCE_ITEM_IDS: ReadonlyArray<{ index: number; id: number; name: string }> = [
@@ -94,17 +50,17 @@ export const RESOURCE_ITEM_IDS: ReadonlyArray<{ index: number; id: number; name:
   { index: 2,  id: 482, name: 'Mattise Crystal' },
   { index: 3,  id: 483, name: 'Rammet Crystal' },
   { index: 4,  id: 484, name: 'Varat Crystal' },
-  { index: 5,  id: 485, name: 'Bastyn Gas' },
-  { index: 6,  id: 486, name: 'Common Crystal' },
+  { index: 5,  id: 485, name: 'Bastyn Crystal' },
+  { index: 6,  id: 486, name: 'Parsen Crystal' },
   { index: 7,  id: 487, name: 'Nocx Crystal' },
   { index: 8,  id: 488, name: 'Threns Ore' },
   { index: 9,  id: 489, name: 'Jisper Ore' },
-  { index: 10, id: 490, name: 'Zercaner Gas' },
+  { index: 10, id: 490, name: 'Zercaner Ore' },
   { index: 11, id: 491, name: 'Sertise Ore' },
-  { index: 12, id: 492, name: 'Hylat Ore' },
+  { index: 12, id: 492, name: 'Hital Ore' },
   { index: 13, id: 493, name: 'Fertikeen Ore' },
-  { index: 14, id: 494, name: 'Sapsun Ore' },
-  { index: 15, id: 495, name: 'Common Metal' },
+  { index: 14, id: 494, name: 'Parstun Ore' },
+  { index: 15, id: 495, name: 'Nacht Ore' },
   { index: 16, id: 255, name: 'Quantanium' },
   { index: 17, id: 256, name: 'Metate' },
   { index: 18, id: 257, name: 'Exogen' },
@@ -139,13 +95,14 @@ export interface SectorInfo {
 /**
  * Decodes `SYSTEMS.INFOS` (VARBINARY 8192 bytes).
  *
- * Returns only non-VOID sectors by default (pass `includeVoid=true` for all).
+ * Returns only non-VOID sectors by default; options select includeVoid and the explicit profile.
  * Returns empty array for absent/empty input; malformed lengths throw.
  */
 export function decodeSystemInfos(
   data: Buffer | Uint8Array | null | undefined,
-  options: { includeVoid?: boolean } = {},
+  options: { includeVoid?: boolean; profile?: DatabaseProfile } = {},
 ): SectorInfo[] {
+  const contract = getDatabaseProfile(options.profile);
   if (!data || data.length === 0) return [];
   if (data.length !== SYSTEM_INFOS_SIZE) throw new DecodeError('E_FORMAT', 'Invalid SYSTEMS.INFOS byte size', { path: 'SYSTEMS.INFOS' });
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
@@ -156,7 +113,7 @@ export function decodeSystemInfos(
     const sectorTypeOrdinal = buf[offset];
     const metadata          = buf[offset + 1];
 
-    const sectorType = (SECTOR_TYPES[sectorTypeOrdinal] ?? 'UNKNOWN') as SectorType | 'UNKNOWN';
+    const sectorType = (contract.sectorTypes[sectorTypeOrdinal] ?? 'UNKNOWN') as SectorType | 'UNKNOWN';
     if (!options.includeVoid && sectorType === 'VOID') continue;
 
     const z = Math.floor(idx / (SYSTEM_SIZE * SYSTEM_SIZE));
@@ -165,7 +122,7 @@ export function decodeSystemInfos(
 
     const entry: SectorInfo = { x, y, z, index: idx, sectorTypeOrdinal, sectorType, metadata };
     if (sectorType === 'PLANET' || sectorType === 'GAS_PLANET') {
-      const pt = PLANET_TYPES[Math.min(PLANET_TYPES.length - 1, metadata)];
+      const pt = contract.planetTypes[Math.min(contract.planetTypes.length - 1, metadata)];
       // The byte index is clamped into the non-empty PLANET_TYPES table.
       entry.planetType = pt;
     }
@@ -177,12 +134,12 @@ export function decodeSystemInfos(
 /**
  * Encodes a system infos grid back to VARBINARY bytes.
  *
- * Produces a full 8192-byte buffer initialized to VOID (ordinal 7).
+ * Produces a full 8192-byte buffer initialized to the selected profile's VOID ordinal.
  * Entries in the list overwrite their corresponding positions.
  * Entries not in the list remain VOID.
  */
-export function encodeSystemInfos(entries: SectorInfo[]): Buffer {
-  const VOID_ORDINAL = SECTOR_TYPES.indexOf('VOID'); // = 7
+export function encodeSystemInfos(entries: SectorInfo[], profile: DatabaseProfile = 'current'): Buffer {
+  const VOID_ORDINAL = getDatabaseProfile(profile).sectorTypes.indexOf('VOID');
   const buf = Buffer.alloc(SYSTEM_INFOS_SIZE, 0);
   // Fill with VOID first
   for (let i = 0; i < SYSTEM_SIZE ** 3; i++) {
@@ -214,7 +171,7 @@ export interface SystemResource {
 }
 
 /**
- * Decodes `SYSTEMS.RESOURCES` (VARBINARY 19 bytes).
+ * Decodes `SYSTEMS.RESOURCES` (16-byte current or 19-byte extended cells).
  *
  * Returns only resources with density > 0 by default.
  * Returns empty array for absent/empty input; malformed lengths throw.
@@ -224,10 +181,10 @@ export function decodeSystemResources(
   options: { includeAbsent?: boolean } = {},
 ): SystemResource[] {
   if (!data || data.length === 0) return [];
-  if (data.length !== RESOURCE_COUNT) throw new DecodeError('E_FORMAT', 'Invalid SYSTEMS.RESOURCES byte size', { path: 'SYSTEMS.RESOURCES' });
+  if (data.length !== 16 && data.length !== RESOURCE_COUNT) throw new DecodeError('E_FORMAT', 'Invalid SYSTEMS.RESOURCES byte size', { path: 'SYSTEMS.RESOURCES' });
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const results: SystemResource[] = [];
-  for (let i = 0; i < RESOURCE_COUNT; i++) {
+  for (let i = 0; i < buf.length; i++) {
     const density = buf[i];
     if (!options.includeAbsent && density === 0) continue;
     const meta = RESOURCE_ITEM_IDS[i];
@@ -237,16 +194,18 @@ export function decodeSystemResources(
 }
 
 /**
- * Encodes resource densities back to VARBINARY bytes for `SYSTEMS.RESOURCES`.
+ * Encodes densities to 16 bytes by default; explicit 19-byte output is supported and lossy writes throw.
  */
-export function encodeSystemResources(resources: SystemResource[]): Buffer {
+export function encodeSystemResources(resources: SystemResource[], resourceSize: 16 | 19 = 16): Buffer {
+  if (resourceSize !== 16 && resourceSize !== 19) throw new RangeError('Resource size must be 16 or 19 bytes');
   const buf = Buffer.alloc(RESOURCE_COUNT, 0);
   for (const r of resources) {
     if (r.index >= 0 && r.index < RESOURCE_COUNT) {
       buf[r.index] = r.density & 0xff;
     }
   }
-  return buf;
+  if (buf.subarray(resourceSize).some(density => density !== 0)) throw new RangeError('Cannot discard extended resources in a 16-byte cell');
+  return buf.subarray(0, resourceSize);
 }
 
 /**

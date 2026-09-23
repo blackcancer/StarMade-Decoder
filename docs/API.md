@@ -1097,11 +1097,11 @@ columns; it does not open a database connection or apply changes to a server.
 
 | Model | Read/create | Main edits and output |
 | --- | --- | --- |
-| `FleetCommandObject` | `fromBytes(bytes)`, `create(fleetDbId, commandType, args?)` | `withFleetDbId`, `withCommand`, `withArgs`, `toBytes(padTo?)`, `toJSON` |
+| `FleetCommandObject` | `fromBytes(bytes, profile?)`, `create(fleetDbId, commandType, args?, profile?)` | `withFleetDbId`, `withCommand`, `withArgs`, `toBytes(padTo?)`, `toJSON` |
 | `FleetRemotesObject` | `fromBytes(bytes, options?)`, `empty()` | `withRemote`, `withToggle`, `withoutRemote`, `toBytes()`, `toJSON` |
 | `SectorItemsObject` | `fromBytes(bytes)`, `from(items)`, `empty()` | `withItem`, `withoutType`, `withMerged`, `toBytes`, `toJSON` |
-| `TradePricesObject` | `fromBytes(bytes)`, `empty(entDbId)` | `withBuyOrder`, `withSellOrder`, `withoutBuyOrder`, `withoutSellOrder`, `toBytes`, `toJSON` |
-| `StarSystem` | `fromBytes(infos, resources, { includeVoid }?)`, `empty()` | `withSector`, `withSectorType`, `withResourceDensity`, `infosToBytes`, `resourcesToBytes`, `toJSON` |
+| `TradePricesObject` | `fromBytes(bytes, profile?)`, `empty(entDbId, profile?)` | `withBuyOrder`, `withSellOrder`, `withoutBuyOrder`, `withoutSellOrder`, `toBytes`, `toJSON` |
+| `StarSystem` | `fromBytes(infos, resources, { includeVoid, profile }?)`, `empty(profile?)` | `withSector`, `withSectorType`, `withResourceDensity`, `infosToBytes`, `resourcesToBytes(size?)`, `toJSON` |
 
 Corresponding raw helpers are `decodeFleetCommand` / `encodeFleetCommand`,
 `decodeFleetRemotes` / `encodeFleetRemotes`, `decodeSectorItems` /
@@ -1109,6 +1109,38 @@ Corresponding raw helpers are `decodeFleetCommand` / `encodeFleetCommand`,
 `decodeSystemInfos` / `encodeSystemInfos`, and `decodeSystemResources` /
 `encodeSystemResources`. Nullable command/price input may produce `null`;
 consult the model's declared return type before editing.
+
+`DatabaseProfile` is `current` (default, Open `e5a3b49d8`) or `legacy-sdk`
+(the SDK 2.0.1 interpretation, not a game-version guarantee). Each business object
+exposes a readonly `profile` retained by its immutable edits. Select it explicitly
+when reading historical data; neither ordinals nor the JSON projections carry an
+automatic version discriminator.
+
+The current contract has 24 fleet commands, sector `VOID = 6`, planet types
+`MARS/EARTH/DESERT/PURPLE/ICE`, and standard **zlib-wrapped** trade payloads.
+The legacy contract keeps 22 commands, `VOID = 7`, historical planet labels and
+raw DEFLATE. Malformed zlib never silently falls back to raw DEFLATE.
+
+Raw profile arguments: `decodeFleetCommand(bytes, profile?)`,
+`decodeTradeNodeItems(bytes, profile?)`, `encodeTradeNodeItems(prices, profile?)`,
+`decodeSystemInfos(bytes, {includeVoid, profile}?)`, `encodeSystemInfos(entries, profile?)`.
+`encodeFleetCommand` writes the raw ordinal supplied by its caller; named construction
+through `FleetCommandObject.create` resolves it using the selected contract.
+
+Resource cells accept 16 or 19 bytes. `encodeSystemResources(resources, size = 16)`
+and current-profile `StarSystem.resourcesToBytes()` write 16 bytes; a legacy system
+defaults to 19. Pass `19` explicitly for an extended target. Nonzero densities that
+would be lost are rejected. The SDK keeps a canonical 19-slot internal resource
+view; only the first 16 exist in the current game. Absent resource cells expose
+`resources = []`, preserved by sector-only edits; setting a density creates a
+complete resource view. Resource labels for the first 16 IDs now match the game.
+
+```ts
+const attack = FleetCommandObject.create(42n, 'FLEET_ATTACK'); // ordinal 6
+const historical = FleetCommandObject.fromBytes(oldBytes, 'legacy-sdk');
+const current = StarSystem.empty().withSectorType(0, 0, 0, 'SUN');
+const resources = current.resourcesToBytes(); // 16 bytes
+```
 
 ---
 

@@ -1,5 +1,16 @@
 # Exact line and branch coverage
 
+## Qualification on 23 September 2026
+
+With `STARMADE_TEST_DIR=/srv/StarMade npm run coverage:check`, **1,547 tests pass**
+with no pending tests. All production files meet the exact line/branch gate:
+28,422/28,422 lines and 8,870/8,870 branches, with zero skips.
+Function coverage is 2,369/2,376 (99.7%).
+Build, JSDoc, source boundaries, packaged consumer and the independent Python
+database oracle also pass. The corrected commercial output is accepted by a
+separate JDK Inflater check. These results qualify the database contracts against
+Open `e5a3b49d8`, not every behavior of a running game server.
+
 ## Required gates
 
 `npm run coverage:check` requires **100% lines, statements and branches** for

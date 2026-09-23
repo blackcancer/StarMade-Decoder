@@ -352,10 +352,10 @@ describe('StarSystem', function () {
   });
 
   it('withSectorType PLANET sets planetType from metadata', function () {
-    const TERRAN = 2; // PLANET_TYPES[2]
-    const sys = StarSystem.empty().withSectorType(3, 4, 5, 'PLANET', TERRAN);
+    const DESERT = 2; // Open e5a3b49d8 PlanetType ordinal
+    const sys = StarSystem.empty().withSectorType(3, 4, 5, 'PLANET', DESERT);
     const p = sys.getSector(3, 4, 5);
-    assert.strictEqual(p!.planetType, 'TERRAN');
+    assert.strictEqual(p!.planetType, 'DESERT');
   });
 
   it('withoutSector removes sector', function () {

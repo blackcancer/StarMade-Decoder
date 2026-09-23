@@ -12,6 +12,8 @@
  * @version 1.1.0
  */
 
+import { getDatabaseProfile, type DatabaseProfile } from './DatabaseProfile.js';
+
 import {
   decodeFleetCommand, encodeFleetCommand,
   FLEET_COMMAND_TYPES,
@@ -25,6 +27,8 @@ export { FLEET_COMMAND_TYPES, type FleetCommandType, type CommandArg };
  * Represents the FleetCommandObject model used by StarMade database object parsing.
  */
 export class FleetCommandObject {
+  /** Explicit ordinal contract retained across edits. */
+  readonly profile: DatabaseProfile;
   readonly fleetDbId: bigint;
   readonly commandOrdinal: number;
   readonly commandType: FleetCommandType | undefined;
@@ -38,16 +42,18 @@ export class FleetCommandObject {
    *
    * @param fleetDbId - Input value for the constructor operation.
    * @param commandOrdinal - Input value for the constructor operation.
-   * @param args - Input value for the constructor operation.
+   * @param args - Command arguments. @param profile Explicit ordinal contract.
    */
   private constructor(
     fleetDbId: bigint,
     commandOrdinal: number,
     args: CommandArg[],
+    profile: DatabaseProfile,
   ) {
+    this.profile = profile;
     this.fleetDbId      = fleetDbId;
     this.commandOrdinal = commandOrdinal;
-    this.commandType    = FLEET_COMMAND_TYPES[commandOrdinal] as FleetCommandType | undefined;
+    this.commandType    = getDatabaseProfile(profile).fleetCommands[commandOrdinal] as FleetCommandType | undefined;
     // Reuse the wire codec's integer, UTF, nesting, argument-count and byte budgets.
     encodeFleetCommand({ fleetDbId, commandOrdinal, commandType: this.commandType, args }, 0);
     validateCommandValues(args);
@@ -58,13 +64,13 @@ export class FleetCommandObject {
   // ── Named constructors ─────────────────────────────────────────────────────
 
   /**
-   * Decodes FLEETS.COMMAND bytes into a FleetCommandObject.
+   * Decodes FLEETS.COMMAND with the selected profile (current by default).
    * Returns null for absent/empty input; malformed data throws with column/offset context.
    */
-  static fromBytes(data: Buffer | Uint8Array | null | undefined): FleetCommandObject | null {
-    const raw = decodeFleetCommand(data);
+  static fromBytes(data: Buffer | Uint8Array | null | undefined, profile: DatabaseProfile = 'current'): FleetCommandObject | null {
+    const raw = decodeFleetCommand(data, profile);
     if (!raw) return null;
-    return new FleetCommandObject(raw.fleetDbId, raw.commandOrdinal, raw.args);
+    return new FleetCommandObject(raw.fleetDbId, raw.commandOrdinal, raw.args, profile);
   }
 
   /**
@@ -72,16 +78,17 @@ export class FleetCommandObject {
    *
    * @param fleetDbId  Database ID of the target fleet.
    * @param type       Command type (name from FLEET_COMMAND_TYPES).
-   * @param args       Command arguments.
+   * @param args       Command arguments. @param profile Current game or historical SDK ordinal contract.
    */
   static create(
     fleetDbId: bigint,
     type: FleetCommandType,
     args: CommandArg[] = [],
+    profile: DatabaseProfile = 'current',
   ): FleetCommandObject {
-    const ordinal = FLEET_COMMAND_TYPES.indexOf(type);
+    const ordinal = getDatabaseProfile(profile).fleetCommands.indexOf(type);
     if (ordinal === -1) throw new RangeError(`Unknown fleet command type: ${type}`);
-    return new FleetCommandObject(fleetDbId, ordinal, args);
+    return new FleetCommandObject(fleetDbId, ordinal, args, profile);
   }
 
   // ── Immutable mutations ────────────────────────────────────────────────────
@@ -93,7 +100,7 @@ export class FleetCommandObject {
    * @returns The computed StarMade-Decoder value.
    */
   withFleetDbId(id: bigint): FleetCommandObject {
-    return new FleetCommandObject(id, this.commandOrdinal, [...this.#args]);
+    return new FleetCommandObject(id, this.commandOrdinal, [...this.#args], this.profile);
   }
 
   /**
@@ -104,9 +111,9 @@ export class FleetCommandObject {
    * @returns The computed StarMade-Decoder value.
    */
   withCommand(type: FleetCommandType, args: CommandArg[] = []): FleetCommandObject {
-    const ordinal = FLEET_COMMAND_TYPES.indexOf(type);
+    const ordinal = getDatabaseProfile(this.profile).fleetCommands.indexOf(type);
     if (ordinal === -1) throw new RangeError(`Unknown fleet command type: ${type}`);
-    return new FleetCommandObject(this.fleetDbId, ordinal, args);
+    return new FleetCommandObject(this.fleetDbId, ordinal, args, this.profile);
   }
 
   /**
@@ -116,7 +123,7 @@ export class FleetCommandObject {
    * @returns The computed StarMade-Decoder value.
    */
   withArgs(args: CommandArg[]): FleetCommandObject {
-    return new FleetCommandObject(this.fleetDbId, this.commandOrdinal, args);
+    return new FleetCommandObject(this.fleetDbId, this.commandOrdinal, args, this.profile);
   }
 
   // ── Accessors ──────────────────────────────────────────────────────────────

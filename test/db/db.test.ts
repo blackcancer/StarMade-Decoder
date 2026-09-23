@@ -83,7 +83,7 @@ describe('decodeFleetCommand', function () {
 
   it('decodes IDLE (no args)', function () {
     const buf = buildFleetCommandBuffer(42n, 0, []);
-    const cmd = decodeFleetCommand(buf);
+    const cmd = decodeFleetCommand(buf, 'legacy-sdk');
     assert.isNotNull(cmd);
     assert.strictEqual(cmd!.fleetDbId, 42n);
     assert.strictEqual(cmd!.commandOrdinal, 0);
@@ -94,7 +94,7 @@ describe('decodeFleetCommand', function () {
   it('decodes MOVE_FLEET with Vector3i arg', function () {
     const args: CommandArg[] = [{ kind: 'vec3i', x: 10, y: -5, z: 200 }];
     const buf = buildFleetCommandBuffer(99n, 1, args);
-    const cmd = decodeFleetCommand(buf);
+    const cmd = decodeFleetCommand(buf, 'legacy-sdk');
     assert.isNotNull(cmd);
     assert.strictEqual(cmd!.commandType, 'MOVE_FLEET');
     assert.strictEqual(cmd!.args.length, 1);
@@ -113,7 +113,7 @@ describe('decodeFleetCommand', function () {
       { kind: 'boolean', value: true },
     ];
     const buf = buildFleetCommandBuffer(7n, 19, args);
-    const cmd = decodeFleetCommand(buf);
+    const cmd = decodeFleetCommand(buf, 'legacy-sdk');
     assert.isNotNull(cmd);
     assert.strictEqual(cmd!.commandType, 'ACTIVATE_REMOTE');
     assert.strictEqual(cmd!.args.length, 2);
@@ -126,7 +126,7 @@ describe('decodeFleetCommand', function () {
 
   it('unknown ordinal yields undefined commandType', function () {
     const buf = buildFleetCommandBuffer(1n, 99, []);
-    const cmd = decodeFleetCommand(buf);
+    const cmd = decodeFleetCommand(buf, 'legacy-sdk');
     assert.isNotNull(cmd);
     assert.isUndefined(cmd!.commandType);
   });
@@ -134,7 +134,7 @@ describe('decodeFleetCommand', function () {
   it('round-trips PATROL_FLEET (ordinal 2)', function () {
     const args: CommandArg[] = [{ kind: 'vec3i', x: 1, y: 2, z: 3 }];
     const buf = buildFleetCommandBuffer(55n, 2, args);
-    const cmd = decodeFleetCommand(buf);
+    const cmd = decodeFleetCommand(buf, 'legacy-sdk');
     assert.isNotNull(cmd);
     const re = encodeFleetCommand(cmd!);
     const cmd2 = decodeFleetCommand(re);
@@ -306,12 +306,12 @@ describe('decodeSystemInfos / encodeSystemInfos', function () {
 
   it('all-VOID buffer returns empty array (default)', function () {
     const buf = Buffer.alloc(SYSTEM_INFOS_SIZE, 0x07); // 7 = VOID ordinal
-    assert.deepEqual(decodeSystemInfos(buf), []);
+    assert.deepEqual(decodeSystemInfos(buf, { profile: 'legacy-sdk' }), []);
   });
 
   it('all-VOID buffer returns all 4096 entries with includeVoid=true', function () {
     const buf = Buffer.alloc(SYSTEM_INFOS_SIZE, 0x07);
-    const entries = decodeSystemInfos(buf, { includeVoid: true });
+    const entries = decodeSystemInfos(buf, { includeVoid: true, profile: 'legacy-sdk' });
     assert.strictEqual(entries.length, SYSTEM_SIZE ** 3);
   });
 
@@ -319,7 +319,7 @@ describe('decodeSystemInfos / encodeSystemInfos', function () {
     const buf = Buffer.alloc(SYSTEM_INFOS_SIZE, 0x07); // all VOID
     buf[0] = 5; // SUN ordinal
     buf[1] = 0; // metadata
-    const entries = decodeSystemInfos(buf);
+    const entries = decodeSystemInfos(buf, { profile: 'legacy-sdk' });
     assert.strictEqual(entries.length, 1);
     assert.strictEqual(entries[0].sectorType, 'SUN');
     assert.strictEqual(entries[0].x, 0);
@@ -332,7 +332,7 @@ describe('decodeSystemInfos / encodeSystemInfos', function () {
     const idx = systemCoordsToIndex(3, 4, 5);
     buf[idx * SECTOR_DATA_SIZE]     = 2; // PLANET ordinal
     buf[idx * SECTOR_DATA_SIZE + 1] = 2; // TERRAN ordinal
-    const entries = decodeSystemInfos(buf);
+    const entries = decodeSystemInfos(buf, { profile: 'legacy-sdk' });
     assert.strictEqual(entries.length, 1);
     assert.strictEqual(entries[0].sectorType, 'PLANET');
     assert.strictEqual(entries[0].planetType, 'TERRAN');
@@ -348,13 +348,13 @@ describe('decodeSystemInfos / encodeSystemInfos', function () {
     buf[idx * SECTOR_DATA_SIZE]     = 2; // PLANET at (8,8,8)
     buf[idx * SECTOR_DATA_SIZE + 1] = 0; // ICE
 
-    const entries = decodeSystemInfos(buf);
+    const entries = decodeSystemInfos(buf, { profile: 'legacy-sdk' });
     // encodeSystemInfos only writes the non-VOID entries; re-build on all-VOID base
     const re = Buffer.alloc(SYSTEM_INFOS_SIZE, 0x07);
-    const written = encodeSystemInfos(entries);
+    const written = encodeSystemInfos(entries, 'legacy-sdk');
     // encodeSystemInfos writes ALL entries including VOID when given includeVoid
     // The simpler test: decode → encode → decode gives same non-void entries
-    const entries2 = decodeSystemInfos(written);
+    const entries2 = decodeSystemInfos(written, { profile: 'legacy-sdk' });
 
     assert.strictEqual(entries2.length, entries.length);
     assert.isTrue(entries2.some(e => e.sectorType === 'SUN' && e.x === 0 && e.y === 0 && e.z === 0));
@@ -401,7 +401,7 @@ describe('decodeSystemResources / encodeSystemResources', function () {
     const buf = Buffer.alloc(RESOURCE_COUNT, 0);
     buf[2] = 50; buf[15] = 100; buf[18] = 5;
     const res = decodeSystemResources(buf, { includeAbsent: true });
-    const re  = encodeSystemResources(res);
+    const re  = encodeSystemResources(res, 19);
     assert.ok(re.equals(buf), 'encoded buffer should match original');
   });
 });

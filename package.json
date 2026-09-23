@@ -1,7 +1,7 @@
 {
   "name": "starmade-decoder",
-  "version": "2.0.1",
-  "description": "TypeScript SDK to read/write StarMade save files — faithful port of the Java Tag format",
+  "version": "2.0.2",
+  "description": "TypeScript SDK to read/write StarMade save files \u2014 faithful port of the Java Tag format",
   "type": "module",
   "license": "MIT",
   "author": "InitSysRev <init-sys-rev@hotmail.com>",

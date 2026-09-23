@@ -1,5 +1,22 @@
 # Data integrity and migration
 
+## Database compatibility correction (2.0.2, 23 September 2026)
+
+Database codecs now default to the `current` profile verified against local
+StarMade-Open `e5a3b49d8`: 24 fleet commands, 10 sector types, 5 planet types,
+16 resource bytes and zlib-wrapped commercial payloads. These bytes have no
+reliable profile discriminator; callers must select `legacy-sdk` explicitly
+when reading data written using SDK 2.0.1's previous database interpretation.
+That profile preserves the old SDK contract, not a certified historical game version.
+Profile selection survives immutable object edits; it does not migrate stored data.
+
+Re-read original game bytes to recover corrected labels. Do not reinterpret
+already rewritten data without knowing its origin. Missing resource data remains
+absent, while present resource data exposes the canonical 19-slot SDK view.
+Current encoding defaults to 16 bytes and rejects nonzero discarded slots;
+request 19 bytes explicitly to preserve legacy data. No database migration runs
+automatically. See [database APIs](API.md) for profile parameters.
+
 ## SMTPL compatibility correction (2.0.1)
 
 The updated local StarMade-Open reference `e5a3b49d86943c4d618cea6512e28fa0b95901df`

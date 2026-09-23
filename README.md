@@ -4,7 +4,7 @@ TypeScript SDK for reading, inspecting, and rewriting **StarMade** save files an
 
 The SDK implements the Java `org.schema.schine.resource.tag.Tag` binary format and higher-level helpers for entities, blueprints and configuration files.
 
-The **2.0.1 SDK** provides dedicated models for every supported format family,
+The **2.0.2 SDK** provides dedicated models for every supported format family,
 including auxiliary files, configuration, entities, inventories and blueprints.
 Models validate stored values, retain opaque data and expose caller-selected limits.
 See the [format matrix](docs/FORMAT_MODELS.md#coverage-of-supported-formats) for
@@ -13,6 +13,10 @@ for corrected schemas and API changes. Updating GitHub does not publish to npm.
 
 Rendering and 3D calculations belong to StarMade-3D; database engine access belongs
 to StarMade-DB. This package provides format operations for those consumers.
+
+The working-tree database codecs target Open `e5a3b49d8` by default. Historical
+SDK 2.0.1 cells require an explicit `legacy-sdk` profile; see
+[database compatibility and migration](docs/API.md#database-binary-values).
 
 ## Features
 

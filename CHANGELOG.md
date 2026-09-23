@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.2 — 2026-09-23
+
+- Correct database fleet, sector and planet ordinals against Open `e5a3b49d8`;
+  add explicit `current` and `legacy-sdk` profiles retained across immutable edits.
+- Read/write current trade prices with the JDK-compatible zlib envelope, verified
+  against an independent JDK capture and Python decompression.
+- Accept native 16-byte resources, write 16 bytes by default, retain explicit
+  19-byte output with loss rejection, correct resource labels and preserve absent
+  resource cells across unrelated edits.
+
 ## 2.0.1 — 2026-09-23
 
 - Correct SMTPL v4/v5 little-endian 24-bit block decoding against the updated

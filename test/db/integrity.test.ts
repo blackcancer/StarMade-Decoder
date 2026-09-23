@@ -1,6 +1,6 @@
 /** @fileoverview Audit A07/A08: database corruption must not become valid empty data. */
 import { assert } from 'chai';
-import { deflateRawSync } from 'node:zlib';
+import { deflateSync } from 'node:zlib';
 import { decodeFleetCommand, decodeFleetRemotes, encodeFleetCommand, encodeFleetRemotes } from '../../src/db/FleetDb.js';
 import { FleetRemotesObject } from '../../src/db/FleetRemotesObject.js';
 import { decodeSystemInfos, decodeSystemResources } from '../../src/db/SystemDb.js';
@@ -116,11 +116,11 @@ describe('Audit database integrity', () => {
   });
   it('requires exact inflated trade length and rejects negative counts and suffixes', () => {
     const payload = Buffer.alloc(12); payload.writeBigInt64BE(1n); payload.writeInt32BE(-1, 8);
-    const compressed = deflateRawSync(payload), header = Buffer.alloc(8);
+    const compressed = deflateSync(payload), header = Buffer.alloc(8);
     header.writeInt32BE(payload.length); header.writeInt32BE(compressed.length, 4);
     assert.throws(() => decodeTradeNodeItems(Buffer.concat([header, compressed])));
     payload.writeInt32BE(0, 8);
-    const valid = deflateRawSync(payload); header.writeInt32BE(valid.length, 4);
+    const valid = deflateSync(payload); header.writeInt32BE(valid.length, 4);
     header.writeInt32BE(13);
     assert.throws(() => decodeTradeNodeItems(Buffer.concat([header, valid])), /size/);
     assert.throws(() => decodeTradeNodeItems(Buffer.alloc(4)));
@@ -129,7 +129,7 @@ describe('Audit database integrity', () => {
       assert.throws(() => decodeTradeNodeItems(Buffer.concat([header, valid])), /budget/);
     }
     const suffix = Buffer.concat([payload, Buffer.from([1])]);
-    const deflated = deflateRawSync(suffix); header.writeInt32BE(suffix.length); header.writeInt32BE(deflated.length, 4);
+    const deflated = deflateSync(suffix); header.writeInt32BE(suffix.length); header.writeInt32BE(deflated.length, 4);
     assert.throws(() => decodeTradeNodeItems(Buffer.concat([header, deflated])), /suffix/);
     header.writeInt32BE(payload.length); header.writeInt32BE(valid.length+1, 4);
     assert.throws(() => decodeTradeNodeItems(Buffer.concat([header, valid, Buffer.from([1])])), /size/);
