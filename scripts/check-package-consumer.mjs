@@ -40,7 +40,7 @@ import fs from 'node:fs';
 import { Tags, writeTo, readFrom, BlockConfig, BlockDefinition, BlockState, Segment, BlockVolume,
   SkinDocument, WorldSeedDocument, PersistentObjectDocument, SubtitleDocument, SystemNamesDocument, BlueprintModMappings,
   XmlConfigDocument, FactionManager, Catalog, TradingManager, ControlElementMapper, registerAllFactories,
-  Inventory, ItemStack, ManagerContainer, parseSment, emptySegment, emptySmd3File, writeSmd3, parseSmd3,
+  Inventory, ItemStack, describeMetaObject, ManagerContainer, parseSment, emptySegment, emptySmd3File, writeSmd3, parseSmd3,
   BlueprintTemplate, parseSmtpl, writeSmtpl, FleetCommandObject, StarSystem, TradePricesObject,
   ServerConfig, SERVER_CONFIG_SCHEMA, SERVER_CONFIG_SCHEMA_SOURCE, ChatLogReader, parseChatLogLine,
   Smd3Document, readBlueprintDocument, readBlueprintFolderDocument, writeSment, writeBlueprintFolder } from 'starmade-decoder';
@@ -56,6 +56,10 @@ const chatLog = new ChatLogReader(process.cwd());
 const chatHistory = chatLog.readRecent();
 assert.equal(chatHistory.records[0].kind, 'message');
 assert.equal(chatLog.poll(chatHistory.cursor).records.length, 0);
+const helmetDetails = describeMetaObject(ItemStack.special(0, {id:7,type:-12,subId:-1,payload:Tags.byte(null,3)}));
+assert.equal(helmetDetails.status, 'ready');
+assert.equal(helmetDetails.category, 'helmet');
+assert.equal(helmetDetails.properties.model, 3);
 assert.throws(() => ServerConfig.fromString('').set('SECTOR_SIZE', 1000), /at least 2000/);
 const attack = FleetCommandObject.create(42n, 'FLEET_ATTACK');
 assert.equal(attack.toBytes().readInt32BE(8), 6);
@@ -152,6 +156,7 @@ console.log('Isolated production consumer exercised V2 auxiliary/domain classes 
   fs.writeFileSync(path.join(consumer, 'smoke.ts'), `import { Tags, writeTo, readFrom, type BlockData, type Smd3ParseOptions,
     readBlueprintDocument, writeBlueprintFolder, type BlueprintFileMap, type BlueprintWriteOptions,
     BlockState, Segment, BlockVolume, BlueprintModel, BlockDefinition, Inventory, ItemStack, InventoryLocation,
+    describeMetaObject, type MetaObjectDetails, type MetaObjectProperties,
     BlueprintTemplate, parseSmtpl, writeSmtpl, type TemplatePiece,
     type BlockDefinitionOptions, type InventoryCapacity, type InventoryReadOptions,
     SkinDocument, WorldSeedDocument, PersistentObjectDocument, SubtitleDocument, SystemNamesDocument, BlueprintModMappings,
@@ -188,6 +193,10 @@ const readOptions: InventoryReadOptions = {maxSlots: 12};
 const inventory = Inventory.fromTag(Inventory.EMPTY.set(new ItemStack(0, 9, 3)).toTag(), readOptions);
 inventory.assertCapacity(capacity);
 new InventoryLocation(3, {x: 0, y: 0, z: 0}, inventory);
+const metaDetails: MetaObjectDetails | null = describeMetaObject(ItemStack.special(1,
+  {id:1,type:-12,subId:-1,payload:Tags.byte(null,0)}));
+const metaProperties: Readonly<MetaObjectProperties> = metaDetails?.properties ?? {};
+void metaProperties;
 void rendererInput; void BlockVolume; void BlueprintModel;
 const limits: FormatLimits = {maxBytes: 4096, maxEntries: 100};
 const jsonLimits: PersistentObjectLimits = {...limits, maxDepth: 10, maxNodes: 100};

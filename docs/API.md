@@ -763,6 +763,55 @@ without changing either original inventory.
 uses type `-32768`. Metadata, grouped members and their Tag payloads are copied
 defensively on input and access.
 
+### `describeMetaObject(item: ItemStack): MetaObjectDetails | null`
+
+Decodes the native `item.meta.payload` Tag directly, without altering the
+`ItemStack` or its saved bytes. Returns `null` for ordinary blocks and multislot
+containers. A special item returns its `category`, `typeId`, `subtype`,
+`instanceId`, `iconIndex`, `status`, `properties` and `invalidFields`.
+
+```ts
+import { describeMetaObject } from 'starmade-decoder';
+
+const details = describeMetaObject(player.inventory.items[0]);
+if (details?.status === 'ready' && details.category === 'weapon') {
+  console.log(details.properties.damage, details.iconIndex);
+}
+```
+
+The categories are `weapon` (`-32`), `blueprint` (`-9`), `recipe` (`-10`),
+`logbook` (`-11`), `helmet` (`-12`), `build-prohibiter` (`-13`),
+`flashlight` (`-14`), `virtual-blueprint` (`-15`), `block-storage` (`-16`),
+and `unknown` for mod types. Native weapon subtypes `1`–`9` use their distinct
+StarMade-Open Tag layouts. An icon index is supplied only when the game's
+`meta-icons` mapping is known: `-typeId` for the eight nonweapon native types,
+`31 + subtype` for native weapons. Mod icon overrides are outside this Tag and
+therefore are not inferred.
+
+`status` is `ready`, `absent` (no payload), `unknown` (mod type or unfamiliar
+weapon subtype), or `invalid` (missing, wrong-type or oversized known fields).
+Valid fields in a partial payload are still returned; `invalidFields` lists
+the missing or rejected keys. No default values or localized labels are
+inserted. The original opaque Tag remains accessible through `item.meta.payload`
+and complete through `item.toJSON().meta.payloadTagBase64`.
+
+The language-neutral `properties` keys include `damage`, `healingPower`,
+`supplyPower`, `projectileSpeed`, `reloadMs`, `colorRgba` (`[r,g,b,a]`),
+`range`, `radius`, `marking`, `markerName`, `markerLocation`,
+`chargePerSecond`, `active`, `model`, `text`, `blueprintName` and
+`blueprintUid`. Blueprint goal/progress and block storage expose only byte
+lengths. Versioned recipes expose their version, product count, produced-goods
+count, fixed price and maximum level; nested products remain opaque. Signed
+64-bit values (`markerLocation`, `producedGoods`, `fixedPrice`) are exact decimal
+strings for JSON-safe consumption. Logbook text is accepted up to the game's
+1,024 UTF-16 code-unit limit; longer text is `invalid` and is not copied into the
+projection. Other displayed strings are capped at 4,096 characters. Stored
+float values must be finite; no game values are clamped or converted into 3D
+coordinates.
+
+The [meta-object qualification](META_OBJECT_QUALIFICATION.md) records the
+source revision, real inventory fixture and coverage evidence.
+
 ### `InventoryLocation`
 
 `new InventoryLocation(kind, position, inventory)` identifies storage by its

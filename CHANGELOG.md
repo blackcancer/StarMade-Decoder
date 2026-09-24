@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.5 — 2026-09-24
+
+- Add `describeMetaObject(ItemStack)` for StarMade-Open's native inventory
+  objects: nine weapon subtypes and blueprint, recipe, logbook, helmet,
+  build-prohibiter, flashlight, virtual-blueprint and block-storage types.
+- Expose stable typed properties, instance/subtype IDs and `meta-icons` indices;
+  distinguish missing, unknown and invalid payloads while preserving the
+  original Tag and complete inventory/entity bytes.
+- Bound logbook text, summarize opaque binary payload sizes, and validate the
+  installed player inventory plus every native subtype at 100% line/branch
+  coverage.
+
 ## 2.0.4 — 2026-09-23
 
 - Add bounded text-chatlog parsing, recent history and incremental polling for
