@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.1.0 — 2026-09-24
+
+- Add on-demand `AsyncIterable` streams for loose SMD3 regions, blueprint
+  folders and `.sment` ZIP archives. Yield entity metadata and docking links
+  before compact `Uint32Array` segment blocks, with `AbortSignal`, resource
+  limits and explicit complete, partial, error or cancelled outcomes.
+- Decode SMD3 words directly into the final typed array, without allocating
+  32,768 intermediate block objects per segment. Index ZIP32 archives without
+  loading them; extract large entries progressively to a checked temporary
+  file with incremental size and CRC validation and cleanup on failure.
+  Reject unsafe archive features and document StarMade-3D limits.
+- Qualify real folder, region and archive samples against eager parsers and
+  publish isolated before/after first-segment, total-time and peak-RSS measures.
+- Avoid a redundant per-piece clone during `.smtpl` parsing; retain the public
+  model's defensive copying and exact round-trip behavior across all 84 real
+  templates.
+
 ## 2.0.5 — 2026-09-24
 
 - Add `describeMetaObject(ItemStack)` for StarMade-Open's native inventory

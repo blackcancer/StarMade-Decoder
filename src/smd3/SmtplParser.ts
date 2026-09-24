@@ -626,7 +626,9 @@ export function parseSmtpl(data: Buffer | Uint8Array): SmtplFile {
     fillUpFilters.push(..._readFilters(r));
   }
 
-  return new BlueprintTemplate({
+  // Every collection above was created solely for this decode. Adopting it avoids
+  // cloning thousands of piece objects a second time before the caller sees them.
+  return adoptDecodedTemplate({
     version,
     minX, minY, minZ, maxX, maxY, maxZ,
     pieces,
@@ -637,6 +639,11 @@ export function parseSmtpl(data: Buffer | Uint8Array): SmtplFile {
     productionLimits,
     fillUpFilters,
   });
+}
+
+/** Builds the same model from parser-owned collections without a redundant clone. */
+function adoptDecodedTemplate(input: Required<SmtplFileInput>): BlueprintTemplate {
+  return Object.assign(Object.create(BlueprintTemplate.prototype) as BlueprintTemplate, input);
 }
 
 // ── Block decoding ─────────────────────────────────────────────────────────────

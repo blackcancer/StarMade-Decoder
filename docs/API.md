@@ -1253,6 +1253,44 @@ const resources = current.resourcesToBytes(); // 16 bytes
 
 ## Blueprint and segment API
 
+### Demand-driven blueprint streams
+
+`streamSmd3(pathOrBytes, options?)` returns an `AsyncGenerator<Smd3StreamEvent>`.
+`streamBlueprintFolder(folderPath, options?)` and `streamSment(filename, options?)`
+return `AsyncGenerator<BlueprintStreamEvent>`. These APIs coexist with the eager
+parsers and editing documents; their events do not mutate source data. Each
+generator yields a final `end` event with `status: 'complete' | 'partial' |
+'error' | 'cancelled'`, segment/entity counts and diagnostics. A consumer must
+inspect that event: receiving some segments does not imply completion.
+
+An `entity` event contains `path`, `parentPath`, `name`, local `offset`, summed
+`worldOffset`, `header`, `meta`, `logic` and `modMappings`. Children arrive in
+docking order after their parent's segments. The offsets are stored block-space
+translations; coordinate conversion and 3D geometry are the consumer's job.
+Metadata objects preserve their parsed text and unknown Tag payloads. A
+`segment` event contains the owning `entityPath` and `regionPath` (for blueprints),
+table `slot`, `headerVersion`, segment coordinates, `lastChanged`, `version`,
+`blockCount` and `words: Uint32Array`. The array has 32,768 canonical unsigned
+words in the existing `posToIndex` order. For v7, bits 0–12 hold type, 13–19
+health, bit 20 active, 21–25 orientation and 26–31 extra. Older SMD3 versions
+are converted to this canonical layout; use `parseSmd3`/`Smd3Document` when
+the exact original byte layout is needed.
+
+The next region record or ZIP entry is read only when the iterator advances.
+`signal: AbortSignal` stops before the next read/decode boundary and produces
+`cancelled`. `mode: 'recover'` skips malformed SMD3 records or unsupported old
+regions and returns `partial`; strict mode returns `error`. Resource limits
+include `maxInputBytes`, `maxBlocks`, `maxEntities`, `maxDepth`,
+`maxEntries`, `maxMetadataBytes`, `maxEntryBytes` and
+`maxCentralDirectoryBytes`; pass `segmentOptions.maxSegments` to bound each
+region's table. Defaults and practical memory limits are in the
+[StarMade-3D integration contract](STREAMING_QUALIFICATION.md). `.sment` uses a
+bounded ZIP32 central index. Geometry entries above `maxBufferedEntryBytes`
+(4 MiB by default) are progressively extracted to a checked temporary file;
+smaller entries are buffered. Encrypted,
+ZIP64, multi-disk and unsafe entries fail explicitly. Legacy `.smd0`–`.smd2`
+regions need migration before streamed geometry is available.
+
 ### Block and hierarchy classes
 
 See [format classes](FORMAT_MODELS.md) for examples, ownership, limits and migration.

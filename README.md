@@ -7,7 +7,7 @@ The SDK implements the Java `org.schema.schine.resource.tag.Tag` binary format a
 `ServerConfig` exposes the [210 current game settings](docs/API.md#serverconfig)
 with defaults, bounds or choices and effect descriptions for configuration tools.
 
-The **2.0.5 SDK** provides dedicated models for every supported format family,
+The **2.1.0 SDK** provides dedicated models for every supported format family,
 including auxiliary files, configuration, entities, inventories and blueprints.
 Models validate stored values, retain opaque data and expose caller-selected limits.
 See the [format matrix](docs/FORMAT_MODELS.md#coverage-of-supported-formats) for
@@ -30,6 +30,8 @@ SDK 2.0.1 cells require an explicit `legacy-sdk` profile; see
 - Read, edit and write complete `.sment` archives and blueprint folders with
   `BlueprintDocument`, preserving unchanged archives byte-for-byte
 - Preserve SMD3 sector layouts with `Smd3Document`; update only changed records
+- Stream `.smd3` records, blueprint folders and `.sment` entities on demand as
+  compact `Uint32Array` segments with cancellation and explicit terminal status
 - Parse StarMade blueprint formats (`.sment`, `.smd3`, `.smtpl`, `.smbph`, `.smbpl`, `.smbpm`, `.smbmm`)
 - Read/write `.smtpl` versions 1–6 without forced version upgrades; use version 5
   for the updated StarMade-Open format. See the [template version table](docs/API.md#smtpl-template-files).
@@ -101,6 +103,31 @@ See [complete blueprint editing](docs/BLUEPRINT_EDITING.md) for folder snapshots
 new models, attachment updates, byte-preservation guarantees and supported limits.
 Unknown resources and mod mappings are retained. Existing destinations require
 explicit `overwrite: true`; new ZIPs from plain folders have a new envelope.
+
+## Streaming for StarMade-3D
+
+```ts
+import { registerAllFactories, streamBlueprintFolder } from 'starmade-decoder';
+
+registerAllFactories();
+let complete = false;
+for await (const event of streamBlueprintFolder('/srv/StarMade/blueprints/Ship')) {
+  if (event.kind === 'entity') {
+    // Store event.path, event.parentPath, offset/worldOffset and metadata.
+  } else if (event.kind === 'segment') {
+    // Consume event.words (32,768 Uint32 values) before requesting the next event.
+  } else if (event.status !== 'complete') {
+    throw new Error(`Blueprint stream ended: ${event.status}`);
+  } else {
+    complete = true;
+  }
+}
+if (!complete) throw new Error('Blueprint stream stopped before completion');
+```
+
+Use `streamSmd3(filename)` for one region and `streamSment(filename)` for a ZIP
+blueprint. All three accept `signal: AbortSignal`; stop requesting events to stop
+I/O. See the [integration contract and measured limits](docs/STREAMING_QUALIFICATION.md).
 
 ## BlockConfig element information
 

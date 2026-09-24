@@ -41,10 +41,11 @@ const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, i) => {
 /**
  * Calculates the ZIP CRC32 without allocating intermediate arrays.
  * @param bytes - Uncompressed entry bytes.
+ * @param seed - Internal CRC state for continuing across chunks (default initial state).
  * @returns Unsigned CRC32.
  */
-export function crc32(bytes: Buffer): number {
-  let crc = 0xffffffff;
+export function crc32(bytes: Buffer, seed = 0xffffffff): number {
+  let crc = seed;
   for (const byte of bytes) crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ byte) & 255];
   return (crc ^ 0xffffffff) >>> 0;
 }

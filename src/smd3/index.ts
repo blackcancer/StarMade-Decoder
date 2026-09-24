@@ -26,6 +26,12 @@ export {
 } from './Smd3Parser.js';
 
 export type { Smd3File, SegmentData, BlockData, Smd3ParseOptions } from './Smd3Parser.js';
+export { streamSmd3 } from './Smd3Stream.js';
+export type { Smd3StreamOptions, Smd3StreamSegment, Smd3StreamEvent, StreamEnd } from './Smd3Stream.js';
+export { streamBlueprintFolder } from './BlueprintStream.js';
+export { streamSment } from './SmentStream.js';
+export type { BlueprintStreamOptions, BlueprintStreamEntity, BlueprintStreamSegment,
+  BlueprintStreamEnd, BlueprintStreamEvent } from './BlueprintStream.js';
 
 export {
   parseSment,

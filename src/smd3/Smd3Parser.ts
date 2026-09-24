@@ -149,6 +149,16 @@ export function parseSmd3(data: Buffer | Uint8Array, options: Smd3ParseOptions =
  * @throws {DecodeError} For an unsupported representation or invalid record.
  */
 function parseSegment(b: Buffer, normals: IcoSideNormals | undefined, legacyBE: boolean): SegmentData {
+  const compact = parseSegmentWords(b, normals, legacyBE);
+  const blocks = Array.from(compact.words, decodeBlockWord);
+  return { x: compact.x, y: compact.y, z: compact.z,
+    lastChanged: compact.lastChanged, version: compact.version, blocks,
+    blockCount: compact.blockCount };
+}
+
+/** Decodes all on-disk representations directly to canonical block words. */
+function parseSegmentWords(b: Buffer, normals: IcoSideNormals | undefined, legacyBE: boolean):
+  Omit<SegmentData, 'blocks'> & { words: Uint32Array } {
   const need = (size: number): void => {
     if (!Number.isSafeInteger(size) || size < 0 || size > b.length) throw new DecodeError('E_TRUNCATED', 'Segment payload exceeds its declared size');
   };
@@ -158,9 +168,9 @@ function parseSegment(b: Buffer, normals: IcoSideNormals | undefined, legacyBE: 
   const lastChanged = b.readBigInt64BE(1);
   const x = b.readInt32BE(9), y = b.readInt32BE(13), z = b.readInt32BE(17);
   const dataByte = b[21];
-  let blocks: BlockData[];
+  const words = new Uint32Array(BLOCK_COUNT);
   if (dataByte === DATA_EMPTY) {
-    blocks = Array.from({ length: BLOCK_COUNT }, () => decodeBlockWord(0));
+    // The allocated typed array already represents 32,768 empty blocks.
   } else if (dataByte === DATA_SINGLE || dataByte === DATA_SINGLE_SIDE_EDGE) {
     need(26);
     if (version < 6) throw new DecodeError('E_UNSUPPORTED', 'Pre-v6 optimized segments require game migration context');
@@ -168,13 +178,14 @@ function parseSegment(b: Buffer, normals: IcoSideNormals | undefined, legacyBE: 
       throw new DecodeError('E_UNSUPPORTED', 'SINGLE_SIDE_EDGE requires sideNormals from data/IcoVectors.bin');
     }
     const word = b.readUInt32BE(22);
-    blocks = Array.from({ length: BLOCK_COUNT }, (_, i) => {
+    const compact = canonicalWord(word, version);
+    for (let i = 0; i < BLOCK_COUNT; i++) {
       const inside = dataByte === DATA_SINGLE || isPointInIcoSide(
         ((i & 31) - 16 + x) | 0, (((i >> 5) & 31) - 16 + y) | 0,
         (((i >> 10) & 31) - 16 + z) | 0, normals!,
       );
-      return decodeVersionedBlock(inside ? word : 0, version);
-    });
+      words[i] = inside ? compact : 0;
+    }
   } else if (dataByte === DATA_BITMAP) {
     need(30);
     if (version < 6) throw new DecodeError('E_UNSUPPORTED', 'Pre-v6 optimized segments require game migration context');
@@ -186,12 +197,13 @@ function parseSegment(b: Buffer, normals: IcoSideNormals | undefined, legacyBE: 
     const mask = (1 << bits) - 1;
     const start = 30 + count * 4;
     need(start + (BLOCK_COUNT >> shift) * 4);
-    blocks = Array.from({ length: BLOCK_COUNT }, (_, i) => {
+    const palette = Array.from({ length: count }, (_, i) => canonicalWord(b.readUInt32BE(30 + i * 4), version));
+    for (let i = 0; i < BLOCK_COUNT; i++) {
       const packed = b.readUInt32BE(start + (i >> shift) * 4);
       const index = (packed >>> ((i & ((1 << shift) - 1)) * bits)) & mask;
       if (index >= count) throw new DecodeError('E_FORMAT', `Bitmap palette index ${index} is out of range`);
-      return decodeVersionedBlock(b.readUInt32BE(30 + index * 4), version);
-    });
+      words[i] = palette[index];
+    }
   } else if (dataByte === DATA_AVAILABLE) {
     need(26);
     const storedSize = b.readInt32BE(22);
@@ -213,16 +225,23 @@ function parseSegment(b: Buffer, normals: IcoSideNormals | undefined, legacyBE: 
       }
       if (inflated.length !== expected) throw new DecodeError('E_FORMAT', `Expected ${expected} inflated segment bytes, got ${inflated.length}`);
     }
-    blocks = Array.from({ length: BLOCK_COUNT }, (_, i) => {
-      if (width === 4) return decodeBlockWord(legacyBE ? inflated.readUInt32BE(i * 4) : inflated.readUInt32LE(i * 4));
-      return decodeVersionedBlock(inflated.readUIntLE(i * 3, 3), version);
-    });
+    for (let i = 0; i < BLOCK_COUNT; i++) {
+      words[i] = width === 4 ? (legacyBE ? inflated.readUInt32BE(i * 4) : inflated.readUInt32LE(i * 4)) :
+        canonicalWord(inflated.readUIntLE(i * 3, 3), version);
+    }
   } else {
     throw new DecodeError('E_UNSUPPORTED', `Unknown SMD3 data type ${dataByte}`);
   }
   let blockCount = 0;
-  for (const block of blocks) if (block.type !== 0) blockCount++;
-  return { x, y, z, lastChanged, version, blocks, blockCount };
+  for (const word of words) if ((word & 0x1fff) !== 0) blockCount++;
+  return { x, y, z, lastChanged, version, words, blockCount };
+}
+
+/** Compact one already bounded record for demand-driven readers. */
+export function decodeSmd3RecordWords(record: Buffer, options: Smd3ParseOptions = {}):
+  Omit<SegmentData, 'blocks'> & { words: Uint32Array } {
+  const normals = options.sideNormals ? normalizeIcoSideNormals(options.sideNormals) : undefined;
+  return parseSegmentWords(record, normals, options.legacyV7ZlibBigEndian === true);
 }
 
 /**
@@ -231,11 +250,10 @@ function parseSegment(b: Buffer, normals: IcoSideNormals | undefined, legacyBE: 
  * @param version - Segment version (legacy v6 uses 11-bit identifiers).
  * @returns Independent block fields; older values are exposed without game-dependent migrations.
  */
-function decodeVersionedBlock(word: number, version: number): BlockData {
-  return version >= VERSION_4BYTE ? decodeBlockWord(word) : {
-    type: word & 0x7ff, hp: (word >>> 11) & 127,
-    active: ((word >>> 18) & 1) !== 0, orientation: (word >>> 19) & 31,
-  };
+function canonicalWord(word: number, version: number): number {
+  return version >= VERSION_4BYTE ? word >>> 0 : (word & 0x7ff) |
+    (((word >>> 11) & 127) << 13) | (((word >>> 18) & 1) << 20) |
+    (((word >>> 19) & 31) << 21);
 }
 
 /**

@@ -43,7 +43,8 @@ import { Tags, writeTo, readFrom, BlockConfig, BlockDefinition, BlockState, Segm
   Inventory, ItemStack, describeMetaObject, ManagerContainer, parseSment, emptySegment, emptySmd3File, writeSmd3, parseSmd3,
   BlueprintTemplate, parseSmtpl, writeSmtpl, FleetCommandObject, StarSystem, TradePricesObject,
   ServerConfig, SERVER_CONFIG_SCHEMA, SERVER_CONFIG_SCHEMA_SOURCE, ChatLogReader, parseChatLogLine,
-  Smd3Document, readBlueprintDocument, readBlueprintFolderDocument, writeSment, writeBlueprintFolder } from 'starmade-decoder';
+  Smd3Document, readBlueprintDocument, readBlueprintFolderDocument, writeSment, writeBlueprintFolder,
+  streamSmd3, streamBlueprintFolder, streamSment } from 'starmade-decoder';
 registerAllFactories();
 assert.equal(Object.keys(SERVER_CONFIG_SCHEMA).length, 210);
 assert.equal(SERVER_CONFIG_SCHEMA_SOURCE, 'e5a3b49d86943c4d618cea6512e28fa0b95901df');
@@ -106,15 +107,34 @@ const document = readBlueprintDocument(original);
 assert.deepEqual(writeSment(document), original);
 document.root.segments.push({...emptySmd3File(),segments:[seg]});
 document.setFile('notes.bin', Buffer.from([1, 2, 3]));
-const edited = readBlueprintDocument(writeSment(document));
+const editedBytes = writeSment(document);
+fs.writeFileSync('edited.sment', editedBytes);
+const edited = readBlueprintDocument(editedBytes);
 assert.equal(edited.root.header.totalBlockCount, 1);
 assert.equal(edited.root.segments[0].segments[0].blocks[0].type, 5);
+const spooledEvents = [];
+for await (const event of streamSment('edited.sment', {maxBufferedEntryBytes: 0})) spooledEvents.push(event);
+assert.equal(spooledEvents.find(event => event.kind === 'segment').words[0] & 8191, 5);
+assert.equal(spooledEvents.at(-1).status, 'complete');
 writeBlueprintFolder(document, 'Consumer-folder');
 const folder = readBlueprintFolderDocument('Consumer-folder');
 assert.equal(folder.root.header.totalBlockCount, 1);
 assert.deepEqual(folder.files.get('Consumer-folder/notes.bin'), Buffer.from([1, 2, 3]));
 const regionBytes = writeSmd3({...emptySmd3File(),segments:[seg]});
 assert.deepEqual(new Smd3Document(regionBytes).toBuffer(), regionBytes);
+const regionEvents = [];
+for await (const event of streamSmd3(regionBytes)) regionEvents.push(event);
+assert.equal(regionEvents[0].kind, 'segment');
+assert.equal(regionEvents[0].words[0] & 8191, 5);
+assert.equal(regionEvents.at(-1).status, 'complete');
+const zipEvents = [];
+for await (const event of streamSment('consumer.sment')) zipEvents.push(event);
+assert.equal(zipEvents[0].kind, 'entity');
+assert.equal(zipEvents.at(-1).status, 'complete');
+const folderEvents = [];
+for await (const event of streamBlueprintFolder('Consumer-folder')) folderEvents.push(event);
+assert.equal(folderEvents[0].kind, 'entity');
+assert.equal(folderEvents.at(-1).status, 'complete');
 const model = folder.model(catalogue), node = model.nodes()[0];
 node.blocks.set({x: -257, y: 0, z: 0}, BlockState.create(9));
 assert.equal(node.blocks.blockCount, 2);
@@ -163,12 +183,18 @@ console.log('Isolated production consumer exercised V2 auxiliary/domain classes 
     XmlConfigDocument, type XmlConfigValue, type FormatLimits, type PersistentObjectLimits, type ModMappingOptions,
     ControlElementMapper, type ControlElementMapperOptions, type NPCRoute,
     SERVER_CONFIG_SCHEMA, SERVER_CONFIG_SCHEMA_SOURCE,
-    type ConfigEntryMeta, type ConfigValueKind, type ConfigCategory } from 'starmade-decoder';
+    type ConfigEntryMeta, type ConfigValueKind, type ConfigCategory,
+    streamSmd3, streamBlueprintFolder, streamSment,
+    type BlueprintStreamEvent, type Smd3StreamSegment } from 'starmade-decoder';
 const serverMeta: ConfigEntryMeta = SERVER_CONFIG_SCHEMA.SECTOR_SIZE;
 const serverKind: ConfigValueKind = serverMeta.kind;
 const serverCategory: ConfigCategory = serverMeta.category;
 void serverKind; void serverCategory; void SERVER_CONFIG_SCHEMA_SOURCE;
 const options: Smd3ParseOptions = { mode: 'strict' };
+const streamEvent: BlueprintStreamEvent | undefined = undefined;
+const compactSegment: Smd3StreamSegment | undefined = undefined;
+void streamEvent; void compactSegment;
+void streamSmd3; void streamBlueprintFolder; void streamSment;
 const templatePiece: TemplatePiece = {x:0,y:0,z:0,type:1,hp:127,active:true,orientation:31,extra:0};
 const template = new BlueprintTemplate({version:5,minX:0,minY:0,minZ:0,maxX:0,maxY:0,maxZ:0,
   pieces:[templatePiece],connections:[],texts:new Map()});
